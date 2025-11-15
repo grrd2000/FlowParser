@@ -1,207 +1,403 @@
-# backend/app/main.py
+from __future__ import annotations
 
 import os
-from fastapi import FastAPI, Depends, Query, UploadFile, File, HTTPException
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from typing import Optional, List
+
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
-from datetime import date
 
 from app.db import engine, SessionLocal
-from app.models import Base, Entry, EtlRun, OdsOperation
-from app.schemas import EntryIn, EntryOut
+from app.models import (
+    Base,
+    User,
+    Account,
+    Statement,
+    ImportRun,
+    RawTransaction,
+    Transaction,
+)
 
-from app.etl.parser_pdf import parse_wordpdf_table
-from app.etl.ods_loader import load_ods_from_df
-
-
+# Tymczasowo użyjemy istniejącego parsera (Word/PDF) jako "parser PKO"
+from app.utils.pko_pdf_parser import parse_pko_statement
 UPLOAD_DIR = "uploads"
 
+app = FastAPI(title="flowparser (prototype, refactored)")
 
-app = FastAPI(title="prototype", version="0.1.0")
 
+# -----------------------
+#  DB dependency
+# -----------------------
 
-@app.on_event("startup")
-def on_startup():
-    Base.metadata.create_all(bind=engine)
-
-    with engine.connect() as conn:
-        conn.execute(text('ALTER TABLE entries ADD COLUMN IF NOT EXISTS category VARCHAR(64);'))
-        conn.commit()
-
-def get_db():
+def get_db() -> Session:
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
+
+# -----------------------
+#  Startup: tworzenie schematu + domyślny user i account
+# -----------------------
+
+def ensure_default_user_and_account():
+    """Tworzy przykładowego użytkownika i konto, jeśli jeszcze nie istnieją."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter_by(email="demo@example.com").first()
+        if not user:
+            user = User(email="demo@example.com", full_name="Demo User")
+            db.add(user)
+            db.flush()  # żeby mieć user.id
+
+        account = (
+            db.query(Account)
+            .filter_by(user_id=user.id, name="Główne konto")
+            .first()
+        )
+        if not account:
+            account = Account(
+                user_id=user.id,
+                name="Główne konto",
+                institution="PKO BP",
+                currency="PLN",
+                account_type="checking",
+            )
+            db.add(account)
+
+        db.commit()
+    finally:
+        db.close()
+
+
+@app.on_event("startup")
+def on_startup():
+    # Tworzymy wszystkie tabele według modeli
+    Base.metadata.create_all(bind=engine)
+
+    # Na potrzeby dev: jeden user i jedno konto startowe
+    ensure_default_user_and_account()
+
+    # Upewniamy się, że katalog na uploady istnieje
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
+
+# -----------------------
+#  Healthchecki
+# -----------------------
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
 
 @app.get("/db/health")
 def db_health():
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    return {"db_status": "ok"}
+    return {"db": "ok"}
 
 
-@app.post("/entries", response_model=EntryOut, status_code=201)
-def create_entry(payload: EntryIn, db: Session = Depends(get_db)):
-    """
-    Dodaje nowy wpis do tabeli `entries`.
-    - Walidacja wejścia (EntryIn) robi się automatycznie przez Pydantic.
-    - Tworzymy obiekt ORM i zapisujemy w transakcji.
-    """
-    entry = Entry(
-        booking_date=payload.booking_date,
+# -----------------------
+#  Accounts – minimalne API
+# -----------------------
+
+@app.get("/accounts")
+def list_accounts(db: Session = Depends(get_db)):
+    """Lista kont w systemie (na razie wszystkie, bez auth)."""
+    accounts = db.execute(select(Account)).scalars().all()
+    return [
+        {
+            "id": a.id,
+            "user_id": a.user_id,
+            "name": a.name,
+            "institution": a.institution,
+            "currency": a.currency,
+            "account_type": a.account_type,
+            "external_id": a.external_id,
+        }
+        for a in accounts
+    ]
+
+
+# -----------------------
+#  Schematy Pydantic do ręcznych transakcji
+# -----------------------
+
+from pydantic import BaseModel, Field
+
+
+class TransactionIn(BaseModel):
+    account_id: int = Field(..., description="ID konta")
+    operation_date: date
+    value_date: Optional[date] = None
+    description: str = Field(..., min_length=3, max_length=512)
+    amount: Decimal
+    category: Optional[str] = Field(None, max_length=64)
+
+
+# -----------------------
+#  Transactions – manualne + odczyt
+# -----------------------
+
+@app.post("/transactions/manual")
+def create_manual_transaction(payload: TransactionIn, db: Session = Depends(get_db)):
+    """Dodaje ręczną transakcję (niezależną od wyciągu)."""
+    account = db.get(Account, payload.account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    tx = Transaction(
+        account_id=account.id,
+        raw_transaction_id=None,
+        operation_date=payload.operation_date,
+        value_date=payload.value_date,
         description=payload.description,
+        raw_description=payload.description,
         amount=payload.amount,
+        balance_after=None,
         category=payload.category,
+        is_manual=True,
     )
-    db.add(entry)
-    db.commit()    
-    db.refresh(entry) 
-    return entry
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
 
-@app.get("/entries", response_model=list[EntryOut])
-def list_entries(
-    category: str | None = None,
-    date_from: date | None = Query(None, alias="from"),
-    date_to: date | None = Query(None, alias="to"),
-    sort: str | None = Query("date_desc", pattern="^(date_asc|date_desc)$"),
+    return {
+        "id": tx.id,
+        "account_id": tx.account_id,
+        "operation_date": tx.operation_date,
+        "value_date": tx.value_date,
+        "description": tx.description,
+        "amount": str(tx.amount),
+        "category": tx.category,
+        "is_manual": tx.is_manual,
+    }
+
+
+@app.get("/transactions")
+def list_transactions(
+    account_id: Optional[int] = None,
+    from_: Optional[date] = Query(None, alias="from"),
+    to: Optional[date] = Query(None, alias="to"),
+    category: Optional[str] = None,
+    sort: str = Query("date_desc", pattern="^(date_asc|date_desc)$"),
     db: Session = Depends(get_db),
 ):
     """
-    Zwraca listę wpisów.
-    - ?category=jedzenie (opcjonalny filtr po kategorii)
-    - ?from=YYYY-MM-DD & ?to=YYYY-MM-DD (opcjonalne filtry daty, włącznie)
+    Lista transakcji z filtrowaniem:
+    - ?account_id=...
+    - ?from=YYYY-MM-DD
+    - ?to=YYYY-MM-DD
+    - ?category=...
+    - ?sort=date_asc/date_desc
     """
-    stmt = select(Entry).order_by(Entry.id.desc())
+    stmt = select(Transaction)
 
+    if account_id is not None:
+        stmt = stmt.where(Transaction.account_id == account_id)
+    if from_ is not None:
+        stmt = stmt.where(Transaction.operation_date >= from_)
+    if to is not None:
+        stmt = stmt.where(Transaction.operation_date <= to)
     if category:
-        stmt = stmt.where(Entry.category == category)
-
-    if date_from:
-        stmt = stmt.where(Entry.booking_date >= date_from)
-    if date_to:
-        stmt = stmt.where(Entry.booking_date <= date_to)
+        stmt = stmt.where(Transaction.category == category)
 
     if sort == "date_asc":
-        stmt = stmt.order_by(Entry.booking_date.asc())
+        stmt = stmt.order_by(Transaction.operation_date.asc())
     else:
-        stmt = stmt.order_by(Entry.booking_date.desc())
+        stmt = stmt.order_by(Transaction.operation_date.desc())
 
-    results = db.execute(stmt).scalars().all()
-    return results
+    rows = db.execute(stmt).scalars().all()
+
+    return [
+        {
+            "id": t.id,
+            "account_id": t.account_id,
+            "operation_date": t.operation_date,
+            "value_date": t.value_date,
+            "description": t.description,
+            "amount": str(t.amount),
+            "balance_after": str(t.balance_after) if t.balance_after is not None else None,
+            "category": t.category,
+            "is_manual": t.is_manual,
+        }
+        for t in rows
+    ]
 
 
-from app.etl.parser import parse_bank_statement
-from app.etl.loader import load_entries_from_df
+# -----------------------
+#  Upload + import PDF dla danego konta
+# -----------------------
 
-@app.post("/etl/import")
-def import_bank_statement(db: Session = Depends(get_db)):
+@app.post("/accounts/{account_id}/import-pdf")
+async def import_pdf_for_account(
+    account_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
     """
-    Prosty testowy ETL:
-    - parsuje przykładowy 'PDF' (na razie dane symulowane)
-    - zapisuje rekordy do bazy
+    1) Zapisuje plik PDF do /uploads
+    2) Tworzy Statement + ImportRun
+    3) Parsuje plik (na razie parser Word/PDF -> później Twój parser PKO)
+    4) Zapisuje RawTransactions + Transactions
     """
-    df = parse_bank_statement("mock.pdf")  # ścieżka testowa
-    load_entries_from_df(df, db)
-    return {"imported": len(df)}
 
+    account = db.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
 
-@app.post("/etl/upload")
-async def upload_file_only(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """
-    1) Zapisuje plik PDF do katalogu /uploads
-    2) Dodaje rekord logu ETL z status=uploaded
-    3) Nie uruchamia parsowania (zrobimy to osobnym krokiem)
-    """
-    if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR)
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
+    # zapis pliku
     file_path = os.path.join(UPLOAD_DIR, file.filename)
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    # log ETL
-    run = EtlRun(file_name=file.filename, imported_rows=0, status="uploaded")
+    # Statement
+    statement = Statement(
+        account_id=account.id,
+        file_name=file.filename,
+        storage_path=file_path,
+        source_type="PKO_PDF",
+    )
+    db.add(statement)
+    db.flush()  # mamy statement.id
+
+    # ImportRun – start
+    run = ImportRun(
+        statement_id=statement.id,
+        status="processing",
+    )
     db.add(run)
-    db.commit()
+    db.flush()  # mamy run.id
 
-    return {"filename": file.filename, 
-            "saved_to": file_path, 
-            "status": "uploaded"}
-
-@app.post("/etl/process/{filename}")
-def process_pdf(filename: str, db: Session = Depends(get_db)):
-    """
-    1) Wczytuje wskazany PDF z /uploads
-    2) Parsuje tabelę (Word→PDF) do DataFrame
-    3) Zapisuje surowe rekordy do ODS (ods_operations)
-    """
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Plik nie istnieje w /uploads")
+    total_rows = 0
+    imported_rows = 0
+    error_rows = 0
 
     try:
-        df = parse_wordpdf_table(file_path)
-        inserted = load_ods_from_df(df, db, source_file=filename)
-        return {"filename": filename, "rows_parsed": len(df), "rows_inserted": inserted}
+        # Na razie używamy istniejącego parsera – zwraca DF z kolumnami operation_date, value_date, ...
+        df = parse_pko_statement(file_path)
+        total_rows = len(df)
+
+        for idx, row in df.iterrows():
+            # surowy zapis – na razie raw_* = string z DF (później możesz podmienić na prawdziwe wartości z PDF)
+            raw = RawTransaction(
+                statement_id=statement.id,
+                import_run_id=run.id,
+                row_index=int(idx),
+                operation_date_raw=str(row["operation_date"]),
+                value_date_raw=str(row["value_date"]),
+                operation_id_raw=str(row.get("operation_id", "")),
+                description_raw=str(row["description"]),
+                op_type_raw=str(row.get("op_type", "")),
+                amount_raw=str(row["amount"]),
+                balance_raw=str(row.get("balance", "")),
+                parsed_ok=True,
+                error_message=None,
+            )
+            db.add(raw)
+            db.flush()  # mamy raw.id
+
+            # docelowa transakcja
+            tx = Transaction(
+                account_id=account.id,
+                raw_transaction_id=raw.id,
+                operation_date=row["operation_date"],
+                value_date=row["value_date"],
+                description=str(row["description"]),
+                raw_description=str(row["description"]),
+                amount=row["amount"],
+                balance_after=row.get("balance"),
+                category=None,
+                is_manual=False,
+            )
+            db.add(tx)
+            imported_rows += 1
+
+        run.status = "success"
+        run.total_rows = total_rows
+        run.imported_rows = imported_rows
+        run.error_rows = error_rows
+        run.finished_at = datetime.now(timezone.utc)
+        db.commit()
+
     except Exception as e:
-        # w realu: log.error(...)
-        raise HTTPException(status_code=400, detail=f"Parsowanie nie powiodło się: {e}")
+        # jeżeli coś pójdzie nie tak – zapisujemy status + message
+        run.status = "failed"
+        run.message = str(e)
+        run.finished_at = datetime.now(timezone.utc)
+        db.commit()
+        raise HTTPException(status_code=400, detail=f"Error during import: {e}")
 
-@app.get("/ods")
-def list_ods(limit: int = 50, db: Session = Depends(get_db)):
-    rows = (
-        db.query(OdsOperation)
-          .order_by(OdsOperation.id.desc())
-          .limit(limit)
-          .all()
-    )
+    return {
+        "account_id": account.id,
+        "statement_id": statement.id,
+        "import_run_id": run.id,
+        "file_name": file.filename,
+        "total_rows": total_rows,
+        "imported_rows": imported_rows,
+        "error_rows": error_rows,
+        "status": run.status,
+    }
+
+
+# -----------------------
+#  Podgląd importów i RAW (do debugu)
+# -----------------------
+
+@app.get("/import-runs")
+def list_import_runs(db: Session = Depends(get_db)):
+    runs = db.execute(select(ImportRun).order_by(ImportRun.id.desc())).scalars().all()
     return [
         {
             "id": r.id,
-            "operation_date": r.operation_date,
-            "value_date": r.value_date,
-            "operation_id": r.operation_id,
-            "description": r.description,
-            "op_type": r.op_type,
-            "amount": str(r.amount),
-            "balance": str(r.balance),
-            "source_file": r.source_file,
-            "ingested_at": r.ingested_at,
-        }
-        for r in rows
-    ]
-
-
-@app.delete("/dev/entries/clear")
-def clear_entries(db: Session = Depends(get_db)):
-    deleted = db.query(Entry).delete()
-    db.commit()
-    return {"deleted_rows": deleted}
-
-@app.delete("/dev/ods/clear")
-def clear_ods(db: Session = Depends(get_db)):
-    deleted = db.query(OdsOperation).delete()
-    db.commit()
-    return {"deleted_rows": deleted}
-
-
-@app.get("/etl/runs")
-def list_etl_runs(db: Session = Depends(get_db)):
-    runs = db.query(EtlRun).order_by(EtlRun.id.desc()).all()
-    return [
-        {
-            "id": r.id,
-            "file_name": r.file_name,
-            "imported_rows": r.imported_rows,
+            "statement_id": r.statement_id,
             "status": r.status,
             "started_at": r.started_at,
+            "finished_at": r.finished_at,
+            "total_rows": r.total_rows,
+            "imported_rows": r.imported_rows,
+            "error_rows": r.error_rows,
+            "message": r.message,
         }
         for r in runs
     ]
 
+
+@app.get("/raw-transactions")
+def list_raw_transactions(
+    import_run_id: Optional[int] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    stmt = select(RawTransaction).order_by(RawTransaction.id.desc())
+    if import_run_id is not None:
+        stmt = stmt.where(RawTransaction.import_run_id == import_run_id)
+
+    rows = db.execute(stmt.limit(limit)).scalars().all()
+    return [
+        {
+            "id": r.id,
+            "statement_id": r.statement_id,
+            "import_run_id": r.import_run_id,
+            "row_index": r.row_index,
+            "operation_date_raw": r.operation_date_raw,
+            "value_date_raw": r.value_date_raw,
+            "operation_id_raw": r.operation_id_raw,
+            "description_raw": r.description_raw,
+            "op_type_raw": r.op_type_raw,
+            "amount_raw": r.amount_raw,
+            "balance_raw": r.balance_raw,
+            "parsed_ok": r.parsed_ok,
+            "error_message": r.error_message,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
