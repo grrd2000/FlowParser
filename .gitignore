@@ -1,0 +1,108 @@
+backend/uploads
+
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.history
+*.swp
+*~
+.coverage.*
+
+# Python bytecode / caches / virtualenvs
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+pip-wheel-metadata/
+pip-log.txt
+htmlcov/
+.coverage
+.tox/
+.nox/
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pyenv/
+.python-version
+
+# Packages / builds
+build/
+dist/
+*.egg-info/
+.eggs/
+*.whl
+
+# Dependency managers
+Pipfile.lock
+poetry.lock
+# (keep lockfiles if you track them intentionally — remove lines above to commit)
+
+# Node (optional, remove if not used)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.lock-wscript
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Data / outputs / binaries
+*.sqlite3
+*.db
+*.db3
+*.sqlite
+*.pickle
+*.pkl
+*.h5
+*.npz
+*.npy
+*.log
+logs/
+*.out
+*.class
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Test / Coverage / Reports
+coverage/
+coverage.xml
+htmlcov/
+reports/
+
+# Environment / secrets
+.env
+.env.*
+secrets.*.json
+*.pem
+*.key
+credentials/
+credentials.json
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Misc
+.Dockerfile.swp
+.cache/
+.idea/
+*.DS_Store
