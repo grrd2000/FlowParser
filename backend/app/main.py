@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy import text, select
@@ -20,8 +20,10 @@ from app.models import (
     Transaction,
 )
 
-# Tymczasowo użyjemy istniejącego parsera (Word/PDF) jako "parser PKO"
 from app.utils.pko_pdf_parser import parse_pko_statement
+from app.utils.data_types_parser import parse_date_str, parse_decimal_str
+
+
 UPLOAD_DIR = "uploads"
 
 app = FastAPI(title="flowparser (prototype, refactored)")
@@ -81,7 +83,6 @@ def on_startup():
     # Na potrzeby dev: jeden user i jedno konto startowe
     ensure_default_user_and_account()
 
-    # Upewniamy się, że katalog na uploady istnieje
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
 
@@ -234,6 +235,16 @@ def list_transactions(
 #  Upload + import PDF dla danego konta
 # -----------------------
 
+REQUIRED_COLS = [
+    "operation_date",
+    "value_date",
+    "operation_id",
+    "description",
+    "operation_type",
+    "amount",
+    "balance",
+]
+
 @app.post("/accounts/{account_id}/import-pdf")
 async def import_pdf_for_account(
     account_id: int,
@@ -241,10 +252,11 @@ async def import_pdf_for_account(
     db: Session = Depends(get_db),
 ):
     """
-    1) Zapisuje plik PDF do /uploads
+    1) Zapisuje PDF do /uploads
     2) Tworzy Statement + ImportRun
-    3) Parsuje plik (na razie parser Word/PDF -> później Twój parser PKO)
-    4) Zapisuje RawTransactions + Transactions
+    3) Parsuje PDF -> DataFrame (surowy tekst)
+    4) KROK 1: Zapisuje tylko RawTransactions (tekst)
+    5) KROK 2: Z RawTransactions próbuje utworzyć Transactions (z konwersją typów w Pythonie)
     """
 
     account = db.get(Account, account_id)
@@ -254,12 +266,15 @@ async def import_pdf_for_account(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-    # zapis pliku
+    # --- zapis pliku ---
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
     file_path = os.path.join(UPLOAD_DIR, file.filename)
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    # Statement
+    # --- Statement ---
     statement = Statement(
         account_id=account.id,
         file_name=file.filename,
@@ -269,7 +284,7 @@ async def import_pdf_for_account(
     db.add(statement)
     db.flush()  # mamy statement.id
 
-    # ImportRun – start
+    # --- ImportRun (start) ---
     run = ImportRun(
         statement_id=statement.id,
         status="processing",
@@ -282,12 +297,22 @@ async def import_pdf_for_account(
     error_rows = 0
 
     try:
-        # Na razie używamy istniejącego parsera – zwraca DF z kolumnami operation_date, value_date, ...
+        # 1) Parsowanie PDF Twoim parserem – tu dostajemy DF z TEKSTAMI
         df = parse_pko_statement(file_path)
+        print("PKO DF columns:", list(df.columns))
         total_rows = len(df)
 
+        missing = [c for c in REQUIRED_COLS if c not in df.columns]
+        if missing:
+            msg = f"Parser nie zwrócił wymaganych kolumn: {missing}. Kolumny DF: {list(df.columns)}"
+            run.status = "failed"
+            run.message = msg
+            run.finished_at = datetime.now(timezone.utc)
+            db.commit()
+            raise HTTPException(status_code=400, detail=msg)
+
+        # 2) KROK 1: zapis wszystkiego do RawTransactions (TYLKO TEKST)
         for idx, row in df.iterrows():
-            # surowy zapis – na razie raw_* = string z DF (później możesz podmienić na prawdziwe wartości z PDF)
             raw = RawTransaction(
                 statement_id=statement.id,
                 import_run_id=run.id,
@@ -296,43 +321,76 @@ async def import_pdf_for_account(
                 value_date_raw=str(row["value_date"]),
                 operation_id_raw=str(row.get("operation_id", "")),
                 description_raw=str(row["description"]),
-                op_type_raw=str(row.get("op_type", "")),
+                op_type_raw=str(row.get("operation_type", "")),
                 amount_raw=str(row["amount"]),
                 balance_raw=str(row.get("balance", "")),
-                parsed_ok=True,
+                parsed_ok=True,       # na razie zakładamy OK – poprawimy w kroku 2
                 error_message=None,
             )
             db.add(raw)
-            db.flush()  # mamy raw.id
 
-            # docelowa transakcja
-            tx = Transaction(
-                account_id=account.id,
-                raw_transaction_id=raw.id,
-                operation_date=row["operation_date"],
-                value_date=row["value_date"],
-                description=str(row["description"]),
-                raw_description=str(row["description"]),
-                amount=row["amount"],
-                balance_after=row.get("balance"),
-                category=None,
-                is_manual=False,
-            )
-            db.add(tx)
-            imported_rows += 1
+        db.commit()  # RAW zapisane niezależnie od dalszych problemów
 
-        run.status = "success"
+        # 3) KROK 2: ETL z RawTransactions -> Transactions (konwersja w Pythonie)
+        raws = (
+            db.query(RawTransaction)
+            .filter(RawTransaction.import_run_id == run.id)
+            .order_by(RawTransaction.row_index.asc())
+            .all()
+        )
+
+        for raw in raws:
+            try:
+                op_date = parse_date_str(raw.operation_date_raw)
+                val_date = parse_date_str(raw.value_date_raw)
+                amount = parse_decimal_str(raw.amount_raw)
+                balance = (
+                    parse_decimal_str(raw.balance_raw)
+                    if raw.balance_raw not in (None, "", "None")
+                    else None
+                )
+
+                tx = Transaction(
+                    account_id=account.id,
+                    raw_transaction_id=raw.id,
+                    operation_date=op_date,
+                    value_date=val_date,
+                    description=raw.description_raw,
+                    raw_description=raw.description_raw,
+                    amount=amount,
+                    balance_after=balance,
+                    category=None,
+                    is_manual=False,
+                )
+                db.add(tx)
+
+                raw.parsed_ok = True
+                raw.error_message = None
+                imported_rows += 1
+
+            except Exception as e:
+                # Błąd parsowania / konwersji – NIE ma transakcji, ale raw zostaje z flagą błędu
+                raw.parsed_ok = False
+                raw.error_message = str(e)
+                error_rows += 1
+
+        # zapisujemy efekty kroku 2
+        run.status = "success" if error_rows == 0 else "partial_success"
         run.total_rows = total_rows
         run.imported_rows = imported_rows
         run.error_rows = error_rows
         run.finished_at = datetime.now(timezone.utc)
         db.commit()
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
-        # jeżeli coś pójdzie nie tak – zapisujemy status + message
+        db.rollback()
         run.status = "failed"
         run.message = str(e)
         run.finished_at = datetime.now(timezone.utc)
+        db.add(run)
         db.commit()
         raise HTTPException(status_code=400, detail=f"Error during import: {e}")
 

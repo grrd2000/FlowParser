@@ -79,13 +79,13 @@ def parse_pko_statement(pdf_path: str) -> pd.DataFrame:
                         opis_full = opis_full[:idx].strip()
 
                 records.append({
-                    "Data operacji": data_operacji,
-                    "Data waluty": data_waluty,
-                    "Identyfikator operacji": ident,
-                    "TYP OPERACJI": typ,
-                    "Kwota operacji": kwota,
-                    "Saldo": saldo,
-                    "Opis operacji": opis_full,
+                    "operation_date": data_operacji,
+                    "value_date": data_waluty,
+                    "operation_id": ident,
+                    "operation_type": typ,
+                    "amount": kwota,
+                    "balance": saldo,
+                    "description": opis_full,
                 })
 
                 i = j 
@@ -97,8 +97,9 @@ def parse_pko_statement(pdf_path: str) -> pd.DataFrame:
     print(df.info())
     print(df)
 
-    df.to_excel("pko_wyciąg.xlsx", index=False)
+    # df.to_excel("pko_wyciąg.xlsx", index=False)
 
+    print(DQ_check_balance_continuity(df))
 
     return df
 
@@ -107,7 +108,7 @@ def parse_pko_statement(pdf_path: str) -> pd.DataFrame:
 
 # DQ check: ciągłość sald
 
-def DQ_check_balance_continuity(df: pd.DataFrame):
+def DQ_check_balance_continuity(df: pd.DataFrame) -> bool:
 
     df_check = df.copy()
 
@@ -140,6 +141,7 @@ def DQ_check_balance_continuity(df: pd.DataFrame):
 
     if not breaks:
         print("Ciągłość sald OK — wszystkie rekordy spójne.")
+        return True
     else:
         print("Nieciągłości sald:")
         for (i, j, s0, k1, s1) in breaks:
@@ -147,3 +149,4 @@ def DQ_check_balance_continuity(df: pd.DataFrame):
                 f"  {i} -> {j}: "
                 f"{s0:.2f} + {k1:.2f} ≠ {s1:.2f} -> {s0 + k1:.2f}\t{df_check.loc[j, 'Identyfikator operacji']}"
             )
+        return False
