@@ -1,48 +1,39 @@
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: flowparser_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
   api:
     build: ./backend
-    environment:
-      DATABASE_URL: postgresql+psycopg://admin:admin@db:5432/flowparser_db
     depends_on:
-      db:
-        condition: service_healthy
+      - db
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://admin:admin@db:5432/flowparser_db
     ports:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
-      - ./backend/uploads:/app/uploads
-  
+
   frontend:
     build: ./frontend
     depends_on:
       - api
     environment:
+      # front w kontenerze będzie gadał z backendem po nazwie serwisu "api"
       - NEXT_PUBLIC_API_BASE_URL=http://api:8000
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app          # kod źródłowy
-      - /app/node_modules        # node_modules tylko w kontenerze
-    command: ["npm", "run", "dev"]
-
-  db:
-      image: postgres:16
-      environment:
-        POSTGRES_USER: admin
-        POSTGRES_PASSWORD: admin
-        POSTGRES_DB: flowparser_db
-      volumes:
-        # - ./volumes/pgdata:/var/lib/postgresql/data
-        - pgdata:/var/lib/postgresql/data
-      ports:
-        - "5432:5432"
-      healthcheck:
-        test: ["CMD-SHELL", "pg_isready -U admin -d flowparser_db"]
-        interval: 5s
-        timeout: 3s
-        retries: 15
+      - ./frontend:/app          # kod źródłowy Next
+      - /app/node_modules        # node_modules trzymamy w kontenerze
+    command: ["sh", "-c", "npm install && npm run dev"]
 
 volumes:
   pgdata:
-  
