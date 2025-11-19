@@ -281,6 +281,7 @@ async def import_pdf_for_account(
         storage_path=file_path,
         source_type="PKO_PDF",
     )
+    print(statement)
     db.add(statement)
     db.flush()  # mamy statement.id
 
@@ -289,6 +290,7 @@ async def import_pdf_for_account(
         statement_id=statement.id,
         status="processing",
     )
+    print(run)
     db.add(run)
     db.flush()  # mamy run.id
 

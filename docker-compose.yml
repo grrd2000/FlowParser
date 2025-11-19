@@ -12,6 +12,19 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/uploads:/app/uploads
+  
+  frontend:
+    build: ./frontend
+    depends_on:
+      - api
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://api:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app          # kod źródłowy
+      - /app/node_modules        # node_modules tylko w kontenerze
+    command: ["npm", "run", "dev"]
 
   db:
       image: postgres:16

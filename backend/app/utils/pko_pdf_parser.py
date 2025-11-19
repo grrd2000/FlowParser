@@ -122,15 +122,15 @@ def DQ_check_balance_continuity(df: pd.DataFrame) -> bool:
         except ValueError:
             return None
 
-    df_check["Kwota_num"] = df_check["Kwota operacji"].apply(parse_pl_amount)
-    df_check["Saldo_num"] = df_check["Saldo"].apply(parse_pl_amount)
+    df_check["amount"] = df_check["amount"].apply(parse_pl_amount)
+    df_check["balance"] = df_check["balance"].apply(parse_pl_amount)
 
     breaks = []
 
     for i in range(len(df_check) - 1):
-        s0 = df_check.loc[i, "Saldo_num"]
-        k1 = df_check.loc[i + 1, "Kwota_num"]
-        s1 = df_check.loc[i + 1, "Saldo_num"]
+        s0 = df_check.loc[i, "balance"]
+        k1 = df_check.loc[i + 1, "amount"]
+        s1 = df_check.loc[i + 1, "balance"]
 
         if pd.isna(s0) or pd.isna(k1) or pd.isna(s1):
             print(f"  Pomijam rekordy {i} i {i+1} z powodu brakujących danych.")
