@@ -26,7 +26,23 @@ from app.utils.data_types_parser import parse_date_str, parse_decimal_str
 
 UPLOAD_DIR = "uploads"
 
+
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="flowparser (prototype, refactored)")
+
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,        # frontend, któremu pozwalasz
+    allow_credentials=True,
+    allow_methods=["*"],          # GET, POST, OPTIONS, itp.
+    allow_headers=["*"],
+)
 
 
 # -----------------------

@@ -26,14 +26,15 @@ services:
     depends_on:
       - api
     environment:
-      # front w kontenerze będzie gadał z backendem po nazwie serwisu "api"
-      - NEXT_PUBLIC_API_BASE_URL=http://api:8000
+      - INTERNAL_API_BASE_URL=http://api:8000        # dla kodu serwerowego Next
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000  # dla przeglądarki
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app          # kod źródłowy Next
-      - /app/node_modules        # node_modules trzymamy w kontenerze
+      - ./frontend:/app
+      - /app/node_modules
     command: ["sh", "-c", "npm install && npm run dev"]
+
 
 volumes:
   pgdata:

@@ -1,68 +1,37 @@
 // frontend/app/page.tsx
-import { fetchTransactions } from "@/lib/api";
+import { fetchTransactions } from "@/lib/serverApi";
+import { UploadForm } from "@/components/UploadForm";
+import { TransactionsView } from "@/components/TransactionsView";
 
 export default async function HomePage() {
-  const transactions = await fetchTransactions();
+  const initialTransactions = await fetchTransactions();
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-4xl mx-auto py-10 px-4">
-        <h1 className="text-2xl font-semibold mb-6">Moje transakcje</h1>
-
-        {transactions.length === 0 ? (
-          <p className="text-slate-400">
-            Brak transakcji. Wgraj wyciąg PDF przez backend.
+      <div className="max-w-4xl mx-auto py-10 px-4 space-y-8">
+        <header className="space-y-2">
+          <h1 className="text-2xl font-semibold">Moje transakcje</h1>
+          <p className="text-sm text-slate-400">
+            Wgraj wyciąg PDF z PKO i przeglądaj swoje operacje z
+            możliwością filtrowania.
           </p>
-        ) : (
-          <div className="border border-slate-800 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900/80">
-                <tr>
-                  <th className="px-3 py-2 text-left">Data</th>
-                  <th className="px-3 py-2 text-left">Opis</th>
-                  <th className="px-3 py-2 text-right">Kwota</th>
-                  <th className="px-3 py-2 text-left">Kategoria</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((t) => (
-                  <tr
-                    key={t.id}
-                    className="border-t border-slate-800 hover:bg-slate-900/60"
-                  >
-                    <td className="px-3 py-2 align-top">
-                      {t.operation_date}
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <div className="font-medium text-slate-100">
-                        {t.description}
-                      </div>
-                      {t.is_manual && (
-                        <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
-                          ręczna
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top text-right">
-                      <span
-                        className={
-                          Number(t.amount) < 0
-                            ? "text-rose-400"
-                            : "text-emerald-400"
-                        }
-                      >
-                        {t.amount} zł
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 align-top text-slate-300">
-                      {t.category ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        </header>
+
+        {/* Sekcja uploadu PDF */}
+        <section className="border border-slate-800 rounded-xl p-4 bg-slate-900/40">
+          <h2 className="text-sm font-medium mb-3 text-slate-200">
+            Importuj wyciąg PDF
+          </h2>
+          <UploadForm />
+        </section>
+
+        {/* Filtry + dashboard + tabela */}
+        <section>
+          <TransactionsView
+            initialTransactions={initialTransactions}
+            initialAccountId={1} // na razie konto 1, później dropdown
+          />
+        </section>
       </div>
     </main>
   );

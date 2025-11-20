@@ -1,6 +1,6 @@
-// frontend/lib/api.ts
+// frontend/lib/serverApi.ts
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://api:8000";
+  process.env.INTERNAL_API_BASE_URL || "http://api:8000";
 
 export type Transaction = {
   id: number;
@@ -15,7 +15,7 @@ export type Transaction = {
 
 export async function fetchTransactions(): Promise<Transaction[]> {
   const res = await fetch(`${API_BASE_URL}/transactions`, {
-    cache: "no-store", // zawsze świeże dane
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`);
