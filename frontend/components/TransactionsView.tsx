@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { Transaction } from "@/lib/serverApi";
 import { fetchTransactionsClient } from "@/lib/clientApi";
+import { TransactionsChart } from "./TransactionsChart";
 
 type Props = {
   initialTransactions: Transaction[];
@@ -156,6 +157,14 @@ export function TransactionsView({
             {totals.count}
           </div>
         </div>
+      </div>
+
+      {/* Wykres z Plotly */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+        <div className="text-xs text-slate-400 mb-2">
+          Saldo dzienne (netto)
+        </div>
+        <TransactionsChart transactions={transactions} />
       </div>
 
       {/* Tabela transakcji */}

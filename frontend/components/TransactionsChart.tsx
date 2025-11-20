@@ -1,0 +1,193 @@
+// frontend/components/TransactionsChart.tsx
+"use client";
+
+import { useMemo, useState } from "react";
+import type { Transaction } from "@/lib/serverApi";
+import dynamic from "next/dynamic";
+
+// Plotly ładujemy tylko w przeglądarce
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
+
+type Props = {
+  transactions: Transaction[];
+};
+
+type Granularity = "day" | "week" | "month" | "quarter";
+
+function parseDateStr(s: string): Date | null {
+  // Zakładamy format YYYY-MM-DD
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function getIsoWeek(d: Date): { year: number; week: number } {
+  // kopia daty (UTC-ish), ISO week
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Czwartek jest "środkiem" tygodnia ISO
+  // Przesuwamy do czwartku tygodnia
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((+date - +yearStart) / 86400000 + 1) / 7);
+  return { year: date.getUTCFullYear(), week: weekNo };
+}
+
+function getQuarter(d: Date): { year: number; quarter: number } {
+  const q = Math.floor(d.getMonth() / 3) + 1; // 0-2 -> Q1 itd.
+  return { year: d.getFullYear(), quarter: q };
+}
+
+export function TransactionsChart({ transactions }: Props) {
+  const [granularity, setGranularity] = useState<Granularity>("day");
+
+  const buckets = useMemo(() => {
+    // bucket: label -> { label, income, expense, net }
+    const map = new Map<
+      string,
+      { label: string; income: number; expense: number; net: number }
+    >();
+
+    for (const t of transactions) {
+      const date = parseDateStr(t.operation_date);
+      if (!date) continue;
+
+      const amount = Number(t.amount);
+      if (Number.isNaN(amount)) continue;
+
+      let label: string;
+
+      switch (granularity) {
+        case "day": {
+          // YYYY-MM-DD
+          label = t.operation_date;
+          break;
+        }
+        case "week": {
+          const { year, week } = getIsoWeek(date);
+          // np. 2025-W09
+          label = `${year}-W${week.toString().padStart(2, "0")}`;
+          break;
+        }
+        case "month": {
+          const y = date.getFullYear();
+          const m = (date.getMonth() + 1).toString().padStart(2, "0");
+          // YYYY-MM
+          label = `${y}-${m}`;
+          break;
+        }
+        case "quarter": {
+          const { year, quarter } = getQuarter(date);
+          // np. 2025-Q1
+          label = `${year}-Q${quarter}`;
+          break;
+        }
+        default:
+          label = t.operation_date;
+      }
+
+      if (!map.has(label)) {
+        map.set(label, { label, income: 0, expense: 0, net: 0 });
+      }
+      const bucket = map.get(label)!;
+
+      if (amount > 0) bucket.income += amount;
+      if (amount < 0) bucket.expense += amount;
+      bucket.net += amount;
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.label.localeCompare(b.label)
+    );
+  }, [transactions, granularity]);
+
+  if (buckets.length === 0) {
+    return (
+      <p className="text-xs text-slate-500">
+        Brak danych do wyświetlenia na wykresie dla wybranego zakresu.
+      </p>
+    );
+  }
+
+  const x = buckets.map((b) => b.label);
+  const net = buckets.map((b) => b.net);
+  const custom = buckets.map((b) => [b.income, b.expense]);
+
+  return (
+    <div className="space-y-3">
+      {/* Przełącznik granulacji */}
+      <div className="inline-flex rounded-full bg-slate-900 border border-slate-800 p-0.5 text-[11px]">
+        {(
+          [
+            ["day", "Dziennie"],
+            ["week", "Tygodniowo"],
+            ["month", "Miesięcznie"],
+            ["quarter", "Kwartalnie"],
+          ] as [Granularity, string][]
+        ).map(([value, label]) => {
+          const active = granularity === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setGranularity(value)}
+              className={[
+                "px-3 py-1 rounded-full transition-colors",
+                active
+                  ? "bg-emerald-600 text-slate-50"
+                  : "text-slate-400 hover:text-slate-100",
+              ].join(" ")}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Wykres Plotly */}
+      <div className="h-64 w-full">
+        <Plot
+          data={[
+            {
+              type: "bar",
+              x,
+              y: net,
+              name: "Saldo (netto)",
+              customdata: custom,
+              hovertemplate:
+                "Okres: %{x}<br>" +
+                "Saldo: %{y:.2f} zł<br>" +
+                "Przychody: %{customdata[0]:.2f} zł<br>" +
+                "Wydatki: %{customdata[1]:.2f} zł<br>" +
+                "<extra></extra>",
+            } as any,
+          ]}
+          layout={{
+            margin: { l: 40, r: 10, t: 10, b: 40 },
+            paper_bgcolor: "rgba(0,0,0,0)",
+            plot_bgcolor: "rgba(0,0,0,0)",
+            xaxis: {
+              title: "",
+              tickfont: { size: 10, color: "#9ca3af" },
+            },
+            yaxis: {
+              title: "zł",
+              tickfont: { size: 10, color: "#9ca3af" },
+            },
+            showlegend: false,
+          }}
+          config={{
+            displaylogo: false,
+            responsive: true,
+            modeBarButtonsToRemove: [
+              "toImage",
+              "lasso2d",
+              "select2d",
+              "autoScale2d",
+            ],
+          }}
+          style={{ width: "100%", height: "100%" }}
+        />
+      </div>
+    </div>
+  );
+}
