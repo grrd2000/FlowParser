@@ -52,7 +52,7 @@ re_row2 = re.compile(
 STOP_PHRASES = ("Saldo do przeniesienia", "Saldo końcowe")
 
 
-def parse_pko_statement(pdf_path: str) -> pd.DataFrame:
+def parse_pko_statement(pdf_path: str):
     
     account_info = {}
     statement_info = {}
@@ -87,7 +87,7 @@ def parse_pko_statement(pdf_path: str) -> pd.DataFrame:
 
         account_info["account_number"] = RE_ACCOUNT_NUMBER.search(header_text).group(1)
         account_info["account_owner"] = RE_OWNER_BLOCK.search(header_text).group(1).strip()
-        account_info["account_type"] = RE_ACCOUNT_TYPE.search(header_text).group(1)
+        account_info["account_name"] = RE_ACCOUNT_TYPE.search(header_text).group(1)
         account_info["account_currency"] = RE_ACCOUNT_CURRENCY.search(header_text).group(1)
 
         print("\nInformacje o rachunku:")
@@ -179,7 +179,7 @@ def parse_pko_statement(pdf_path: str) -> pd.DataFrame:
     # print(DQ_check_balance_continuity(df_transactions))
     DQ_check_balance_continuity(df_transactions)
 
-    return df_transactions
+    return df_transactions, account_info, statement_info
 
 
 

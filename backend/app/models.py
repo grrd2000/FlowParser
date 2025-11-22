@@ -58,11 +58,13 @@ class Account(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
-    name: Mapped[str] = mapped_column(String(255), nullable=False)                      # np. "PKO ROR"
-    institution: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)      # np. "PKO BP"
+    number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    owner: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)                 
+    institution: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  
     currency: Mapped[str] = mapped_column(String(3), default="PLN", nullable=False)
-    account_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)      # np. "checking", "credit_card"
-    external_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)       # np. numer konta
+    type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -98,6 +100,11 @@ class Statement(Base):
 
     period_start: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     period_end: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    issue_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    pages_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    turnover_ma: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    turnover_wn: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    previous_balance: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
 
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

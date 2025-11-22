@@ -82,7 +82,7 @@ def ensure_default_user_and_account():
                 name="Główne konto",
                 institution="PKO BP",
                 currency="PLN",
-                account_type="checking",
+                type="checking",
             )
             db.add(account)
 
@@ -134,8 +134,8 @@ def list_accounts(db: Session = Depends(get_db)):
             "name": a.name,
             "institution": a.institution,
             "currency": a.currency,
-            "account_type": a.account_type,
-            "external_id": a.external_id,
+            "type": a.account_type,
+            "number": a.external_id,
         }
         for a in accounts
     ]
@@ -316,13 +316,34 @@ async def import_pdf_for_account(
 
     try:
         # 1) Parsowanie PDF Twoim parserem – tu dostajemy DF z TEKSTAMI
-        df = parse_pko_statement(file_path)
-        print("PKO DF columns:", list(df.columns))
-        total_rows = len(df)
+        transactions, account_info, statement_info = parse_pko_statement(file_path)
 
-        missing = [c for c in REQUIRED_COLS if c not in df.columns]
+        if account_info:
+            account.number = account_info.get("account_number", account.number)
+            account.name = account_info.get("account_name", account.name)
+            account.owner = account_info.get("account_owner", account.owner)
+            account.institution = "PKO BP"
+            account.currency = account_info.get("account_currency", account.currency)
+            db.add(account)
+            db.commit()
+        
+        if statement_info:
+            statement.period_start = datetime.strptime(statement_info.get("period_start"), "%d.%m.%Y").date()
+            statement.period_end = datetime.strptime(statement_info.get("period_end"), "%d.%m.%Y").date()
+            statement.issue_date = datetime.strptime(statement_info.get("statement_date"), "%d.%m.%Y").date()
+            statement.pages_total = statement_info.get("pages_total")
+            statement.turnover_ma = parse_decimal_str(statement_info.get("turnover_ma"))
+            statement.turnover_wn = parse_decimal_str(statement_info.get("turnover_wn"))
+            statement.previous_balance = parse_decimal_str(statement_info.get("previous_balance"))
+            db.add(statement)
+            db.commit()
+
+        print("PKO DF columns:", list(transactions.columns))
+        total_rows = len(transactions)
+
+        missing = [c for c in REQUIRED_COLS if c not in transactions.columns]
         if missing:
-            msg = f"Parser nie zwrócił wymaganych kolumn: {missing}. Kolumny DF: {list(df.columns)}"
+            msg = f"Parser nie zwrócił wymaganych kolumn: {missing}. Kolumny DF: {list(transactions.columns)}"
             run.status = "failed"
             run.message = msg
             run.finished_at = datetime.now(timezone.utc)
@@ -330,7 +351,7 @@ async def import_pdf_for_account(
             raise HTTPException(status_code=400, detail=msg)
 
         # 2) KROK 1: zapis wszystkiego do RawTransactions (TYLKO TEKST)
-        for idx, row in df.iterrows():
+        for idx, row in transactions.iterrows():
             raw = RawTransaction(
                 statement_id=statement.id,
                 import_run_id=run.id,
