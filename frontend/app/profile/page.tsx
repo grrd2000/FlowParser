@@ -1,9 +1,11 @@
 // frontend/app/profile/page.tsx
+import Link from "next/link";
+
 export default function ProfilePage() {
   return (
     <div className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">My Profile</h1>
+        <h1 className="text-2xl font-semibold">Profile</h1>
         <p className="text-sm text-slate-400">
           Ustawienia użytkownika i preferencje aplikacji.
         </p>
@@ -25,14 +27,19 @@ export default function ProfilePage() {
           </ul>
         </section>
 
-        <section className="border border-slate-800 rounded-xl p-4 bg-slate-900/40">
+        <section className="border border-slate-800 rounded-xl p-4 bg-slate-900/40 space-y-2">
           <h2 className="text-sm font-medium mb-2 text-slate-200">
-            Preferencje
+            Accounts
           </h2>
           <p className="text-sm text-slate-400">
-            Tutaj możesz kiedyś dodać np. domyślną walutę, zakres dat na
-            dashboardzie, domyślną granulację wykresu (D/W/M/Q) itp.
+            Zarządzaj kontami bankowymi i historią importów.
           </p>
+          <Link
+            href="/profile/accounts"
+            className="inline-flex items-center gap-2 text-xs font-medium text-emerald-400 hover:text-emerald-300"
+          >
+            Otwórz Accounts →
+          </Link>
         </section>
       </div>
     </div>

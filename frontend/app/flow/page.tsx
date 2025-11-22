@@ -1,23 +1,36 @@
 // frontend/app/flow/page.tsx
+import { fetchTransactions } from "@/lib/serverApi";
+import { UploadForm } from "@/components/UploadForm";
+import { TransactionsView } from "@/components/TransactionsView";
 
-export default function FlowPage() {
+export default async function FlowPage() {
+  const initialTransactions = await fetchTransactions();
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Flow</h1>
         <p className="text-sm text-slate-400">
-          Przepływy pieniędzy w czasie – docelowo zaawansowane wykresy i
-          analityka cashflow.
+          Szczegółowy widok przepływów: import wyciągów, filtry, wykresy i
+          pełna lista transakcji.
         </p>
       </header>
 
-      <div className="border border-slate-800 rounded-xl p-4 bg-slate-900/40 text-sm text-slate-300">
-        <p>
-          Na razie to placeholder. Później przeniesiemy tutaj dodatkowe
-          wykresy (np. przychody vs wydatki, trendy, rolling averages,
-          scenariusze itp.).
-        </p>
-      </div>
+      {/* Import PDF przeniesiony z Dashboardu */}
+      <section className="border border-slate-800 rounded-xl p-4 bg-slate-900/40">
+        <h2 className="text-sm font-medium mb-3 text-slate-200">
+          Importuj wyciąg PDF
+        </h2>
+        <UploadForm />
+      </section>
+
+      {/* Zaawansowany widok: filtry + mini-dash + wykres + tabela */}
+      <section>
+        <TransactionsView
+          initialTransactions={initialTransactions}
+          initialAccountId={1}
+        />
+      </section>
     </div>
   );
 }

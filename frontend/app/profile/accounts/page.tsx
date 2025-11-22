@@ -1,12 +1,12 @@
-// frontend/app/accounts/page.tsx
-export default function AccountsPage() {
+// frontend/app/profile/accounts/page.tsx
+export default function ProfileAccountsPage() {
   return (
     <div className="space-y-4">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Accounts</h1>
         <p className="text-sm text-slate-400">
-          Przegląd kont, wyciągów i importów. Na razie jedno konto, ale
-          struktura przygotowana na więcej.
+          Przegląd Twoich kont i importów wyciągów. Na razie jedno konto,
+          ale struktura gotowa na więcej.
         </p>
       </header>
 

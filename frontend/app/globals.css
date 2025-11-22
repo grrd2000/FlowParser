@@ -24,3 +24,89 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px) translateX(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) translateX(10px) scale(1.05);
+  }
+}
+
+@keyframes float_reverse {
+  0%,
+  100% {
+    transform: translateY(0px) translateX(0px) scale(1);
+  }
+  50% {
+    transform: translateY(20px) translateX(-10px) scale(1.05);
+  }
+}
+
+/* te nazwy odpowiadają klasom animate-[...] z AppShell */
+@layer utilities {
+  .animate-\[float_18s_ease-in-out_infinite\] {
+    animation: float 18s ease-in-out infinite;
+  }
+  .animate-\[float_22s_ease-in-out_infinite_reverse\] {
+    animation: float_reverse 22s ease-in-out infinite;
+  }
+}
+
+@keyframes orbit {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate3d(40px, -40px, 0) scale(1.08);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.3;
+  }
+}
+
+@keyframes orbit-reverse {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate3d(-40px, 40px, 0) scale(1.1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.25;
+  }
+}
+
+.bg-orbit {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(48px);
+}
+
+.bg-orbit--left {
+  width: 22rem;
+  height: 22rem;
+  top: -8rem;
+  left: -8rem;
+  background: radial-gradient(circle at 30% 30%, rgba(129, 140, 248, 0.6), transparent 60%);
+  animation: orbit 26s ease-in-out infinite;
+}
+
+.bg-orbit--right {
+  width: 24rem;
+  height: 24rem;
+  bottom: -10rem;
+  right: -10rem;
+  background: radial-gradient(circle at 70% 70%, rgba(236, 72, 153, 0.5), transparent 60%);
+  animation: orbit-reverse 30s ease-in-out infinite;
+}
