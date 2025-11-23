@@ -9,12 +9,11 @@ export default function LandingPage() {
           Personal finance lab
         </p>
         <h1 className="text-3xl md:text-4xl font-semibold">
-          Ogarnij swoje przepływy pieniężne.
+          Zarządzaj swoimi przepływami.
         </h1>
         <p className="text-sm md:text-base text-slate-400 max-w-xl">
           FlowParser łączy import wyciągów bankowych, analitykę i
-          wizualizacje. Wszystko lokalnie, bez chmury – idealne jako
-          osobisty finansowy cockpit i projekt do portfolio.
+          wizualizacje.
         </p>
 
         <div className="flex flex-wrap gap-3 pt-2">
@@ -45,11 +44,9 @@ export default function LandingPage() {
           </h2>
           <ul className="list-disc pl-5 space-y-1 text-slate-400">
             <li>Wrzucasz wyciąg PDF z banku.</li>
-            <li>Dane trafiają do bazy (raw + przetworzone).</li>
+            <li>Dane trafiają do nas.</li>
             <li>Dashboard pokazuje wykresy, statystyki i tabelę operacji.</li>
-            <li>
-              Flow pozwala analizować trendy, okresy i przepływy w czasie.
-            </li>
+            <li>Flow pozwala analizować trendy, okresy i przepływy w czasie.</li>
           </ul>
         </div>
 

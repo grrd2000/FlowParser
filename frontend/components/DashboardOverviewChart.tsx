@@ -73,7 +73,7 @@ export function DashboardOverviewChart({ transactions }: Props) {
 
   return (
     <motion.div
-      className="h-64 w-full"
+      className="h-80 w-full md:h-96"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
