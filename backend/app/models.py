@@ -44,6 +44,27 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    preferences = relationship("UserPreference", back_populates="user", uselist=False)
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+
+    # preferencje
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="PLN")
+    default_range: Mapped[str] = mapped_column(String(8), nullable=False, default="3m")
+    default_granularity: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="month"
+    )
+    theme: Mapped[str] = mapped_column(String(16), nullable=False, default="dark")
+
+    user = relationship("User", back_populates="preferences")
+
 
 # -----------------------
 #  Accounts

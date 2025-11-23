@@ -18,7 +18,10 @@ from app.models import (
     ImportRun,
     RawTransaction,
     Transaction,
+    UserPreference
 )
+
+from app.schemas import UserProfileResponse, UserProfileUpdate
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
@@ -61,9 +64,9 @@ def get_db() -> Session:
 #  Startup: tworzenie schematu + domyślny user i account
 # -----------------------
 
-def ensure_default_user_and_account():
+def ensure_default_user_and_account(db: Session) -> User:
     """Tworzy przykładowego użytkownika i konto, jeśli jeszcze nie istnieją."""
-    db = SessionLocal()
+    # db = SessionLocal()
     try:
         user = db.query(User).filter_by(email="demo@example.com").first()
         if not user:
@@ -89,6 +92,26 @@ def ensure_default_user_and_account():
         db.commit()
     finally:
         db.close()
+        return user
+
+def get_or_create_user_prefs(db: Session, user: User) -> UserPreference:
+    prefs = (
+        db.query(UserPreference)
+        .filter(UserPreference.user_id == user.id)
+        .first()
+    )
+    if prefs is None:
+        prefs = UserPreference(
+            user_id=user.id,
+            currency="PLN",
+            default_range="3m",
+            default_granularity="month",
+            theme="dark",
+        )
+        db.add(prefs)
+        db.commit()
+        db.refresh(prefs)
+    return prefs
 
 
 @app.on_event("startup")
@@ -97,7 +120,7 @@ def on_startup():
     Base.metadata.create_all(bind=engine)
 
     # Na potrzeby dev: jeden user i jedno konto startowe
-    ensure_default_user_and_account()
+    ensure_default_user_and_account(db=SessionLocal())
 
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
@@ -117,6 +140,52 @@ def db_health():
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     return {"db": "ok"}
+
+
+@app.get("/user/me", response_model=UserProfileResponse)
+def get_my_profile(db: Session = Depends(get_db)):
+    user = ensure_default_user_and_account(db)
+    prefs = get_or_create_user_prefs(db, user)
+
+    return UserProfileResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        currency=prefs.currency,
+        default_range=prefs.default_range,
+        default_granularity=prefs.default_granularity,
+        theme=prefs.theme,
+    )
+
+
+@app.patch("/user/me", response_model=UserProfileResponse)
+def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db)):
+    user = ensure_default_user_and_account(db)
+    prefs = get_or_create_user_prefs(db, user)
+
+    user.name = payload.name
+    user.email = payload.email
+
+    prefs.currency = payload.currency
+    prefs.default_range = payload.default_range
+    prefs.default_granularity = payload.default_granularity
+    prefs.theme = payload.theme
+
+    db.add(user)
+    db.add(prefs)
+    db.commit()
+    db.refresh(user)
+    db.refresh(prefs)
+
+    return UserProfileResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        currency=prefs.currency,
+        default_range=prefs.default_range,
+        default_granularity=prefs.default_granularity,
+        theme=prefs.theme,
+    )
 
 
 # -----------------------
