@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
 import type { UserProfile } from "@/lib/serverApi";
 
 type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
@@ -8,7 +12,7 @@ type ProfileClientProps = {
   initialProfile: UserProfile;
 };
 
-export function ProfileClient() {
+export function ProfileClient({ initialProfile }: ProfileClientProps) {
     const [name, setName] = useState(initialProfile.name);
     const [email, setEmail] = useState(initialProfile.email);
 

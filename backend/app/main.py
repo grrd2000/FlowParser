@@ -64,9 +64,9 @@ def get_db() -> Session:
 #  Startup: tworzenie schematu + domyślny user i account
 # -----------------------
 
-def ensure_default_user_and_account(db: Session) -> User:
+def ensure_default_user_and_account() -> None:
     """Tworzy przykładowego użytkownika i konto, jeśli jeszcze nie istnieją."""
-    # db = SessionLocal()
+    db = SessionLocal()
     try:
         user = db.query(User).filter_by(email="demo@example.com").first()
         if not user:
@@ -92,7 +92,6 @@ def ensure_default_user_and_account(db: Session) -> User:
         db.commit()
     finally:
         db.close()
-        return user
 
 def get_or_create_user_prefs(db: Session, user: User) -> UserPreference:
     prefs = (
@@ -120,7 +119,7 @@ def on_startup():
     Base.metadata.create_all(bind=engine)
 
     # Na potrzeby dev: jeden user i jedno konto startowe
-    ensure_default_user_and_account(db=SessionLocal())
+    ensure_default_user_and_account()
 
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
@@ -142,14 +141,24 @@ def db_health():
     return {"db": "ok"}
 
 
+def get_or_create_demo_user(db: Session) -> User:
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        user = User(email="demo@example.com", full_name="Demo User")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+
+
 @app.get("/user/me", response_model=UserProfileResponse)
 def get_my_profile(db: Session = Depends(get_db)):
-    user = ensure_default_user_and_account(db)
+    user = get_or_create_demo_user(db)
     prefs = get_or_create_user_prefs(db, user)
 
     return UserProfileResponse(
         id=user.id,
-        name=user.name,
+        name=user.full_name,
         email=user.email,
         currency=prefs.currency,
         default_range=prefs.default_range,
@@ -160,10 +169,10 @@ def get_my_profile(db: Session = Depends(get_db)):
 
 @app.patch("/user/me", response_model=UserProfileResponse)
 def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db)):
-    user = ensure_default_user_and_account(db)
+    user = get_or_create_demo_user(db)
     prefs = get_or_create_user_prefs(db, user)
 
-    user.name = payload.name
+    user.full_name = payload.name
     user.email = payload.email
 
     prefs.currency = payload.currency
@@ -179,7 +188,7 @@ def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db))
 
     return UserProfileResponse(
         id=user.id,
-        name=user.name,
+        name=user.full_name,
         email=user.email,
         currency=prefs.currency,
         default_range=prefs.default_range,
