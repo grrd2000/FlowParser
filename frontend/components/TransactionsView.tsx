@@ -6,24 +6,31 @@ import type { Transaction } from "@/lib/serverApi";
 import { fetchTransactionsClient } from "@/lib/clientApi";
 import { TransactionsChart } from "./TransactionsChart";
 
+
+type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all" | "custom";
+type Granularity = "day" | "week" | "month" | "quarter";
+
 type Props = {
   initialTransactions: Transaction[];
   initialAccountId?: number;
+  initialRange?: RangeKey;
+  initialGranularity?: Granularity;
 };
-
-type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all" | "custom";
 
 export function TransactionsView({
   initialTransactions,
-  initialAccountId = 1,
+  initialAccountId,
+  initialRange,
+  initialGranularity,
 }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [accountId] = useState<number>(initialAccountId);
 
-  const [rangeKey, setRangeKey] = useState<RangeKey>("1m");
-
-  const [from, setFromDate] = useState<string>("");
-  const [to, setToDate] = useState<string>("");
+  const [rangeKey, setRangeKey] = useState<RangeKey>(
+    initialRange ?? "3m"
+  );
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,8 +58,8 @@ export function TransactionsView({
 
       const data = await fetchTransactionsClient({
         accountId,
-        from: from || undefined,
-        to: to || undefined,
+        from: fromDate || undefined,
+        to: toDate || undefined,
       });
 
       setTransactions(data);
@@ -186,7 +193,7 @@ export function TransactionsView({
             <input
               id="from"
               type="date"
-              value={from}
+              value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               className="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-100
                          focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -200,7 +207,7 @@ export function TransactionsView({
             <input
               id="to"
               type="date"
-              value={to}
+              value={toDate}
               onChange={(e) => setToDate(e.target.value)}
               className="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-100
                          focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -271,7 +278,10 @@ export function TransactionsView({
         <div className="text-xs text-slate-400 mb-2">
           Saldo dzienne (netto)
         </div>
-        <TransactionsChart transactions={transactions} />
+        <TransactionsChart
+          transactions={transactions}
+          initialGranularity={initialGranularity}
+        />
       </div>
 
       {/* Tabela transakcji */}

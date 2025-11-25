@@ -1,9 +1,16 @@
-// frontend/app/dashboard/page.tsx
-import { fetchTransactions } from "@/lib/serverApi";
+import { fetchTransactions, fetchUserProfile } from "@/lib/serverApi";
 import { DashboardClient } from "@/components/DashboardClient";
 
 export default async function DashboardPage() {
-  const transactions = await fetchTransactions();
+  const [transactions, profile] = await Promise.all([
+    fetchTransactions(),
+    fetchUserProfile(),
+  ]);
 
-  return <DashboardClient transactions={transactions} />;
+  return (
+    <DashboardClient
+      transactions={transactions}
+      initialRange={profile.default_range as any} // "1m" | "3m" | ...
+    />
+  );
 }

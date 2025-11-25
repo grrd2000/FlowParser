@@ -11,6 +11,7 @@ import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 
 type Props = {
   transactions: Transaction[];
+  initialRange?: RangeKey;
 };
 
 type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all" | "custom";
@@ -28,8 +29,10 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-export function DashboardClient({ transactions }: Props) {
-  const [rangeKey, setRangeKey] = useState<RangeKey>("1m");
+export function DashboardClient({ transactions, initialRange }: Props) {
+  const [rangeKey, setRangeKey] = useState<RangeKey>(
+    (initialRange as RangeKey) ?? "3m"
+  );
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 

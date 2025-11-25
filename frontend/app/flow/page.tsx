@@ -1,10 +1,13 @@
 // frontend/app/flow/page.tsx
-import { fetchTransactions } from "@/lib/serverApi";
+import { fetchTransactions, fetchUserProfile } from "@/lib/serverApi";
 import { UploadForm } from "@/components/UploadForm";
 import { TransactionsView } from "@/components/TransactionsView";
 
 export default async function FlowPage() {
-  const initialTransactions = await fetchTransactions();
+  const [initialTransactions, profile] = await Promise.all([
+    fetchTransactions(),
+    fetchUserProfile(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -29,6 +32,8 @@ export default async function FlowPage() {
         <TransactionsView
           initialTransactions={initialTransactions}
           initialAccountId={1}
+          initialRange={profile.default_range as any}
+          initialGranularity={profile.default_granularity as any}
         />
       </section>
     </div>

@@ -10,6 +10,7 @@ const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 type Props = {
   transactions: Transaction[];
+  initialGranularity?: Granularity;
 };
 
 type Granularity = "day" | "week" | "month" | "quarter";
@@ -33,8 +34,14 @@ function getQuarter(d: Date): { year: number; quarter: number } {
   return { year: d.getFullYear(), quarter: q };
 }
 
-export function TransactionsChart({ transactions }: Props) {
-  const [granularity, setGranularity] = useState<Granularity>("day");
+
+export function TransactionsChart({
+  transactions,
+  initialGranularity,
+}: Props) {
+  const [granularity, setGranularity] = useState<Granularity>(
+    initialGranularity ?? "day"
+  );
 
   const buckets = useMemo(() => {
     const map = new Map<
