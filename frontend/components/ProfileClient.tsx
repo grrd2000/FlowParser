@@ -13,18 +13,22 @@ type ProfileClientProps = {
 };
 
 export function ProfileClient({ initialProfile }: ProfileClientProps) {
-    const [name, setName] = useState(initialProfile.name);
-    const [email, setEmail] = useState(initialProfile.email);
+  // dane użytkownika
+  const [name, setName] = useState(initialProfile.name);
+  const [email, setEmail] = useState(initialProfile.email);
 
-    const [currency, setCurrency] = useState<Currency>(
+  // walutę trzymamy tylko na potrzeby payloadu – UI już jej nie edytuje
+  const [currency] = useState<Currency>(
     (initialProfile.currency as Currency) ?? "PLN"
-    );
-    const [defaultRange, setDefaultRange] = useState<RangeKey>(
+  );
+
+  // preferencje
+  const [defaultRange, setDefaultRange] = useState<RangeKey>(
     (initialProfile.default_range as RangeKey) ?? "3m"
-    );
-    const [defaultGranularity, setDefaultGranularity] =
+  );
+  const [defaultGranularity, setDefaultGranularity] =
     useState<Granularity>(
-        (initialProfile.default_granularity as Granularity) ?? "month"
+      (initialProfile.default_granularity as Granularity) ?? "month"
     );
 
   const [saving, setSaving] = useState(false);
@@ -40,42 +44,41 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
           .join("")
       : "U";
 
-const handleSave = async () => {
-  try {
-    setSaving(true);
+  const handleSave = async () => {
+    try {
+      setSaving(true);
 
-    const payload = {
-      name,
-      email,
-      currency,
-      default_range: defaultRange,
-      default_granularity: defaultGranularity,
-      theme: "dark",
-    };
+      const payload = {
+        name,
+        email,
+        currency, // nadal wysyłamy, ale nie edytujemy w UI
+        default_range: defaultRange,
+        default_granularity: defaultGranularity,
+        theme: "dark",
+      };
 
-    const API_BASE =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+      const apiBase =
+        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-    const res = await fetch(`${API_BASE}/user/me`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    });
+      const res = await fetch(`${apiBase}/user/me`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
+      if (!res.ok) {
+        console.error("Failed to update profile", await res.text());
+        return;
+      }
 
-    if (!res.ok) {
-      console.error("Failed to update profile", await res.text());
-      // tu możesz kiedyś dodać toast z błędem
-      return;
+      await res.json();
+      setSavedAt(new Date());
+    } finally {
+      setSaving(false);
     }
-
-    const updated = await res.json();
-    setSavedAt(new Date());
-  } finally {
-    setSaving(false);
-  }
-};
-
+  };
 
   return (
     <div className="space-y-6">
@@ -154,13 +157,18 @@ const handleSave = async () => {
           </section>
         </div>
 
-        {/* prawa kolumna: preferencje + przycisk zapisu */}
+        {/* prawa kolumna: odświeżony kafelek Preferencje */}
         <div className="space-y-4">
           <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-slate-200">
-                Preferencje
-              </h2>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-medium text-slate-200">
+                  Preferencje widoku
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Dashboard i Flow startują zgodnie z tymi ustawieniami.
+                </p>
+              </div>
               {savedAt && (
                 <span className="text-[11px] text-emerald-300">
                   Zapisano:{" "}
@@ -172,65 +180,89 @@ const handleSave = async () => {
               )}
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 text-sm">
-              {/* waluta */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-400">
-                  Domyślna waluta
-                </label>
-                <select
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-0"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value as Currency)}
-                >
-                  <option value="PLN">PLN – złoty polski</option>
-                  <option value="EUR">EUR – euro</option>
-                  <option value="USD">USD – dolar amerykański</option>
-                </select>
+            <div className="space-y-4 text-sm">
+              {/* domyślny zakres */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    Domyślny zakres czasowy
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Używany w Dashboard i Flow
+                  </span>
+                </div>
+                <div className="inline-flex rounded-full bg-slate-950/80 border border-slate-700 p-0.5 text-[11px]">
+                  {(
+                    [
+                      ["1m", "1 mies."],
+                      ["3m", "3 mies."],
+                      ["6m", "6 mies."],
+                      ["ytd", "YTD"],
+                      ["all", "Wszystko"],
+                    ] as [RangeKey, string][]
+                  ).map(([value, label]) => {
+                    const active = defaultRange === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setDefaultRange(value)}
+                        className={[
+                          "px-3 py-1 rounded-full transition-colors",
+                          active
+                            ? "bg-indigo-500 text-slate-50"
+                            : "text-slate-400 hover:text-slate-100",
+                        ].join(" ")}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* domyślny zakres na dashboardzie */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-400">
-                  Domyślny zakres na Dashboardzie
-                </label>
-                <select
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-0"
-                  value={defaultRange}
-                  onChange={(e) =>
-                    setDefaultRange(e.target.value as RangeKey)
-                  }
-                >
-                  <option value="1m">Ostatni miesiąc</option>
-                  <option value="3m">Ostatnie 3 miesiące</option>
-                  <option value="6m">Ostatnie 6 miesięcy</option>
-                  <option value="ytd">Year to date</option>
-                  <option value="all">Cała historia</option>
-                </select>
+              {/* domyślna granulacja */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    Domyślna granulacja wykresów
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Wpływa na oś czasu
+                  </span>
+                </div>
+                <div className="inline-flex rounded-full bg-slate-950/80 border border-slate-700 p-0.5 text-[11px]">
+                  {(
+                    [
+                      ["day", "Dzień"],
+                      ["week", "Tydzień"],
+                      ["month", "Miesiąc"],
+                      ["quarter", "Kwartał"],
+                    ] as [Granularity, string][]
+                  ).map(([value, label]) => {
+                    const active = defaultGranularity === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setDefaultGranularity(value)}
+                        className={[
+                          "px-3 py-1 rounded-full transition-colors",
+                          active
+                            ? "bg-indigo-500 text-slate-50"
+                            : "text-slate-400 hover:text-slate-100",
+                        ].join(" ")}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* domyślna granulacja wykresu */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-400">
-                  Domyślna granulacja wykresów
-                </label>
-                <select
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-0"
-                  value={defaultGranularity}
-                  onChange={(e) =>
-                    setDefaultGranularity(e.target.value as Granularity)
-                  }
-                >
-                  <option value="day">Dziennie</option>
-                  <option value="week">Tygodniowo</option>
-                  <option value="month">Miesięcznie</option>
-                  <option value="quarter">Kwartalnie</option>
-                </select>
-              </div>
-
-              {/* tryb UI – na razie tylko dark */}
-              <div className="space-y-1">
-                <label className="text-xs text-slate-400">Tryb UI</label>
+              {/* tryb UI */}
+              <div className="space-y-2">
+                <span className="text-xs text-slate-400">Tryb interfejsu</span>
                 <div className="flex gap-2 text-xs">
                   <button
                     type="button"
@@ -249,9 +281,10 @@ const handleSave = async () => {
             </div>
 
             {/* przycisk zapisu */}
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-5 flex items-center justify-between">
               <p className="text-[11px] text-slate-500">
-                Na razie preferencje zapisywane są lokalnie w sesji demo.
+                Preferencje zapisywane są w bazie i używane przy starcie
+                widoków.
               </p>
               <button
                 type="button"

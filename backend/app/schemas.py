@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -22,3 +22,17 @@ class UserProfileResponse(UserPreferencesBase):
 class UserProfileUpdate(UserPreferencesBase):
     name: str
     email: EmailStr
+
+
+class AccountSummary(BaseModel):
+    id: int
+    name: str
+    institution: str | None = None
+    currency: str
+    account_number: str | None = None
+    owner: str | None = None
+    created_at: datetime | None = None
+    transaction_count: int
+
+    class Config:
+        from_attributes = True

@@ -48,3 +48,26 @@ export async function fetchUserProfile(): Promise<UserProfile> {
 
   return res.json();
 }
+
+export type AccountSummary = {
+  id: number;
+  name: string;
+  institution: string | null;
+  currency: string;
+  account_number: string | null;
+  owner: string | null;
+  created_at: string | null;
+  transaction_count: number;
+};
+
+export async function fetchAccounts(): Promise<AccountSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/accounts`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+
+  return res.json();
+}

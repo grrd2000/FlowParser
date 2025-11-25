@@ -21,7 +21,7 @@ from app.models import (
     UserPreference
 )
 
-from app.schemas import UserProfileResponse, UserProfileUpdate
+from app.schemas import UserProfileResponse, UserProfileUpdate, AccountSummary
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
@@ -212,8 +212,8 @@ def list_accounts(db: Session = Depends(get_db)):
             "name": a.name,
             "institution": a.institution,
             "currency": a.currency,
-            "type": a.account_type,
-            "number": a.external_id,
+            "type": a.type,
+            "number": a.number,
         }
         for a in accounts
     ]
@@ -522,6 +522,43 @@ async def import_pdf_for_account(
         "status": run.status,
     }
 
+
+
+@app.get("/accounts", response_model=list[AccountSummary])
+def list_accounts(db: Session = Depends(get_db)):
+    # demo – ten sam user co w /user/me
+    user = get_or_create_demo_user(db)
+
+    # join z transakcjami + count
+    rows = (
+        db.query(
+            Account,
+            func.count(Transaction.id).label("tx_count"),
+        )
+        .outerjoin(
+            Transaction, Transaction.account_id == Account.id
+        )
+        .filter(Account.user_id == user.id)
+        .group_by(Account.id)
+        .all()
+    )
+
+    result: list[AccountSummary] = []
+    for account, tx_count in rows:
+        result.append(
+            AccountSummary(
+                id=account.id,
+                name=getattr(account, "name", "Konto"),
+                institution=getattr(account, "institution", None),
+                currency=getattr(account, "currency", "PLN"),
+                account_number=getattr(account, "account_number", None),
+                owner=getattr(account, "owner", None),
+                created_at=getattr(account, "created_at", None),
+                transaction_count=tx_count or 0,
+            )
+        )
+
+    return result
 
 # -----------------------
 #  Podgląd importów i RAW (do debugu)
