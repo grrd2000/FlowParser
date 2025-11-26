@@ -4,9 +4,9 @@ from decimal import Decimal
 
 
 class UserPreferencesBase(BaseModel):
-    currency: str  # "PLN" | "EUR" | "USD"
-    default_range: str  # "1m" | "3m" | "6m" | "ytd" | "all"
-    default_granularity: str  # "day" | "week" | "month" | "quarter"
+    currency: str
+    default_range: str
+    default_granularity: str
     theme: str = "dark"
 
 
@@ -16,13 +16,12 @@ class UserProfileResponse(UserPreferencesBase):
     email: EmailStr
 
     class Config:
-        from_attributes = True  # dla SQLAlchemy modeli
+        from_attributes = True
 
 
 class UserProfileUpdate(UserPreferencesBase):
     name: str
     email: EmailStr
-
 
 class AccountSummary(BaseModel):
     id: int

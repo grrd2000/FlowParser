@@ -140,7 +140,7 @@ function AccountCard({ account }: { account: AccountSummary }) {
         <div className="text-right space-y-0.5">
           {created && (
             <div className="text-slate-500">
-              Założone:{" "}
+              Dodane:{" "}
               <span className="text-slate-300">{created}</span>
             </div>
           )}

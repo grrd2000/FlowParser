@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
-from sqlalchemy import text, select
+from sqlalchemy import text, select, func
 from sqlalchemy.orm import Session
 
 from app.db import engine, SessionLocal
@@ -64,34 +64,48 @@ def get_db() -> Session:
 #  Startup: tworzenie schematu + domyślny user i account
 # -----------------------
 
-def ensure_default_user_and_account() -> None:
-    """Tworzy przykładowego użytkownika i konto, jeśli jeszcze nie istnieją."""
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter_by(email="demo@example.com").first()
-        if not user:
-            user = User(email="demo@example.com", full_name="Demo User")
-            db.add(user)
-            db.flush()  # żeby mieć user.id
+# def ensure_default_user_and_account() -> None:
+#     """Tworzy przykładowego użytkownika i konto, jeśli jeszcze nie istnieją."""
+#     db = SessionLocal()
+#     try:
+#         user = db.query(User).filter_by(email="demo@example.com").first()
+#         if not user:
+#             user = User(email="demo@example.com", full_name="Demo User")
+#             db.add(user)
+#             db.flush()  # żeby mieć user.id
 
-        account = (
-            db.query(Account)
-            .filter_by(user_id=user.id, name="Główne konto")
-            .first()
+#         account = (
+#             db.query(Account)
+#             .filter_by(user_id=user.id, name="Główne konto")
+#             .first()
+#         )
+#         if not account:
+#             account = Account(
+#                 user_id=user.id,
+#                 name="Główne konto",
+#                 institution="PKO BP",
+#                 currency="PLN",
+#                 type="checking",
+#             )
+#             db.add(account)
+
+#         db.commit()
+#     finally:
+#         db.close()
+
+def get_current_user(db: Session) -> User:
+    """
+    Tymczasowo: w systemie single-user zwracamy pierwszego istniejącego usera.
+    Później to podmienimy na proper auth.
+    """
+    user = db.query(User).order_by(User.id.asc()).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="No users configured. Create a user in the database first.",
         )
-        if not account:
-            account = Account(
-                user_id=user.id,
-                name="Główne konto",
-                institution="PKO BP",
-                currency="PLN",
-                type="checking",
-            )
-            db.add(account)
+    return user
 
-        db.commit()
-    finally:
-        db.close()
 
 def get_or_create_user_prefs(db: Session, user: User) -> UserPreference:
     prefs = (
@@ -117,9 +131,6 @@ def get_or_create_user_prefs(db: Session, user: User) -> UserPreference:
 def on_startup():
     # Tworzymy wszystkie tabele według modeli
     Base.metadata.create_all(bind=engine)
-
-    # Na potrzeby dev: jeden user i jedno konto startowe
-    ensure_default_user_and_account()
 
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
@@ -167,12 +178,27 @@ def get_my_profile(db: Session = Depends(get_db)):
     )
 
 
-@app.patch("/user/me", response_model=UserProfileResponse)
-def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db)):
-    user = get_or_create_demo_user(db)
+@app.get("/user/me", response_model=UserProfileResponse)
+def get_my_profile(db: Session = Depends(get_db)):
+    user = get_current_user(db)  # ⬅ tu już NIC się nie tworzy
     prefs = get_or_create_user_prefs(db, user)
 
-    user.full_name = payload.name
+    return UserProfileResponse(
+        id=user.id,
+        name=user.full_name,  # lub user.name – jak masz w modelu
+        email=user.email,
+        currency=prefs.currency,
+        default_range=prefs.default_range,
+        default_granularity=prefs.default_granularity,
+        theme=prefs.theme,
+    )
+
+@app.patch("/user/me", response_model=UserProfileResponse)
+def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db)):
+    user = get_current_user(db)
+    prefs = get_or_create_user_prefs(db, user)
+
+    user.full_name = payload.name  # dopasuj do swojego modelu
     user.email = payload.email
 
     prefs.currency = payload.currency
@@ -201,22 +227,50 @@ def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db))
 #  Accounts – minimalne API
 # -----------------------
 
-@app.get("/accounts")
+@app.get("/accounts", response_model=list[AccountSummary])
 def list_accounts(db: Session = Depends(get_db)):
-    """Lista kont w systemie (na razie wszystkie, bez auth)."""
-    accounts = db.execute(select(Account)).scalars().all()
-    return [
-        {
-            "id": a.id,
-            "user_id": a.user_id,
-            "name": a.name,
-            "institution": a.institution,
-            "currency": a.currency,
-            "type": a.type,
-            "number": a.number,
-        }
-        for a in accounts
-    ]
+    user = get_current_user(db)
+
+    rows = (
+        db.query(
+            Account.id,
+            Account.name,
+            Account.institution,
+            Account.currency,
+            Account.number,
+            Account.owner,
+            Account.created_at,
+            func.count(Transaction.id).label("tx_count"),
+        )
+        .outerjoin(Transaction, Transaction.account_id == Account.id)
+        .filter(Account.user_id == user.id)
+        .group_by(
+            Account.id,
+            Account.name,
+            Account.institution,
+            Account.currency,
+            Account.number,
+            Account.owner,
+            Account.created_at,
+        )
+        .all()
+    )
+
+    result: list[AccountSummary] = []
+    for row in rows:
+        result.append(
+            AccountSummary(
+                id=row.id,
+                name=row.name,
+                institution=row.institution,
+                currency=row.currency,
+                account_number=row.number,
+                owner=row.owner,
+                created_at=row.created_at,
+                transaction_count=row.tx_count or 0,
+            )
+        )
+    return result
 
 
 # -----------------------
@@ -339,23 +393,37 @@ REQUIRED_COLS = [
     "balance",
 ]
 
-@app.post("/accounts/{account_id}/import-pdf")
-async def import_pdf_for_account(
-    account_id: int,
+from datetime import datetime, timezone
+from fastapi import UploadFile, File, HTTPException, Depends
+from sqlalchemy.orm import Session
+
+# zakładam, że to już importujesz:
+# from app.database import get_db
+# from app.models import Account, Statement, ImportRun, RawTransaction, Transaction
+# from app.utils.pko_pdf_parser import parse_pko_statement
+# from app.utils.etl_helpers import parse_date_str, parse_decimal_str
+# REQUIRED_COLS = [...]  # jak wcześniej
+# get_current_user – ta nowa funkcja, o której pisaliśmy
+
+@app.post("/statements/import-pdf")
+async def import_pdf(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
     """
+    Import wyciągu PDF:
+
     1) Zapisuje PDF do /uploads
-    2) Tworzy Statement + ImportRun
-    3) Parsuje PDF -> DataFrame (surowy tekst)
-    4) KROK 1: Zapisuje tylko RawTransactions (tekst)
-    5) KROK 2: Z RawTransactions próbuje utworzyć Transactions (z konwersją typów w Pythonie)
+    2) Parsuje PDF -> DataFrame + account_info + statement_info
+    3) Na podstawie account_info:
+       - szuka istniejącego konta użytkownika
+       - lub tworzy nowe
+    4) Tworzy Statement + ImportRun
+    5) Zapisuje RawTransactions
+    6) Buduje Transactions z konwersją typów w Pythonie
     """
 
-    account = db.get(Account, account_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+    user = get_current_user(db)
 
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -368,68 +436,114 @@ async def import_pdf_for_account(
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    # --- Statement ---
-    statement = Statement(
-        account_id=account.id,
-        file_name=file.filename,
-        storage_path=file_path,
-        source_type="PKO_PDF",
-    )
-    print(statement)
-    db.add(statement)
-    db.flush()  # mamy statement.id
-
-    # --- ImportRun (start) ---
-    run = ImportRun(
-        statement_id=statement.id,
-        status="processing",
-    )
-    print(run)
-    db.add(run)
-    db.flush()  # mamy run.id
-
     total_rows = 0
     imported_rows = 0
     error_rows = 0
 
     try:
-        # 1) Parsowanie PDF Twoim parserem – tu dostajemy DF z TEKSTAMI
-        transactions, account_info, statement_info = parse_pko_statement(file_path)
+        # 1) Parsowanie PDF – Twój parser
+        df, account_info, statement_info = parse_pko_statement(file_path)
 
-        if account_info:
-            account.number = account_info.get("account_number", account.number)
-            account.name = account_info.get("account_name", account.name)
-            account.owner = account_info.get("account_owner", account.owner)
-            account.institution = "PKO BP"
-            account.currency = account_info.get("account_currency", account.currency)
+        if not account_info or "account_number" not in account_info:
+            raise HTTPException(
+                status_code=400,
+                detail="Parser nie zwrócił informacji o numerze konta (account_info).",
+            )
+
+        account_number = account_info.get("account_number")
+        account_name = account_info.get("account_name") or "Konto"
+        account_owner = account_info.get("account_owner")
+        account_currency = account_info.get("account_currency") or "PLN"
+
+        # 2) SZUKAMY / TWORZYMY konto dla usera na podstawie numeru + waluty + instytucji
+        institution = "PKO BP"  # bo to parser PKO – jak kiedyś dodasz inne, tu zrobimy rozgałęzienie
+
+        account = (
+            db.query(Account)
+            .filter(
+                Account.user_id == user.id,
+                Account.number == account_number,
+                Account.currency == account_currency,
+                Account.institution == institution,
+            )
+            .first()
+        )
+
+        if not account:
+            account = Account(
+                user_id=user.id,
+                number=account_number,
+                name=account_name,
+                owner=account_owner,
+                institution=institution,
+                currency=account_currency,
+            )
             db.add(account)
-            db.commit()
-        
+            db.flush()  # mamy account.id
+
+        # 3) Tworzymy Statement – dopiero po ustaleniu konta
+        statement = Statement(
+            account_id=account.id,
+            file_name=file.filename,
+            storage_path=file_path,
+            source_type="PKO_PDF",
+        )
+
         if statement_info:
-            statement.period_start = datetime.strptime(statement_info.get("period_start"), "%d.%m.%Y").date()
-            statement.period_end = datetime.strptime(statement_info.get("period_end"), "%d.%m.%Y").date()
-            statement.issue_date = datetime.strptime(statement_info.get("statement_date"), "%d.%m.%Y").date()
+            try:
+                statement.period_start = datetime.strptime(
+                    statement_info.get("period_start"), "%d.%m.%Y"
+                ).date()
+                statement.period_end = datetime.strptime(
+                    statement_info.get("period_end"), "%d.%m.%Y"
+                ).date()
+                statement.issue_date = datetime.strptime(
+                    statement_info.get("statement_date"), "%d.%m.%Y"
+                ).date()
+            except Exception:
+                # jeśli coś nie tak z datami – niech statement żyje, ale bez nich
+                pass
+
             statement.pages_total = statement_info.get("pages_total")
-            statement.turnover_ma = parse_decimal_str(statement_info.get("turnover_ma"))
-            statement.turnover_wn = parse_decimal_str(statement_info.get("turnover_wn"))
-            statement.previous_balance = parse_decimal_str(statement_info.get("previous_balance"))
-            db.add(statement)
-            db.commit()
+            if statement_info.get("turnover_ma"):
+                statement.turnover_ma = parse_decimal_str(
+                  statement_info.get("turnover_ma")
+                )
+            if statement_info.get("turnover_wn"):
+                statement.turnover_wn = parse_decimal_str(
+                  statement_info.get("turnover_wn")
+                )
+            if statement_info.get("previous_balance"):
+                statement.previous_balance = parse_decimal_str(
+                  statement_info.get("previous_balance")
+                )
 
-        print("PKO DF columns:", list(transactions.columns))
-        total_rows = len(transactions)
+        db.add(statement)
+        db.flush()  # statement.id
 
-        missing = [c for c in REQUIRED_COLS if c not in transactions.columns]
+        # 4) ImportRun (start)
+        run = ImportRun(
+            statement_id=statement.id,
+            status="processing",
+        )
+        db.add(run)
+        db.flush()  # run.id
+
+        # 5) Surowe dane – weryfikacja kolumn
+        print("PKO DF columns:", list(df.columns))
+        total_rows = len(df)
+
+        missing = [c for c in REQUIRED_COLS if c not in df.columns]
         if missing:
-            msg = f"Parser nie zwrócił wymaganych kolumn: {missing}. Kolumny DF: {list(transactions.columns)}"
+            msg = f"Parser nie zwrócił wymaganych kolumn: {missing}. Kolumny DF: {list(df.columns)}"
             run.status = "failed"
             run.message = msg
             run.finished_at = datetime.now(timezone.utc)
             db.commit()
             raise HTTPException(status_code=400, detail=msg)
 
-        # 2) KROK 1: zapis wszystkiego do RawTransactions (TYLKO TEKST)
-        for idx, row in transactions.iterrows():
+        # 6) RAW TRANSACTIONS – zapis tekstów
+        for idx, row in df.iterrows():
             raw = RawTransaction(
                 statement_id=statement.id,
                 import_run_id=run.id,
@@ -441,14 +555,14 @@ async def import_pdf_for_account(
                 op_type_raw=str(row.get("operation_type", "")),
                 amount_raw=str(row["amount"]),
                 balance_raw=str(row.get("balance", "")),
-                parsed_ok=True,       # na razie zakładamy OK – poprawimy w kroku 2
+                parsed_ok=True,
                 error_message=None,
             )
             db.add(raw)
 
-        db.commit()  # RAW zapisane niezależnie od dalszych problemów
+        db.commit()  # RAW zapisane
 
-        # 3) KROK 2: ETL z RawTransactions -> Transactions (konwersja w Pythonie)
+        # 7) ETL: RawTransactions -> Transactions
         raws = (
             db.query(RawTransaction)
             .filter(RawTransaction.import_run_id == run.id)
@@ -486,12 +600,10 @@ async def import_pdf_for_account(
                 imported_rows += 1
 
             except Exception as e:
-                # Błąd parsowania / konwersji – NIE ma transakcji, ale raw zostaje z flagą błędu
                 raw.parsed_ok = False
                 raw.error_message = str(e)
                 error_rows += 1
 
-        # zapisujemy efekty kroku 2
         run.status = "success" if error_rows == 0 else "partial_success"
         run.total_rows = total_rows
         run.imported_rows = imported_rows
@@ -504,11 +616,15 @@ async def import_pdf_for_account(
         raise
     except Exception as e:
         db.rollback()
-        run.status = "failed"
-        run.message = str(e)
-        run.finished_at = datetime.now(timezone.utc)
-        db.add(run)
-        db.commit()
+        # zabezpieczenie – jeśli run istnieje
+        try:
+            run.status = "failed"
+            run.message = str(e)
+            run.finished_at = datetime.now(timezone.utc)
+            db.add(run)
+            db.commit()
+        except Exception:
+            pass
         raise HTTPException(status_code=400, detail=f"Error during import: {e}")
 
     return {
@@ -521,6 +637,7 @@ async def import_pdf_for_account(
         "error_rows": error_rows,
         "status": run.status,
     }
+
 
 
 

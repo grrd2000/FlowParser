@@ -27,8 +27,7 @@ export function UploadForm() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch(
-        `${PUBLIC_API_BASE_URL}/accounts/${accountId}/import-pdf`,
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/statements/import-pdf`,
         {
           method: "POST",
           body: formData,
