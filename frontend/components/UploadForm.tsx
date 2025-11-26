@@ -6,7 +6,7 @@ import { PUBLIC_API_BASE_URL } from "@/lib/clientApi";
 
 export function UploadForm() {
   // TODO: pobierać account_id dynamicznie; na razie na sztywno 1
-  const [accountId] = useState<number>(1);
+  // const [accountId] = useState<number>(1);
 
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<null | "idle" | "loading" | "success" | "error">(null);

@@ -71,3 +71,43 @@ export async function fetchAccounts(): Promise<AccountSummary[]> {
 
   return res.json();
 }
+
+export type StatementSummary = {
+  id: number;
+  account_id: number;
+  account_name: string;
+  account_number: string | null;
+  institution: string | null;
+  currency: string;
+
+  file_name: string;
+  source_type: string | null;
+
+  period_start: string | null;
+  period_end: string | null;
+  issue_date: string | null;
+
+  pages_total: number | null;
+
+  turnover_ma: number | null;
+  turnover_wn: number | null;
+  previous_balance: number | null;
+
+  import_status: string | null;
+  total_rows: number | null;
+  imported_rows: number | null;
+  error_rows: number | null;
+  finished_at: string | null;
+};
+
+export async function fetchStatements(): Promise<StatementSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/statements`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+
+  return res.json();
+}

@@ -155,6 +155,28 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
               </Link>
             </div>
           </section>
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-slate-200">
+                Statements
+              </h2>
+              <span className="text-[11px] text-slate-500">
+                Wgrane wyciągi
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Przeglądaj zaimportowane wyciągi, ich zakres dat, status importu
+              i podstawowe agregaty.
+            </p>
+            <div>
+              <Link
+                href="/profile/statements"
+                className="inline-flex items-center gap-1 rounded-full border border-indigo-400/60 bg-indigo-500/10 px-3 py-1.5 text-[11px] font-medium text-indigo-200 hover:bg-indigo-500/20 transition-colors"
+              >
+                Otwórz Statements →
+              </Link>
+            </div>
+          </section>
         </div>
 
         {/* prawa kolumna: odświeżony kafelek Preferencje */}

@@ -35,3 +35,34 @@ class AccountSummary(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class StatementSummary(BaseModel):
+    id: int
+    account_id: int
+    account_name: str
+    account_number: str | None = None
+    institution: str | None = None
+    currency: str
+
+    file_name: str
+    source_type: str | None = None
+
+    period_start: date | None = None
+    period_end: date | None = None
+    issue_date: date | None = None
+
+    pages_total: int | None = None
+
+    turnover_ma: float | None = None
+    turnover_wn: float | None = None
+    previous_balance: float | None = None
+
+    import_status: str | None = None
+    total_rows: int | None = None
+    imported_rows: int | None = None
+    error_rows: int | None = None
+    finished_at: datetime | None = None
+
+    class Config:
+        from_attributes = True

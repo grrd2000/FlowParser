@@ -21,7 +21,7 @@ from app.models import (
     UserPreference
 )
 
-from app.schemas import UserProfileResponse, UserProfileUpdate, AccountSummary
+from app.schemas import UserProfileResponse, UserProfileUpdate, AccountSummary, StatementSummary
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
@@ -676,6 +676,75 @@ def list_accounts(db: Session = Depends(get_db)):
         )
 
     return result
+
+
+@app.get("/statements", response_model=list[StatementSummary])
+def list_statements(db: Session = Depends(get_db)):
+    user = get_current_user(db)
+
+    # join: Statement -> Account -> ImportRun (ostatni run, jeśli masz ich więcej)
+    # zakładam, że dla każdego statementu masz maksymalnie 1 ImportRun
+    rows = (
+        db.query(
+            Statement.id,
+            Statement.account_id,
+            Statement.file_name,
+            Statement.source_type,
+            Statement.period_start,
+            Statement.period_end,
+            Statement.issue_date,
+            Statement.pages_total,
+            Statement.turnover_ma,
+            Statement.turnover_wn,
+            Statement.previous_balance,
+            Account.name.label("account_name"),
+            Account.number.label("account_number"),
+            Account.institution.label("institution"),
+            Account.currency.label("currency"),
+            ImportRun.status.label("import_status"),
+            ImportRun.total_rows,
+            ImportRun.imported_rows,
+            ImportRun.error_rows,
+            ImportRun.finished_at,
+        )
+        .join(Account, Account.id == Statement.account_id)
+        .outerjoin(ImportRun, ImportRun.statement_id == Statement.id)
+        .filter(Account.user_id == user.id)
+        .order_by(Statement.issue_date.desc().nullslast(), Statement.id.desc())
+        .all()
+    )
+
+    result: list[StatementSummary] = []
+    for r in rows:
+        result.append(
+            StatementSummary(
+                id=r.id,
+                account_id=r.account_id,
+                account_name=r.account_name,
+                account_number=r.account_number,
+                institution=r.institution,
+                currency=r.currency,
+                file_name=r.file_name,
+                source_type=r.source_type,
+                period_start=r.period_start,
+                period_end=r.period_end,
+                issue_date=r.issue_date,
+                pages_total=r.pages_total,
+                turnover_ma=float(r.turnover_ma) if r.turnover_ma is not None else None,
+                turnover_wn=float(r.turnover_wn) if r.turnover_wn is not None else None,
+                previous_balance=float(r.previous_balance)
+                if r.previous_balance is not None
+                else None,
+                import_status=r.import_status,
+                total_rows=r.total_rows,
+                imported_rows=r.imported_rows,
+                error_rows=r.error_rows,
+                finished_at=r.finished_at,
+            )
+        )
+
+    return result
+
 
 # -----------------------
 #  Podgląd importów i RAW (do debugu)
