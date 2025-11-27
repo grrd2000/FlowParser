@@ -512,7 +512,7 @@ async def import_pdf(
             dup_query = (
                 db.query(Statement)
                 .filter(
-                    Statement.account_id == account.id,
+                    # Statement.account_id == account.id,
                     Statement.period_start == period_start_date,
                     Statement.period_end == period_end_date,
                 )
@@ -521,6 +521,9 @@ async def import_pdf(
             existing_stmt = dup_query.first()
         else:
             existing_stmt = None
+
+        print(dup_query)
+        print(dup_query.first())
 
         if existing_stmt:
             print("Found existing statement – reimporting:", existing_stmt.id)
