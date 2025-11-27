@@ -60,39 +60,6 @@ def get_db() -> Session:
         db.close()
 
 
-# -----------------------
-#  Startup: tworzenie schematu + domyślny user i account
-# -----------------------
-
-# def ensure_default_user_and_account() -> None:
-#     """Tworzy przykładowego użytkownika i konto, jeśli jeszcze nie istnieją."""
-#     db = SessionLocal()
-#     try:
-#         user = db.query(User).filter_by(email="demo@example.com").first()
-#         if not user:
-#             user = User(email="demo@example.com", full_name="Demo User")
-#             db.add(user)
-#             db.flush()  # żeby mieć user.id
-
-#         account = (
-#             db.query(Account)
-#             .filter_by(user_id=user.id, name="Główne konto")
-#             .first()
-#         )
-#         if not account:
-#             account = Account(
-#                 user_id=user.id,
-#                 name="Główne konto",
-#                 institution="PKO BP",
-#                 currency="PLN",
-#                 type="checking",
-#             )
-#             db.add(account)
-
-#         db.commit()
-#     finally:
-#         db.close()
-
 def get_current_user(db: Session) -> User:
     """
     Tymczasowo: w systemie single-user zwracamy pierwszego istniejącego usera.
@@ -160,6 +127,34 @@ def get_or_create_demo_user(db: Session) -> User:
         db.commit()
         db.refresh(user)
     return user
+
+
+def wipe_statement_data(db: Session, statement_id: int) -> None:
+    """
+    Usuwa wszystkie RawTransaction i Transaction powiązane z danym statementem.
+    Używane przy reimpocie wyciągu (ten sam okres, to samo konto).
+    """
+    # znajdź ID rawów dla danego statementu
+    raw_ids = [
+        r_id
+        for (r_id,) in db.query(RawTransaction.id)
+        .filter(RawTransaction.statement_id == statement_id)
+        .all()
+    ]
+    print("Wiping statement ID:", statement_id)
+    print(RawTransaction.statement_id == statement_id)
+    print("Wiping raws:", raw_ids)
+
+    if raw_ids:
+        # najpierw usuwamy Transactions powiązane z tymi rawami
+        db.query(Transaction).where(
+            Transaction.raw_transaction_id.in_(raw_ids)
+        ).delete(synchronize_session=False)
+
+        # potem same rawy
+        db.query(RawTransaction).where(
+            RawTransaction.id.in_(raw_ids)
+        ).delete(synchronize_session=False)
 
 
 @app.get("/user/me", response_model=UserProfileResponse)
@@ -413,14 +408,10 @@ async def import_pdf(
     """
     Import wyciągu PDF:
 
-    1) Zapisuje PDF do /uploads
-    2) Parsuje PDF -> DataFrame + account_info + statement_info
-    3) Na podstawie account_info:
-       - szuka istniejącego konta użytkownika
-       - lub tworzy nowe
-    4) Tworzy Statement + ImportRun
-    5) Zapisuje RawTransactions
-    6) Buduje Transactions z konwersją typów w Pythonie
+    - zapisuje PDF
+    - parsuje go na DF + account_info + statement_info
+    - NAJPIERW sprawdza, czy taki wyciąg nie był już importowany
+    - jeśli nie, tworzy Account (jeśli trzeba), Statement, ImportRun, RawTransactions, Transactions
     """
 
     user = get_current_user(db)
@@ -428,7 +419,7 @@ async def import_pdf(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-    # --- zapis pliku ---
+    # --- zapis pliku na dysk ---
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
 
@@ -454,10 +445,44 @@ async def import_pdf(
         account_name = account_info.get("account_name") or "Konto"
         account_owner = account_info.get("account_owner")
         account_currency = account_info.get("account_currency") or "PLN"
+        institution = "PKO BP"
 
-        # 2) SZUKAMY / TWORZYMY konto dla usera na podstawie numeru + waluty + instytucji
-        institution = "PKO BP"  # bo to parser PKO – jak kiedyś dodasz inne, tu zrobimy rozgałęzienie
+        # 2) USTALAMY OKRES WYCIĄGU – potrzebne do deduplikacji
+        period_start_date = None
+        period_end_date = None
+        issue_date = None
+        turnover_ma = None
+        turnover_wn = None
+        previous_balance = None
 
+        if statement_info:
+            try:
+                if statement_info.get("period_start"):
+                    period_start_date = datetime.strptime(
+                        statement_info["period_start"], "%d.%m.%Y"
+                    ).date()
+                if statement_info.get("period_end"):
+                    period_end_date = datetime.strptime(
+                        statement_info["period_end"], "%d.%m.%Y"
+                    ).date()
+                if statement_info.get("statement_date"):
+                    issue_date = datetime.strptime(
+                        statement_info["statement_date"], "%d.%m.%Y"
+                    ).date()
+            except Exception:
+                # jeśli daty są dziwne – trudno, dalej próbujemy, ale deduplikacja będzie tylko po tym, co mamy
+                pass
+
+            if statement_info.get("turnover_ma"):
+                turnover_ma = parse_decimal_str(statement_info["turnover_ma"])
+            if statement_info.get("turnover_wn"):
+                turnover_wn = parse_decimal_str(statement_info["turnover_wn"])
+            if statement_info.get("previous_balance"):
+                previous_balance = parse_decimal_str(
+                    statement_info["previous_balance"]
+                )
+
+        # 3) SZUKAMY / TWORZYMY konto
         account = (
             db.query(Account)
             .filter(
@@ -479,57 +504,86 @@ async def import_pdf(
                 currency=account_currency,
             )
             db.add(account)
-            db.flush()  # mamy account.id
+            db.flush()
 
-        # 3) Tworzymy Statement – dopiero po ustaleniu konta
+        # 4) DEDUPE: sprawdź, czy dla tego konta jest już statement
+        #    z takim samym okresem (i ew. sumami)
+        if period_start_date and period_end_date:
+            dup_query = (
+                db.query(Statement)
+                .filter(
+                    Statement.account_id == account.id,
+                    Statement.period_start == period_start_date,
+                    Statement.period_end == period_end_date,
+                )
+            )
+
+            existing_stmt = dup_query.first()
+        else:
+            existing_stmt = None
+
+        if existing_stmt:
+            print("Found existing statement – reimporting:", existing_stmt.id)
+            # 🟣 REIMPORT: czyścimy stare dane i używamy istniejącego statementu
+            wipe_statement_data(db, existing_stmt.id)
+
+            statement = existing_stmt
+
+            # ewentualnie aktualizujemy metadane (daty, sumy) jeśli parser zwrócił coś nowego
+            statement.issue_date = issue_date or statement.issue_date
+            statement.turnover_ma = turnover_ma or statement.turnover_ma
+            statement.turnover_wn = turnover_wn or statement.turnover_wn
+            statement.previous_balance = previous_balance or statement.previous_balance
+
+        else:
+            # 🟢 PIERWSZY IMPORT: tworzymy nowy statement
+            statement = Statement(
+                account_id=account.id,
+                file_name=file.filename,
+                storage_path=file_path,
+                source_type="PKO_PDF",
+                period_start=period_start_date,
+                period_end=period_end_date,
+                issue_date=issue_date,
+                turnover_ma=turnover_ma,
+                turnover_wn=turnover_wn,
+                previous_balance=previous_balance,
+            )
+            if statement_info:
+                statement.pages_total = statement_info.get("pages_total")
+
+            db.add(statement)
+            db.flush()
+
+        # 5) Skoro nie ma duplikatu – tworzymy Statement
         statement = Statement(
             account_id=account.id,
             file_name=file.filename,
             storage_path=file_path,
             source_type="PKO_PDF",
+            period_start=period_start_date,
+            period_end=period_end_date,
+            issue_date=issue_date,
+            turnover_ma=turnover_ma,
+            turnover_wn=turnover_wn,
+            previous_balance=previous_balance,
         )
 
         if statement_info:
-            try:
-                statement.period_start = datetime.strptime(
-                    statement_info.get("period_start"), "%d.%m.%Y"
-                ).date()
-                statement.period_end = datetime.strptime(
-                    statement_info.get("period_end"), "%d.%m.%Y"
-                ).date()
-                statement.issue_date = datetime.strptime(
-                    statement_info.get("statement_date"), "%d.%m.%Y"
-                ).date()
-            except Exception:
-                # jeśli coś nie tak z datami – niech statement żyje, ale bez nich
-                pass
-
             statement.pages_total = statement_info.get("pages_total")
-            if statement_info.get("turnover_ma"):
-                statement.turnover_ma = parse_decimal_str(
-                  statement_info.get("turnover_ma")
-                )
-            if statement_info.get("turnover_wn"):
-                statement.turnover_wn = parse_decimal_str(
-                  statement_info.get("turnover_wn")
-                )
-            if statement_info.get("previous_balance"):
-                statement.previous_balance = parse_decimal_str(
-                  statement_info.get("previous_balance")
-                )
 
         db.add(statement)
-        db.flush()  # statement.id
+        db.flush()
 
-        # 4) ImportRun (start)
+        # 6) ImportRun
         run = ImportRun(
             statement_id=statement.id,
             status="processing",
         )
         db.add(run)
-        db.flush()  # run.id
+        db.flush()
 
-        # 5) Surowe dane – weryfikacja kolumn
+        # 7) Walidacja kolumn DF
         print("PKO DF columns:", list(df.columns))
         total_rows = len(df)
 
@@ -542,7 +596,7 @@ async def import_pdf(
             db.commit()
             raise HTTPException(status_code=400, detail=msg)
 
-        # 6) RAW TRANSACTIONS – zapis tekstów
+        # 8) RAW TRANSACTIONS
         for idx, row in df.iterrows():
             raw = RawTransaction(
                 statement_id=statement.id,
@@ -560,9 +614,9 @@ async def import_pdf(
             )
             db.add(raw)
 
-        db.commit()  # RAW zapisane
+        db.commit()
 
-        # 7) ETL: RawTransactions -> Transactions
+        # 9) ETL -> Transactions
         raws = (
             db.query(RawTransaction)
             .filter(RawTransaction.import_run_id == run.id)
@@ -584,6 +638,7 @@ async def import_pdf(
                 tx = Transaction(
                     account_id=account.id,
                     raw_transaction_id=raw.id,
+                    operation_id=raw.operation_id_raw,
                     operation_date=op_date,
                     value_date=val_date,
                     description=raw.description_raw,
@@ -616,12 +671,11 @@ async def import_pdf(
         raise
     except Exception as e:
         db.rollback()
-        # zabezpieczenie – jeśli run istnieje
         try:
-            run.status = "failed"
-            run.message = str(e)
-            run.finished_at = datetime.now(timezone.utc)
-            db.add(run)
+            run.status = "failed"  # type: ignore[name-defined]
+            run.message = str(e)   # type: ignore[name-defined]
+            run.finished_at = datetime.now(timezone.utc)  # type: ignore[name-defined]
+            db.add(run)  # type: ignore[name-defined]
             db.commit()
         except Exception:
             pass
@@ -637,7 +691,6 @@ async def import_pdf(
         "error_rows": error_rows,
         "status": run.status,
     }
-
 
 
 

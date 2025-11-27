@@ -139,7 +139,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                 Accounts
               </h2>
               <span className="text-[11px] text-slate-500">
-                Konta i importy
+                Twoje konta
               </span>
             </div>
             <p className="text-xs text-slate-400">
@@ -161,7 +161,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                 Statements
               </h2>
               <span className="text-[11px] text-slate-500">
-                Wgrane wyciągi
+                Twoje wyciągi bankowe
               </span>
             </div>
             <p className="text-xs text-slate-400">

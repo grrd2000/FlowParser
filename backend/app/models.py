@@ -237,6 +237,8 @@ class Transaction(Base):
         ForeignKey("raw_transactions.id"), nullable=True
     )
 
+    operation_id: Mapped[str] = mapped_column(String(128), nullable=True)
+
     operation_date: Mapped[date] = mapped_column(Date, nullable=False)
     value_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
