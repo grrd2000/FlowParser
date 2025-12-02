@@ -168,6 +168,11 @@ function StatementCard({
       ? `${statement.error_rows} błędnych wierszy`
       : "brak błędów";
 
+  const reimportInfo =
+    statement.import_runs_count > 1
+      ? `Reimportowany ${statement.import_runs_count}×`
+      : null;
+
   return (
     <motion.div
       className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:border-indigo-400/60 hover:shadow-lg hover:shadow-indigo-500/10 transition-all flex flex-col gap-3 cursor-default"
@@ -176,33 +181,45 @@ function StatementCard({
       transition={{ delay: index * 0.03, duration: 0.25, ease: "easeOut" }}
     >
       {/* top: konto + status */}
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
           <div className="text-sm font-medium text-slate-100">
             {statement.account_name}
           </div>
           <div className="text-[11px] text-slate-500">
             {statement.institution ?? "Instytucja nieznana"} ·{" "}
-            {statement.currency}
+            <span className="text-slate-300">{statement.currency}</span>
           </div>
           {statement.account_number && (
-            <div className="mt-0.5 text-[11px] text-slate-500 font-mono">
+            <div className="mt-0.5 text-[11px] text-slate-400 font-mono">
               {maskAccountNumber(statement.account_number)}
             </div>
           )}
         </div>
-        <span
-          className={[
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border",
-            statusBadge.bg,
-            statusBadge.border,
-            statusBadge.text,
-          ].join(" ")}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          <span>{statusBadge.label}</span>
-        </span>
+
+        <div className="flex flex-col items-end gap-1">
+          <span
+            className={[
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border",
+              statusBadge.bg,
+              statusBadge.border,
+              statusBadge.text,
+            ].join(" ")}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+            <span>{statusBadge.label}</span>
+          </span>
+
+          {statement.is_reimported && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-200 border border-indigo-400/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-300" />
+              <span>reimported</span>
+              {/* <span>reimported ×{statement.import_runs_count}</span> */}
+            </span>
+          )}
+        </div>
       </div>
+
 
       {/* okres + data wystawienia */}
       <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -217,40 +234,61 @@ function StatementCard({
       </div>
 
       {/* dół: statystyki importu */}
-      <div className="flex items-end justify-between gap-2 text-[11px]">
-        <div className="space-y-0.5">
-          <div className="text-slate-500">Wiersze</div>
-          <div className="text-slate-200">{rowsInfo}</div>
-          <div className="text-slate-500">{errorsInfo}</div>
-        </div>
-        <div className="text-right space-y-0.5">
-          {statement.pages_total != null && (
-            <div className="text-slate-500">
-              Strony:{" "}
-              <span className="text-slate-200">
-                {statement.pages_total}
-              </span>
+      <div className="mt-3 flex flex-col gap-2 text-[11px]">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <div className="text-slate-500">Wiersze</div>
+            <div className="text-slate-200 text-sm font-medium">
+              {rowsInfo}
             </div>
-          )}
-          {finished && (
-            <div className="text-slate-500">
-              Import zakończony:{" "}
-              <span className="text-slate-200">
-                {finished.toLocaleString("pl-PL", {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
+            <div
+              className={
+                (statement.error_rows ?? 0) > 0
+                  ? "text-rose-300"
+                  : "text-emerald-300"
+              }
+            >
+              {errorsInfo}
             </div>
-          )}
-          <div className="text-slate-500 italic">
-            Szczegóły transakcji → zakładka Flow
+          </div>
+
+          <div className="flex flex-col items-end gap-1 text-right">
+            {statement.pages_total != null && (
+              <div className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950/70 px-2 py-0.5">
+                <span className="text-slate-500">Pages:</span>
+                <span className="text-slate-200 font-medium">
+                  {statement.pages_total}
+                </span>
+              </div>
+            )}
+
+            {finished && (
+              <div className="text-slate-500">
+                <span className="block text-[10px] uppercase tracking-wide">
+                  Import zakończony
+                </span>
+                <span className="text-slate-200">
+                  {finished.toLocaleString("pl-PL", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* <div className="flex items-center justify-between gap-2">
+          <div className="text-slate-500 italic">
+            Szczegóły transakcji w zakładce{" "}
+            <span className="text-slate-200 not-italic">Flow</span>
+          </div>
+        </div> */}
       </div>
+
     </motion.div>
   );
 }

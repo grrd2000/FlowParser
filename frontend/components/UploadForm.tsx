@@ -42,9 +42,15 @@ export function UploadForm() {
 
       const data = await res.json();
       setStatus("success");
-      setMessage(
-        `Zaimportowano: ${data.imported_rows}/${data.total_rows} rekordów (błędy: ${data.error_rows}).`
-      );
+      if (data.was_reimport) {
+        setMessage(
+          `Wyciąg dla tego konta i okresu był już wcześniej – dane zostały zaktualizowane. Wczytano ${data.imported_rows}/${data.total_rows} wierszy.`
+        );
+      } else {
+        setMessage(
+          `Import zakończony. Wczytano ${data.imported_rows}/${data.total_rows} wierszy.`
+        );
+      }
 
       // Na razie: prosty reload, żeby odświeżyć listę transakcji
       window.location.reload();

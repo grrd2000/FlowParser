@@ -430,6 +430,7 @@ async def import_pdf(
     total_rows = 0
     imported_rows = 0
     error_rows = 0
+    reimport = False
 
     try:
         # 1) Parsowanie PDF – Twój parser
@@ -512,7 +513,7 @@ async def import_pdf(
             dup_query = (
                 db.query(Statement)
                 .filter(
-                    # Statement.account_id == account.id,
+                    Statement.account_id == account.id,
                     Statement.period_start == period_start_date,
                     Statement.period_end == period_end_date,
                 )
@@ -527,10 +528,11 @@ async def import_pdf(
 
         if existing_stmt:
             print("Found existing statement – reimporting:", existing_stmt.id)
-            # 🟣 REIMPORT: czyścimy stare dane i używamy istniejącego statementu
+            # REIMPORT: czyścimy stare dane i używamy istniejącego statementu
             wipe_statement_data(db, existing_stmt.id)
 
             statement = existing_stmt
+            reimport = True
 
             # ewentualnie aktualizujemy metadane (daty, sumy) jeśli parser zwrócił coś nowego
             statement.issue_date = issue_date or statement.issue_date
@@ -539,7 +541,8 @@ async def import_pdf(
             statement.previous_balance = previous_balance or statement.previous_balance
 
         else:
-            # 🟢 PIERWSZY IMPORT: tworzymy nowy statement
+            # PIERWSZY IMPORT: tworzymy nowy statement
+            # 5) Skoro nie ma duplikatu – tworzymy Statement
             statement = Statement(
                 account_id=account.id,
                 file_name=file.filename,
@@ -558,25 +561,6 @@ async def import_pdf(
             db.add(statement)
             db.flush()
 
-        # 5) Skoro nie ma duplikatu – tworzymy Statement
-        statement = Statement(
-            account_id=account.id,
-            file_name=file.filename,
-            storage_path=file_path,
-            source_type="PKO_PDF",
-            period_start=period_start_date,
-            period_end=period_end_date,
-            issue_date=issue_date,
-            turnover_ma=turnover_ma,
-            turnover_wn=turnover_wn,
-            previous_balance=previous_balance,
-        )
-
-        if statement_info:
-            statement.pages_total = statement_info.get("pages_total")
-
-        db.add(statement)
-        db.flush()
 
         # 6) ImportRun
         run = ImportRun(
@@ -693,6 +677,7 @@ async def import_pdf(
         "imported_rows": imported_rows,
         "error_rows": error_rows,
         "status": run.status,
+        "reimport": reimport,
     }
 
 
@@ -738,64 +723,60 @@ def list_accounts(db: Session = Depends(get_db)):
 def list_statements(db: Session = Depends(get_db)):
     user = get_current_user(db)
 
-    # join: Statement -> Account -> ImportRun (ostatni run, jeśli masz ich więcej)
-    # zakładam, że dla każdego statementu masz maksymalnie 1 ImportRun
+    # subquery: ile runów i który jest ostatni
+    runs_sub = (
+        db.query(
+            ImportRun.statement_id.label("sid"),
+            func.count(ImportRun.id).label("runs_count"),
+            func.max(ImportRun.id).label("last_run_id"),
+        )
+        .group_by(ImportRun.statement_id)
+        .subquery()
+    )
+
     rows = (
         db.query(
-            Statement.id,
-            Statement.account_id,
-            Statement.file_name,
-            Statement.source_type,
-            Statement.period_start,
-            Statement.period_end,
-            Statement.issue_date,
-            Statement.pages_total,
-            Statement.turnover_ma,
-            Statement.turnover_wn,
-            Statement.previous_balance,
-            Account.name.label("account_name"),
-            Account.number.label("account_number"),
-            Account.institution.label("institution"),
-            Account.currency.label("currency"),
-            ImportRun.status.label("import_status"),
-            ImportRun.total_rows,
-            ImportRun.imported_rows,
-            ImportRun.error_rows,
-            ImportRun.finished_at,
+            Statement,
+            Account,
+            ImportRun,
+            runs_sub.c.runs_count,
         )
         .join(Account, Account.id == Statement.account_id)
-        .outerjoin(ImportRun, ImportRun.statement_id == Statement.id)
+        .outerjoin(runs_sub, runs_sub.c.sid == Statement.id)
+        .outerjoin(ImportRun, ImportRun.id == runs_sub.c.last_run_id)
         .filter(Account.user_id == user.id)
         .order_by(Statement.issue_date.desc().nullslast(), Statement.id.desc())
         .all()
     )
 
     result: list[StatementSummary] = []
-    for r in rows:
+    for st, acc, run, runs_count in rows:
         result.append(
             StatementSummary(
-                id=r.id,
-                account_id=r.account_id,
-                account_name=r.account_name,
-                account_number=r.account_number,
-                institution=r.institution,
-                currency=r.currency,
-                file_name=r.file_name,
-                source_type=r.source_type,
-                period_start=r.period_start,
-                period_end=r.period_end,
-                issue_date=r.issue_date,
-                pages_total=r.pages_total,
-                turnover_ma=float(r.turnover_ma) if r.turnover_ma is not None else None,
-                turnover_wn=float(r.turnover_wn) if r.turnover_wn is not None else None,
-                previous_balance=float(r.previous_balance)
-                if r.previous_balance is not None
+                id=st.id,
+                account_id=st.account_id,
+                account_name=acc.name,
+                account_number=acc.number,
+                institution=acc.institution,
+                currency=acc.currency,
+                file_name=st.file_name,
+                source_type=st.source_type,
+                period_start=st.period_start,
+                period_end=st.period_end,
+                issue_date=st.issue_date,
+                pages_total=st.pages_total,
+                turnover_ma=float(st.turnover_ma) if st.turnover_ma is not None else None,
+                turnover_wn=float(st.turnover_wn) if st.turnover_wn is not None else None,
+                previous_balance=float(st.previous_balance)
+                if st.previous_balance is not None
                 else None,
-                import_status=r.import_status,
-                total_rows=r.total_rows,
-                imported_rows=r.imported_rows,
-                error_rows=r.error_rows,
-                finished_at=r.finished_at,
+                import_status=run.status if run else None,
+                total_rows=run.total_rows if run else None,
+                imported_rows=run.imported_rows if run else None,
+                error_rows=run.error_rows if run else None,
+                finished_at=run.finished_at if run else None,
+                import_runs_count=runs_count or 0,
+                is_reimported=(runs_count or 0) > 1,
             )
         )
 

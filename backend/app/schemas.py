@@ -64,5 +64,8 @@ class StatementSummary(BaseModel):
     error_rows: int | None = None
     finished_at: datetime | None = None
 
+    import_runs_count: int = 0
+    is_reimported: bool = False
+
     class Config:
         from_attributes = True

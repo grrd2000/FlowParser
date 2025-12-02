@@ -98,6 +98,9 @@ export type StatementSummary = {
   imported_rows: number | null;
   error_rows: number | null;
   finished_at: string | null;
+
+  import_runs_count: number;
+  is_reimported: boolean;
 };
 
 export async function fetchStatements(): Promise<StatementSummary[]> {
