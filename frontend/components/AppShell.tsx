@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { UserMenu } from "@/components/UserMenu";
+
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/flow", label: "Flow" },
@@ -98,9 +100,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
 
               {/* avatar */}
-              <div className="h-9 w-9 rounded-full bg-indigo-500/30 border border-indigo-400/60 flex items-center justify-center text-xs font-semibold text-indigo-100">
+               <UserMenu />
+              {/* <div className="h-9 w-9 rounded-full bg-indigo-500/30 border border-indigo-400/60 flex items-center justify-center text-xs font-semibold text-indigo-100">
                 G
-              </div>
+              </div> */}
             </div>
           </header>
 
