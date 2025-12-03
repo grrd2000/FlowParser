@@ -19,14 +19,6 @@ export default async function FlowPage() {
         </p>
       </header>
 
-      {/* Import PDF przeniesiony z Dashboardu */}
-      <section className="border border-slate-800 rounded-xl p-4 bg-slate-900/40">
-        <h2 className="text-sm font-medium mb-3 text-slate-200">
-          Importuj wyciąg PDF
-        </h2>
-        <UploadForm />
-      </section>
-
       {/* Zaawansowany widok: filtry + mini-dash + wykres + tabela */}
       <section>
         <TransactionsView
