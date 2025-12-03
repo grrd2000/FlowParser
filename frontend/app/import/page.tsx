@@ -11,8 +11,10 @@ export default function ImportPage() {
             Import Center
           </h1>
           <p className="text-sm text-slate-400">
-            Wgrywaj wyciągi PDF z banku i aktualizuj swoje dane.
+            Wgrywaj pojedyncze lub mnogie wyciągi PDF z banku. Dane z batcha
+            automatycznie zasilą Flow, Dashboard i Statements.
           </p>
+
         </div>
         <div className="hidden sm:flex gap-2 text-[11px] text-slate-400">
           <Link
@@ -46,7 +48,8 @@ export default function ImportPage() {
                   <p className="text-xs text-slate-400 mt-1">
                     Obsługiwane są obecnie wyciągi PDF z{" "}
                     <span className="text-indigo-300 font-medium">PKO BP</span>.
-                    System automatycznie rozpoznaje konto, okres, kwoty i saldo.
+                    System automatycznie rozpoznaje konto, okres, kwoty i saldo. Możesz
+                    wgrać wiele plików naraz.
                   </p>
                 </div>
                 <div className="text-[10px] text-slate-500 text-right space-y-1">
