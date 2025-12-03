@@ -14,7 +14,7 @@ const API_BASE =
 
 export function UserMenu() {
   const [open, setOpen] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
+  // const [showImportModal, setShowImportModal] = useState(false);
   const [profile, setProfile] = useState<UserProfileLite | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
@@ -82,11 +82,6 @@ export function UserMenu() {
           .slice(0, 2)
           .join("")
       : "U";
-
-  const handleOpenImport = () => {
-    setShowImportModal(true);
-    setOpen(false);
-  };
 
   return (
     <>
@@ -167,16 +162,15 @@ export function UserMenu() {
               <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
                 Data &amp; imports
               </div>
-              <button
-                type="button"
-                onClick={handleOpenImport}
-                className="w-full rounded-lg bg-indigo-500/15 border border-indigo-400/60 px-2 py-1.5 text-xs text-indigo-100 hover:bg-indigo-500/25 flex items-center justify-between"
-              >
-                <span>Import statements (PDF)</span>
-                <span className="text-[10px] text-indigo-200">
-                  PKO BP
-                </span>
-              </button>
+                <Link
+                  href="/import"
+                  className="w-full rounded-lg bg-indigo-500/15 border border-indigo-400/60 px-2 py-1.5 text-xs text-indigo-100 hover:bg-indigo-500/25 flex items-center justify-between"
+                  onClick={() => setOpen(false)}
+                >
+                  <span>Import statements</span>
+                  {/* <span className="text-[10px] text-indigo-200">PKO BP</span> */}
+                </Link>
+
             </div>
 
             {/* sekcja: preferences na przyszłość */}
@@ -187,40 +181,6 @@ export function UserMenu() {
         )}
       </div>
 
-      {/* modal importu */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950/95 p-5 shadow-xl">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-100">
-                  Import bank statement
-                </h2>
-                <p className="text-[11px] text-slate-500">
-                  Obsługiwane: wyciągi PDF z PKO BP. Dane trafią do
-                  kont i zakładki Flow.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowImportModal(false)}
-                className="text-slate-500 hover:text-slate-200 text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-              <UploadForm />
-            </div>
-
-            <p className="mt-2 text-[10px] text-slate-500">
-              Po imporcie nowe transakcje i wyciągi pojawią się w
-              Dashboard, Flow i Statements.
-            </p>
-          </div>
-        </div>
-      )}
     </>
   );
 }

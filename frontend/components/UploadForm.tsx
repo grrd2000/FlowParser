@@ -93,12 +93,6 @@ export function UploadForm() {
       {status === "error" && message && (
         <p className="text-xs text-rose-400">{message}</p>
       )}
-      {status === null && (
-        <p className="text-xs text-slate-500">
-          Na razie importujemy na stałe na konto o ID 1. Później dodamy wybór
-          konta z listy.
-        </p>
-      )}
     </form>
   );
 }
