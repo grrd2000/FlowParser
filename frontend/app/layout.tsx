@@ -1,22 +1,23 @@
-// frontend/app/layout.tsx
-import type { Metadata } from "next";
 import "./globals.css";
-import { AppShell } from "@/components/AppShell";
+import type { ReactNode } from "react";
+import { TopNav } from "@/components/TopNav";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "FlowParser",
-  description: "Personal finance analytics",
+  description: "Personal finance insights with modern UI",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-slate-950 text-slate-100">
-        <AppShell>{children}</AppShell>
+      <body className="antialiased">
+        <TopNav />
+
+        <main className="pt-24 pb-10 px-4">
+          <div className="mx-auto w-full max-w-5xl">
+            {children}
+          </div>
+        </main>
       </body>
     </html>
   );
