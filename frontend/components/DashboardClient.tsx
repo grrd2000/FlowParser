@@ -1,363 +1,930 @@
-// frontend/components/DashboardClient.tsx
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import type { Transaction } from "@/lib/serverApi";
-import { KpiCard } from "@/components/KpiCard";
-import { DashboardOverviewChart } from "@/components/DashboardOverviewChart";
-import { SpendingDonut } from "@/components/SpendingDonut";
-import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 
-type Props = {
-  transactions: Transaction[];
-  initialRange?: RangeKey;
-};
+const ReactApexChart = dynamic(() => import("react-apexcharts"), {
+  ssr: false,
+});
 
-type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all" | "custom";
+type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
 
-function parseDateStr(s: string): Date | null {
-  // Bezpieczne parsowanie YYYY-MM-DD
-  const parts = s.split("-");
-  if (parts.length !== 3) return null;
-  const [y, m, d] = parts.map((p) => Number(p));
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
-}
+type TxExt = Transaction & { amountNum: number; date: Date };
 
-function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-export function DashboardClient({ transactions, initialRange }: Props) {
-  const [rangeKey, setRangeKey] = useState<RangeKey>(
-    (initialRange as RangeKey) ?? "3m"
-  );
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+export function DashboardClient() {
+  const [transactions, setTransactions] = useState<TxExt[]>([]);
+  const [range, setRange] = useState<RangeKey>("3m");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // 1) Wyznaczamy przefiltrowane transakcje wg wybranego zakresu
-  const filtered = useMemo(() => {
-    if (!transactions.length) return [];
-
-    const today = startOfDay(new Date());
-    let from: Date | null = null;
-    let to: Date | null = today;
-
-    switch (rangeKey) {
-        case "1m": {
-        const d = new Date(today);
-        d.setMonth(d.getMonth() - 1);
-        from = d;
-        break;
+  // 1) Fetch danych raz po załadowaniu
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`${API_BASE}/transactions`, {
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status}`);
+        }
+        const raw: Transaction[] = await res.json();
+        const parsed = normalizeTransactions(raw);
+        setTransactions(parsed);
+      } catch (e: any) {
+        console.error(e);
+        setError(e?.message ?? "Błąd podczas ładowania danych.");
+      } finally {
+        setLoading(false);
       }
-      case "3m": {
-        const d = new Date(today);
-        d.setMonth(d.getMonth() - 3);
-        from = d;
-        break;
-      }
-      case "6m": {
-        const d = new Date(today);
-        d.setMonth(d.getMonth() - 6);
-        from = d;
-        break;
-      }
-      case "ytd": {
-        from = new Date(today.getFullYear(), 0, 1);
-        break;
-      }
-      case "all": {
-        return [...transactions];
-      }
-      case "custom": {
-        from = customFrom ? parseDateStr(customFrom) : null;
-        to = customTo ? startOfDay(parseDateStr(customTo) ?? today) : today;
-        break;
-      }
-    }
-
-    return transactions.filter((t) => {
-      const d = parseDateStr(t.operation_date);
-      if (!d) return false;
-      const day = startOfDay(d);
-      if (from && day < from) return false;
-      if (to && day > to) return false;
-      return true;
-    });
-  }, [transactions, rangeKey, customFrom, customTo]);
-
-  // 2) Agregaty na podstawie przefiltrowanych transakcji
-  const {
-    income,
-    expense,
-    balance,
-    txCount,
-    daysCount,
-    avgDailySpend,
-    avgTxn,
-    preview,
-    hasMore,
-    extraCount,
-  } = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    const datesSet = new Set<string>();
-
-    for (const t of filtered) {
-      const amount = Number(t.amount);
-      if (Number.isNaN(amount)) continue;
-
-      datesSet.add(t.operation_date);
-
-      if (amount > 0) income += amount;
-      if (amount < 0) expense += amount;
-    }
-
-    const balance = income + expense;
-    const txCount = filtered.length;
-    const daysCount = datesSet.size || 1;
-    const avgDailySpend =
-      daysCount > 0 ? Math.abs(expense) / daysCount : 0;
-    const avgTxn =
-      txCount > 0 ? (income + expense) / txCount : 0;
-
-    const sorted = [...filtered].sort((a, b) =>
-      b.operation_date.localeCompare(a.operation_date)
-    );
-    const preview = sorted.slice(0, 5);
-    const hasMore = sorted.length > 5;
-    const extraCount = hasMore ? sorted.length - 5 : 0;
-
-    return {
-      income,
-      expense,
-      balance,
-      txCount,
-      daysCount,
-      avgDailySpend,
-      avgTxn,
-      preview,
-      hasMore,
-      extraCount,
     };
-  }, [filtered]);
+    fetchData();
+  }, []);
 
-  const rangeLabel =
-    rangeKey === "1m"
-      ? "Ostatni miesiąc"
-      : rangeKey === "3m"
-      ? "Ostatnie 3 miesiące"
-      : rangeKey === "6m"
-      ? "Ostatnie 6 miesięcy"
-      : rangeKey === "ytd"
-      ? "Year to date"
-      : rangeKey === "all"
-      ? "Cała historia"
-      : "Zakres niestandardowy";
+  // 2) Wyliczenia zależne od zakresu
+const {
+  filtered,
+  startDate,
+  metrics,
+  netFlowSeries,
+  categorySeries,
+  heatmapSeries,
+} = useMemo(() => {
+  const { filtered, startDate } = filterByRange(transactions, range);
+  const metrics = computeMetrics(filtered);
+  const netFlowSeries = buildNetFlowSeries(filtered, range);
+  const categorySeries = groupByCategory(filtered);
+  const heatmapSeries = buildHeatmap(filtered);
+  return {
+    filtered,
+    startDate,
+    metrics,
+    netFlowSeries,
+    categorySeries,
+    heatmapSeries,
+  };
+}, [transactions, range]);
+  const rangeText = rangeLabel(range, startDate);
 
   return (
-    <div className="space-y-5">
-      {/* Nagłówek + filtry czasu */}
-      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-xs text-slate-500">
-            Podsumowanie Twoich przepływów finansowych.
-          </p>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Zakres: <span className="text-slate-300">{rangeLabel}</span> —{" "}
-            {filtered.length} transakcji
-          </p>
+    <div className="space-y-6">
+      {/* HEADER */}
+      <section className="space-y-2">
+        <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
+          Dashboard
+        </h1>
+        <p className="text-sm text-slate-400 max-w-xl">
+          Szklany podgląd Twoich przepływów – kluczowe liczby, trendy w czasie
+          i rozkład wydatków. Dane z{" "}
+          <span className="text-slate-200 font-medium">{rangeText}</span>.
+        </p>
+      </section>
+
+      {error && (
+        <div className="rounded-2xl border border-rose-500/60 bg-rose-500/10 px-4 py-3 text-[12px] text-rose-100">
+          {error}
         </div>
+      )}
 
-        <div className="flex flex-col items-start gap-2 text-[11px] text-slate-400">
-          {/* szybkie zakresy */}
-          <div className="inline-flex rounded-full bg-slate-900/70 border border-slate-800 p-0.5">
-            {(
-              [
-                ["1m", "1 mies."],
-                ["3m", "3 mies."],
-                ["6m", "6 mies."],
-                ["ytd", "YTD"],
-                ["all", "Wszystko"],
-                ["custom", "Custom"],
-              ] as [RangeKey, string][]
-            ).map(([key, label]) => {
-              const active = rangeKey === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setRangeKey(key)}
-                  className={[
-                    "px-3 py-1 rounded-full transition-colors",
-                    active
-                      ? "bg-indigo-500 text-slate-50"
-                      : "text-slate-400 hover:text-slate-100",
-                  ].join(" ")}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* daty custom */}
-          {rangeKey === "custom" && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span>Od</span>
-              <input
-                type="date"
-                className="bg-slate-900/80 border border-slate-700 rounded-md px-2 py-1 text-[11px] text-slate-100"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-              />
-              <span>do</span>
-              <input
-                type="date"
-                className="bg-slate-900/80 border border-slate-700 rounded-md px-2 py-1 text-[11px] text-slate-100"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* KPI row */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* GÓRNE KPI */}
+      <section className="grid gap-4 md:grid-cols-3">
         <KpiCard
-          label="Saldo"
-          value={`${balance.toFixed(2)} zł`}
-          tone={balance >= 0 ? "positive" : "negative"}
-        />
-        <KpiCard
-          label="Przychody"
-          value={`${income.toFixed(2)} zł`}
-          tone="positive"
+          label="Saldo netto"
+          value={formatCurrency(metrics.net)}
+          subtitle="Suma wpływów i wydatków"
+          tone={metrics.net >= 0 ? "positive" : "negative"}
+          loading={loading}
         />
         <KpiCard
           label="Wydatki"
-          value={`${Math.abs(expense).toFixed(2)} zł`}
+          value={formatCurrency(-Math.min(metrics.expenses, 0))}
+          subtitle="Łącznie w wybranym okresie"
           tone="negative"
+          loading={loading}
         />
         <KpiCard
-          label="Transakcje"
-          value={String(txCount)}
-          tone="neutral"
-          subLabel={`${daysCount} dni w zakresie`}
+          label="Wpływy"
+          value={formatCurrency(Math.max(metrics.income, 0))}
+          subtitle="Łączne wpływy"
+          tone="positive"
+          loading={loading}
         />
       </section>
 
-      {/* Wykres główny + donut + heatmapa */}
-      <section className="grid gap-4 lg:grid-cols-[2fr_1.2fr]">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 hover:border-indigo-400/60 hover:shadow-xl hover:shadow-indigo-500/10 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-medium text-slate-200">
-              Przepływy i saldo w czasie
-            </h2>
-            <span className="text-[11px] text-slate-500">
-              Interaktywny wykres (zoom, hover)
-            </span>
+      {/* RANGE TABS */}
+      <section className="flex items-center justify-between gap-3">
+        <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 backdrop-blur-xl px-1 py-1 shadow-inner shadow-black/30">
+          {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setRange(key)}
+              className={[
+                "px-3 py-1 text-[11px] rounded-full font-medium transition-all border",
+                range === key
+                  ? "bg-white/80 text-slate-900 border-white shadow-md shadow-white/40"
+                  : "bg-white/0 text-slate-100/80 border-transparent hover:bg-white/15 hover:text-white",
+              ].join(" ")}
+            >
+              {rangeLabelShort(key)}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Zakres dotyczy wszystkich wykresów i liczb na tej stronie.
+        </p>
+      </section>
+
+      {/* ŚRODEK: FLOW + DONUT */}
+      <section className="grid gap-4 lg:grid-cols-3">
+        {/* FLOW W CZASIE */}
+        <div className="lg:col-span-2 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-50">
+                Przepływy w czasie
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                Dzienny wynik netto – wpływy minus wydatki.
+              </p>
+            </div>
           </div>
-          <DashboardOverviewChart transactions={filtered} />
+          <NetFlowChart series={netFlowSeries} loading={loading} />
         </div>
 
-        <div className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:border-indigo-400/60 hover:shadow-lg hover:shadow-indigo-500/10 transition-all">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-xs font-medium text-slate-200">
-                Wydatki wg dnia tygodnia
-              </h2>
-              <span className="text-[11px] text-slate-500">Donut</span>
-            </div>
-            <SpendingDonut transactions={filtered} />
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:border-indigo-400/60 hover:shadow-lg hover:shadow-indigo-500/10 transition-all">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-xs font-medium text-slate-200">
-                Heatmapa wydatków
-              </h2>
-            </div>
-            <ActivityHeatmap transactions={filtered} />
-          </div>
+        {/* PODZIAŁ KATEGORII */}
+        <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5 flex flex-col">
+          <h2 className="text-sm font-semibold text-slate-50 mb-2">
+            Rozkład wydatków
+          </h2>
+          <p className="text-[11px] text-slate-400 mb-3">
+            Udział kategorii w całkowitych wydatkach.
+          </p>
+          <CategoryDonutChart categories={categorySeries} loading={loading} />
         </div>
       </section>
 
-      {/* Ostatnie transakcje – 5 + "zanikająca" linia */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 hover:border-slate-500/70 transition-colors cursor-pointer">
-        <Link href="/flow" className="block">
-          <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-slate-200">
-              Ostatnie transakcje
-            </h2>
-            <span className="text-[11px] text-slate-500">
-              kliknij, aby przejść do pełnej listy
-            </span>
-          </div>
-          {preview.length === 0 ? (
-            <p className="text-sm text-slate-400 px-4 pb-4">
-              Brak transakcji w wybranym zakresie. Zmień filtr dat lub
-              zaimportuj wyciąg w zakładce Flow.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-900/80 border-t border-b border-slate-800">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Data</th>
-                    <th className="px-3 py-2 text-left">Opis</th>
-                    <th className="px-3 py-2 text-right">Kwota</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.map((t) => (
-                    <tr
-                      key={t.id}
-                      className="border-t border-slate-800/80 hover:bg-slate-900/70 transition-colors"
-                    >
-                      <td className="px-3 py-2 align-top">
-                        {t.operation_date}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        <div className="text-slate-100 line-clamp-2">
-                          {t.description}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 align-top text-right">
-                        <span
-                          className={
-                            Number(t.amount) < 0
-                              ? "text-rose-400"
-                              : "text-emerald-400"
-                          }
-                        >
-                          {t.amount} zł
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {hasMore && (
-                    <tr className="border-t border-slate-800/80">
-                      <td
-                        colSpan={3}
-                        className="px-3 py-2 text-center text-[11px] text-slate-500 italic"
-                      >
-                        + {extraCount} kolejnych transakcji w wybranym
-                        zakresie — kliknij, aby zobaczyć pełną listę w
-                        zakładce Flow
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+      {/* DÓŁ: HEATMAP + OSTATNIE TRANSAKCJE */}
+      <section className="grid gap-4 lg:grid-cols-3">
+        {/* HEATMAP */}
+        <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-50">
+                Heatmapa aktywności
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                Intensywność przepływów według dnia tygodnia i pory dnia.
+              </p>
             </div>
-          )}
-        </Link>
+          </div>
+          <HeatmapGrid data={heatmapSeries} loading={loading} />
+        </div>
+
+        {/* OSTATNIE TRANSAKCJE */}
+        <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5">
+          <h2 className="text-sm font-semibold text-slate-50 mb-2">
+            Ostatnie transakcje
+          </h2>
+          <p className="text-[11px] text-slate-400 mb-3">
+            Kilka ostatnich zapisów – pełna lista w zakładce{" "}
+            <span className="text-slate-100">Flow</span>.
+          </p>
+          <RecentTransactionsList
+            transactions={filtered.slice(-6).reverse()}
+            loading={loading}
+          />
+        </div>
       </section>
     </div>
   );
+}
+
+/* ---------- UI COMPONENTS ---------- */
+
+function KpiCard({
+  label,
+  value,
+  subtitle,
+  tone,
+  loading,
+}: {
+  label: string;
+  value: string;
+  subtitle: string;
+  tone: "positive" | "negative";
+  loading: boolean;
+}) {
+  const toneClass =
+    tone === "positive" ? "text-emerald-300" : "text-rose-300";
+
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 flex flex-col justify-between">
+      <div>
+        <div className="text-[11px] uppercase tracking-wide text-slate-400">
+          {label}
+        </div>
+        <div
+          className={`mt-2 text-xl font-semibold ${
+            loading ? "text-slate-600 animate-pulse" : toneClass
+          }`}
+        >
+          {loading ? "—" : value}
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-slate-500">{subtitle}</div>
+    </div>
+  );
+}
+
+function NetFlowChart({
+  series,
+  loading,
+}: {
+  series: { x: string; net: number; income: number; expense: number }[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
+        Ładowanie danych...
+      </div>
+    );
+  }
+  if (series.length === 0) {
+    return (
+      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
+        Brak danych w wybranym okresie.
+      </div>
+    );
+  }
+
+  const options: ApexCharts.ApexOptions = {
+    chart: {
+      type: "line",
+      stacked: false,
+      toolbar: { show: false },
+      zoom: { enabled: false },
+      animations: { enabled: true },
+      foreColor: "#94a3b8",
+    },
+    stroke: {
+      curve: "smooth",
+      width: [0, 0, 2],
+    },
+    dataLabels: { enabled: false },
+    grid: {
+      borderColor: "#1e293b",
+      strokeDashArray: 3,
+    },
+    xaxis: {
+      type: "category",
+      labels: {
+        rotate: 0,
+        hideOverlappingLabels: true,
+        style: { colors: "#94a3b8", fontSize: "10px" },
+      },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+      tooltip: { enabled: false },
+    },
+    yaxis: {
+      labels: {
+        style: { colors: "#64748b", fontSize: "10px" },
+        formatter: (val: number) => formatNumberCompact(val),
+      },
+    },
+    tooltip: {
+      shared: true,
+      x: {
+        formatter: (value: string) => value,
+      },
+      y: {
+        formatter: (val: number, opts) => {
+          const sName =
+            opts?.seriesIndex === 0
+              ? "Wpływy"
+              : opts?.seriesIndex === 1
+              ? "Wydatki"
+              : "Netto";
+
+          if (opts?.seriesIndex === 1) {
+            return `${sName}: ${formatCurrency(-val)}`;
+          }
+          return `${sName}: ${formatCurrency(val)}`;
+        },
+      },
+    },
+    legend: {
+      show: true,
+      position: "top",
+      horizontalAlign: "left",
+      fontSize: "10px",
+      labels: { colors: "#cbd5f5" },
+    },
+    plotOptions: {
+      bar: {
+        columnWidth: "60%",
+        borderRadius: 4,
+      },
+    },
+    colors: ["#22c55e", "#fb7185", "#60a5fa"], // income, expense, net
+  };
+
+  const seriesData: ApexAxisChartSeries = [
+    {
+      name: "Wpływy",
+      type: "column",
+      data: series.map((s) => ({
+        x: s.x,
+        y: s.income,
+      })),
+    },
+    {
+      name: "Wydatki",
+      type: "column",
+      data: series.map((s) => ({
+        x: s.x,
+        y: Math.abs(s.expense),
+      })),
+    },
+    {
+      name: "Netto",
+      type: "line",
+      data: series.map((s) => ({
+        x: s.x,
+        y: s.net,
+      })),
+    },
+  ];
+
+  return (
+    <div className="h-56">
+      <ReactApexChart
+        type="line"
+        options={options}
+        series={seriesData}
+        height="100%"
+      />
+    </div>
+  );
+}
+
+
+
+function CategoryDonutChart({
+  categories,
+  loading,
+}: {
+  categories: { name: string; value: number }[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-[11px] text-slate-500">
+        Ładowanie danych...
+      </div>
+    );
+  }
+  if (categories.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-[11px] text-slate-500">
+        Brak wydatków w wybranym okresie.
+      </div>
+    );
+  }
+
+  const options: ApexCharts.ApexOptions = {
+    chart: { type: "donut" },
+    legend: {
+      show: false,
+    },
+    labels: categories.map((c) => c.name),
+    dataLabels: { enabled: false },
+    stroke: { show: false },
+    plotOptions: {
+      pie: {
+        donut: { size: "60%" },
+      },
+    },
+    tooltip: {
+      y: {
+        formatter: (v: number) => formatCurrency(v),
+      },
+    },
+  };
+
+  const seriesData = categories.map((c) => c.value);
+
+  return (
+    <div className="flex-1 flex flex-col gap-3">
+      <div className="flex items-center justify-center">
+        <ReactApexChart
+          type="donut"
+          options={options}
+          series={seriesData}
+          height={180}
+        />
+      </div>
+      <div className="space-y-1 max-h-32 overflow-y-auto pr-1 text-[11px]">
+        {categories.map((c) => (
+          <div
+            key={c.name}
+            className="flex items-center justify-between text-slate-200"
+          >
+            <span>{c.name}</span>
+            <span className="text-slate-400">
+              {formatCurrency(c.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HeatmapGrid({
+  data,
+  loading,
+}: {
+  data: { weekIndex: number; dayIndex: number; value: number }[];
+  loading: boolean;
+}) {
+  const days = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+
+  // wszystkie tygodnie obecne w danych
+  const weekSet = new Set<number>();
+  for (const d of data) {
+    weekSet.add(d.weekIndex);
+  }
+  const allWeeks = Array.from(weekSet).sort((a, b) => a - b);
+
+  const MAX_WEEKS = 12;
+  const trimmed = allWeeks.length > MAX_WEEKS;
+  const weeks = trimmed ? allWeeks.slice(-MAX_WEEKS) : allWeeks;
+
+  const max = Math.max(1, ...data.map((d) => Math.abs(d.value)));
+
+  const getValue = (dayIdx: number, weekIdx: number) => {
+    const entry = data.find(
+      (d) => d.dayIndex === dayIdx && d.weekIndex === weekIdx
+    );
+    return entry?.value ?? 0;
+  };
+
+  if (loading) {
+    return (
+      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
+        Ładowanie danych...
+      </div>
+    );
+  }
+
+  if (weeks.length === 0) {
+    return (
+      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
+        Brak danych w wybranym okresie.
+      </div>
+    );
+  }
+
+  return (
+  <div className="space-y-2 text-[10px]">
+    {/* nagłówki tygodni */}
+    <div className="flex items-center">
+      <div className="w-8" />
+      <div className="flex gap-1 flex-1 justify-between">
+        {weeks.map((w) => (
+          <span key={w} className="text-slate-400">
+            T{w + 1}
+          </span>
+        ))}
+      </div>
+    </div>
+
+    {trimmed && (
+      <div className="text-right text-[9px] text-slate-500">
+        Pokazuję ostatnie {MAX_WEEKS} tygodni (z {allWeeks.length})
+      </div>
+    )}
+
+    {/* ...reszta: wiersze z dniami tygodnia */}
+    <div className="space-y-1">
+      {days.map((label, dayIdx) => (
+        <div key={label} className="flex items-center gap-1">
+          <div className="w-8 text-slate-400">{label}</div>
+          <div className="flex gap-1 flex-1">
+            {weeks.map((w) => {
+              const val = getValue(dayIdx, w);
+              const intensity = Math.min(1, Math.abs(val) / max);
+              const bg =
+                intensity === 0
+                  ? "bg-slate-800/40"
+                  : val >= 0
+                  ? "bg-emerald-400"
+                  : "bg-rose-400";
+              const opacity =
+                intensity === 0 ? 0.25 : 0.3 + intensity * 0.7;
+
+              return (
+                <div
+                  key={w}
+                  className={`h-5 flex-1 rounded-md ${bg}`}
+                  style={{ opacity }}
+                  title={`T${w + 1}, ${label}: ${val.toFixed(2)}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+}
+
+
+
+function RecentTransactionsList({
+  transactions,
+  loading,
+}: {
+  transactions: Transaction[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="h-32 flex items-center justify-center text-[11px] text-slate-500">
+        Ładowanie danych...
+      </div>
+    );
+  }
+  if (transactions.length === 0) {
+    return (
+      <div className="h-32 flex items-center justify-center text-[11px] text-slate-500">
+        Brak transakcji w wybranym okresie.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {transactions.map((t, idx) => {
+        const amount = parseAmount(t.amount as any);
+        const isPositive = amount >= 0;
+        const isFaded = idx === transactions.length - 1;
+
+        return (
+          <div
+            key={t.id}
+            className={[
+              "flex items-center justify-between rounded-xl px-2 py-1.5 text-[11px]",
+              isFaded
+                ? "bg-slate-900/20 text-slate-500"
+                : "bg-slate-900/60 text-slate-100",
+            ].join(" ")}
+          >
+            <div className="flex flex-col">
+              <span className="truncate max-w-[180px]">
+                {t.description}
+              </span>
+              <span className="text-slate-500">
+                {t.operation_date}
+              </span>
+            </div>
+            <div
+              className={
+                isPositive ? "text-emerald-300" : "text-rose-300"
+              }
+            >
+              {formatCurrency(amount)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- DATA HELPERS ---------- */
+
+function normalizeTransactions(transactions: Transaction[]): TxExt[] {
+  return transactions
+    .map((t) => ({
+      ...t,
+      amountNum: parseAmount(t.amount as any),
+      date: parseDate(t.operation_date),
+    }))
+    .filter((t) => !!t.date) as TxExt[];
+}
+
+function parseAmount(raw: string): number {
+  if (!raw) return 0;
+  const cleaned = raw
+    .replace(/\s/g, "")
+    .replace("PLN", "")
+    .replace(",", ".");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseDate(raw: string | null | undefined): Date {
+  if (!raw) return new Date(NaN);
+  const d = new Date(raw);
+  return d;
+}
+
+function filterByRange(data: TxExt[], range: RangeKey) {
+  if (data.length === 0) {
+    return { filtered: [] as TxExt[], startDate: null as Date | null };
+  }
+  const sorted = [...data].sort(
+    (a, b) => a.date.getTime() - b.date.getTime()
+  );
+  const lastDate = sorted[sorted.length - 1].date;
+  const start = computeStartDate(lastDate, range);
+  if (!start) {
+    return { filtered: sorted, startDate: null as Date | null };
+  }
+  const filtered = sorted.filter((t) => t.date >= start);
+  return { filtered, startDate: start };
+}
+
+function computeStartDate(last: Date, range: RangeKey): Date | null {
+  const d = new Date(last);
+  switch (range) {
+    case "1m":
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    case "3m":
+      d.setMonth(d.getMonth() - 3);
+      return d;
+    case "6m":
+      d.setMonth(d.getMonth() - 6);
+      return d;
+    case "ytd":
+      return new Date(d.getFullYear(), 0, 1);
+    case "all":
+      return null;
+  }
+}
+
+function computeMetrics(data: TxExt[]) {
+  let income = 0;
+  let expenses = 0;
+  for (const t of data) {
+    if (t.amountNum >= 0) income += t.amountNum;
+    else expenses += t.amountNum;
+  }
+  const net = income + expenses;
+  return { income, expenses, net };
+}
+
+function groupByDay(data: TxExt[]) {
+  type Agg = { net: number; income: number; expense: number };
+
+  const map = new Map<string, Agg>();
+
+  for (const t of data) {
+    const key = t.date.toISOString().slice(0, 10); // YYYY-MM-DD
+    const agg = map.get(key) ?? { net: 0, income: 0, expense: 0 };
+
+    if (t.amountNum >= 0) {
+      agg.income += t.amountNum;
+    } else {
+      agg.expense += t.amountNum; // ujemne
+    }
+    agg.net = agg.income + agg.expense;
+
+    map.set(key, agg);
+  }
+
+  return Array.from(map.entries())
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([date, agg]) => ({
+      date,
+      net: agg.net,
+      income: agg.income,
+      expense: agg.expense,
+    }));
+}
+
+
+function groupByCategory(data: TxExt[]) {
+  const map = new Map<string, number>();
+  for (const t of data) {
+    if (t.amountNum >= 0) continue; // tylko wydatki
+    const key = t.category || "Inne";
+    map.set(key, (map.get(key) ?? 0) + Math.abs(t.amountNum));
+  }
+  return Array.from(map.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function buildHeatmap(data: TxExt[]) {
+  if (data.length === 0) return [] as { weekIndex: number; dayIndex: number; value: number }[];
+
+  // sortujemy po dacie i bierzemy najstarszą jako początek zakresu
+  const sorted = [...data].sort(
+    (a, b) => a.date.getTime() - b.date.getTime()
+  );
+  const start = sorted[0].date;
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  const map = new Map<string, number>();
+
+  for (const t of data) {
+    const diffDays = Math.floor(
+      (t.date.getTime() - start.getTime()) / dayMs
+    );
+    const weekIndex = Math.floor(diffDays / 7);
+    const dayIndex = (t.date.getDay() + 6) % 7; // Pn=0
+
+    const key = `${weekIndex}-${dayIndex}`;
+    map.set(key, (map.get(key) ?? 0) + t.amountNum);
+  }
+
+  return Array.from(map.entries()).map(([key, value]) => {
+    const [weekStr, dayStr] = key.split("-");
+    return {
+      weekIndex: Number(weekStr),
+      dayIndex: Number(dayStr),
+      value,
+    };
+  });
+}
+
+
+function rangeLabel(range: RangeKey, startDate: Date | null) {
+  if (!startDate) return "całej historii";
+  const opts: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  };
+  return `okres od ${startDate.toLocaleDateString("pl-PL", opts)}`;
+}
+
+function rangeLabelShort(range: RangeKey) {
+  switch (range) {
+    case "1m":
+      return "1M";
+    case "3m":
+      return "3M";
+    case "6m":
+      return "6M";
+    case "ytd":
+      return "YTD";
+    case "all":
+      return "ALL";
+  }
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("pl-PL", {
+    style: "currency",
+    currency: "PLN",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatDateShort(isoDate: string) {
+  // "2025-09-01" -> "01.09"
+  const [y, m, d] = isoDate.split("-");
+  if (!y || !m || !d) return isoDate;
+  return `${d}.${m}`;
+}
+
+function formatDateLong(isoDate: string) {
+  // "2025-09-01" -> "01.09.2025"
+  const [y, m, d] = isoDate.split("-");
+  if (!y || !m || !d) return isoDate;
+  return `${d}.${m}.${y}`;
+}
+
+function formatNumberCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    return (value / 1_000_000).toFixed(1).replace(".0", "") + "M";
+  }
+  if (abs >= 1_000) {
+    return (value / 1_000).toFixed(1).replace(".0", "") + "k";
+  }
+  return value.toFixed(0);
+}
+
+function buildNetFlowSeries(data: TxExt[], range: RangeKey) {
+  type Agg = { net: number; income: number; expense: number };
+
+  const map = new Map<string, Agg>();
+
+  for (const t of data) {
+    const d = t.date;
+    const year = d.getFullYear();
+    const month = d.getMonth(); // 0–11
+
+    let key: string;
+
+    switch (range) {
+      case "1m": {
+        // dziennie: YYYY-MM-DD
+        key = d.toISOString().slice(0, 10);
+        break;
+      }
+      case "3m": {
+        // tygodnie: YYYY-Www
+        const { year: y, week } = getIsoWeek(d);
+        key = `${y}-W${String(week).padStart(2, "0")}`;
+        break;
+      }
+      case "6m":
+      case "ytd": {
+        // miesiące: YYYY-MM
+        key = `${year}-${String(month + 1).padStart(2, "0")}`;
+        break;
+      }
+      case "all": {
+        // kwartały: YYYY-Qx
+        const q = Math.floor(month / 3) + 1;
+        key = `${year}-Q${q}`;
+        break;
+      }
+    }
+
+    const agg = map.get(key) ?? { net: 0, income: 0, expense: 0 };
+
+    if (t.amountNum >= 0) {
+      agg.income += t.amountNum;
+    } else {
+      agg.expense += t.amountNum; // ujemne
+    }
+    agg.net = agg.income + agg.expense;
+
+    map.set(key, agg);
+  }
+
+  const points = Array.from(map.entries()).map(([key, agg]) => ({
+    key,
+    label: labelForBucket(key, range),
+    net: agg.net,
+    income: agg.income,
+    expense: agg.expense,
+  }));
+
+  // sortujemy po key (formaty typu YYYY-MM, YYYY-Www, YYYY-Qx są do tego OK)
+  points.sort((a, b) => (a.key < b.key ? -1 : 1));
+
+  return points.map((p) => ({
+    x: p.label,
+    net: p.net,
+    income: p.income,
+    expense: p.expense,
+  }));
+}
+
+// Pomocniczo: tydzień ISO
+function getIsoWeek(date: Date) {
+  const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((tmp.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return { year: tmp.getUTCFullYear(), week };
+}
+
+function labelForBucket(key: string, range: RangeKey) {
+  switch (range) {
+    case "1m": {
+      // YYYY-MM-DD -> dd.MM
+      const [y, m, d] = key.split("-");
+      if (!y || !m || !d) return key;
+      return `${d}.${m}`;
+    }
+    case "3m": {
+      // YYYY-Www -> Tww
+      const parts = key.split("-W");
+      const week = parts[1] ?? key;
+      return `T${week}`;
+    }
+    case "6m":
+    case "ytd": {
+      // YYYY-MM -> MM.YY
+      const [y, m] = key.split("-");
+      if (!y || !m) return key;
+      return `${m}.${y.slice(-2)}`;
+    }
+    case "all": {
+      // YYYY-Qx -> Qx YY
+      const [y, q] = key.split("-Q");
+      if (!y || !q) return key;
+      return `Q${q} ${y.slice(-2)}`;
+    }
+  }
 }

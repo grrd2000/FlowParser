@@ -12,9 +12,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body className="antialiased">
         <TopNav />
-
-        <main className="pt-24 pb-10 px-4">
-          <div className="mx-auto w-full max-w-5xl">
+        <main className="pt-20 pb-10 px-4 md:px-6">
+          <div className="mx-auto w-full max-w-6xl">
             {children}
           </div>
         </main>
