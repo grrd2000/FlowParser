@@ -143,7 +143,7 @@ const {
       {/* ŚRODEK: FLOW + DONUT */}
       <section className="grid gap-4 lg:grid-cols-3">
         {/* FLOW W CZASIE */}
-        <div className="lg:col-span-2 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5">
+        <div className="lg:col-span-2 glass-card glass-card-hover-soft p-4 md:p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-50">
@@ -158,7 +158,7 @@ const {
         </div>
 
         {/* PODZIAŁ KATEGORII */}
-        <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5 flex flex-col">
+        <div className="glass-card glass-card-hover-soft p-4 md:p-5 flex flex-col">
           <h2 className="text-sm font-semibold text-slate-50 mb-2">
             Rozkład wydatków
           </h2>
@@ -172,7 +172,7 @@ const {
       {/* DÓŁ: HEATMAP + OSTATNIE TRANSAKCJE */}
       <section className="grid gap-4 lg:grid-cols-3">
         {/* HEATMAP */}
-        <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5 lg:col-span-2">
+        <div className="glass-card glass-card-hover-soft p-4 md:p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-50">
@@ -187,7 +187,7 @@ const {
         </div>
 
         {/* OSTATNIE TRANSAKCJE */}
-        <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 md:p-5">
+        <div className="glass-card glass-card-hover-soft p-4 md:p-5">
           <h2 className="text-sm font-semibold text-slate-50 mb-2">
             Ostatnie transakcje
           </h2>
@@ -224,7 +224,7 @@ function KpiCard({
     tone === "positive" ? "text-emerald-300" : "text-rose-300";
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-black/30 p-4 flex flex-col justify-between">
+    <div className="glass-card glass-card-hover-strong p-4 flex flex-col justify-between">
       <div>
         <div className="text-[11px] uppercase tracking-wide text-slate-400">
           {label}
@@ -273,6 +273,9 @@ function NetFlowChart({
       animations: { enabled: true },
       foreColor: "#94a3b8",
     },
+    // theme: {
+    //   mode: "dark",
+    // },
     stroke: {
       curve: "smooth",
       width: [0, 0, 2],
@@ -301,6 +304,12 @@ function NetFlowChart({
     },
     tooltip: {
       shared: true,
+      theme: "dark",
+      fillSeriesColor: false,
+      style: {
+        fontSize: "11px",
+        fontFamily: "inherit",
+      },
       x: {
         formatter: (value: string) => value,
       },
@@ -333,7 +342,7 @@ function NetFlowChart({
         borderRadius: 4,
       },
     },
-    colors: ["#22c55e", "#fb7185", "#60a5fa"], // income, expense, net
+    colors: ["#22c55e", "#fb7185", "#60a5fa"],
   };
 
   const seriesData: ApexAxisChartSeries = [
@@ -581,15 +590,16 @@ function RecentTransactionsList({
         const isFaded = idx === transactions.length - 1;
 
         return (
-          <div
-            key={t.id}
-            className={[
-              "flex items-center justify-between rounded-xl px-2 py-1.5 text-[11px]",
-              isFaded
-                ? "bg-slate-900/20 text-slate-500"
-                : "bg-slate-900/60 text-slate-100",
-            ].join(" ")}
-          >
+            <div
+              key={t.id}
+              className={[
+                "flex items-center justify-between rounded-xl px-2 py-1.5 text-[11px]",
+                "transition-all duration-150 hover:bg-slate-900/80 hover:scale-[1.01]",
+                isFaded
+                  ? "bg-slate-900/20 text-slate-500"
+                  : "bg-slate-900/60 text-slate-100",
+              ].join(" ")}
+            >
             <div className="flex flex-col">
               <span className="truncate max-w-[180px]">
                 {t.description}
