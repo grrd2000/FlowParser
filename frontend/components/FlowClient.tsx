@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { Transaction } from "@/lib/serverApi";
 
 import {
@@ -262,7 +262,10 @@ export function FlowClient() {
             </div>
 
             <TransactionsTable transactions={filtered} loading={loading} />
+
+
           </section>
+
         </div>
       </section>
     </div>
@@ -545,6 +548,8 @@ function TransactionsTable({
     getPaginationRowModel: getPaginationRowModel(),
   });
 
+  const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
+
   if (loading) {
     return (
       <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
@@ -687,37 +692,155 @@ function TransactionsTable({
               </tr>
             ))}
           </thead>
-          <tbody>
-            {pageRows.map((row) => (
-              <tr
-                key={row.id}
-                className="border-t border-slate-800/60 hover:bg-slate-900/60 transition-colors"
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    className={[
-                      "px-3 py-1.5 align-middle",
-                      cell.column.id === "amount" ||
-                      cell.column.id === "is_manual"
-                        ? "text-right"
-                        : "text-left",
-                    ].join(" ")}
-                  >
-                    {flexRender(
-                      cell.column.columnDef.cell,
-                      cell.getContext()
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
+<tbody>
+  {pageRows.map((row) => {
+    const tx = row.original;
+    const isExpanded = expandedRowId === tx.id;
+    const visibleCells = row.getVisibleCells();
+
+    return (
+      <React.Fragment key={row.id}>
+        <tr
+          onClick={() =>
+            setExpandedRowId((prev) => (prev === tx.id ? null : tx.id))
+          }
+          className={[
+            "border-t border-slate-800/60 transition-colors cursor-pointer",
+            isExpanded
+              ? "bg-slate-900/80"
+              : "hover:bg-slate-900/60",
+          ].join(" ")}
+        >
+          {visibleCells.map((cell) => (
+            <td
+              key={cell.id}
+              className={[
+                "px-3 py-1.5 align-middle",
+                cell.column.id === "amount" ||
+                cell.column.id === "is_manual"
+                  ? "text-right"
+                  : "text-left",
+              ].join(" ")}
+            >
+              {flexRender(
+                cell.column.columnDef.cell,
+                cell.getContext()
+              )}
+            </td>
+          ))}
+        </tr>
+
+        {isExpanded && (
+          <tr className="border-t border-slate-800/80 bg-slate-950/80">
+            <td
+              colSpan={visibleCells.length}
+              className="px-3 py-3"
+            >
+              <ExpandedTransactionDetails tx={tx} />
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  })}
+</tbody>
+
+
+
         </table>
       </div>
     </div>
   );
 }
+
+
+
+
+
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+function ExpandedTransactionDetails({ tx }: { tx: TxExt }) {
+  const positive = tx.amountNum >= 0;
+
+  const operationDate = formatDateDisplay(tx.date);
+  const valueDate =
+    tx.value_date &&
+    !Number.isNaN(new Date(tx.value_date as any).getTime())
+      ? formatDateDisplay(new Date(tx.value_date as any))
+      : "—";
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-3 md:px-4 md:py-3 space-y-3">
+      {/* top: description + amount */}
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+        <div className="space-y-1">
+          <div className="text-[11px] text-slate-400">
+            {tx.category ?? "Bez kategorii"}
+          </div>
+          <div className="text-[12px] md:text-[13px] font-medium text-slate-50 leading-snug">
+            {tx.description}
+          </div>
+        </div>
+        <div className="flex flex-col items-start md:items-end gap-1">
+          <span
+            className={[
+              "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+              positive
+                ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
+                : "border-rose-400/60 bg-rose-500/10 text-rose-200",
+            ].join(" ")}
+          >
+            {formatCurrency(tx.amountNum)}
+          </span>
+          <span className="text-[11px] text-slate-500">
+            {positive ? "Wpływ" : "Wydatek"} · ID: {tx.id}
+          </span>
+        </div>
+      </div>
+
+      {/* meta grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] md:text-[11px]">
+        <MetaCell label="Data operacji" value={operationDate} />
+        <MetaCell label="Data waluty" value={valueDate} />
+        <MetaCell
+          label="Źródło"
+          value={tx.is_manual ? "Ręczna" : "Import PDF"}
+        />
+        <MetaCell
+          label="ID konta"
+          value={String(tx.account_id)}
+        />
+      </div>
+
+      {/* pełny opis (na razie ten sam, ale w przyszłości raw / AI-notes) */}
+      <div className="space-y-1">
+        <div className="text-[10px] text-slate-500">
+          Pełny opis
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-200 whitespace-pre-wrap">
+          {tx.description}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetaCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-100">{value}</span>
+    </div>
+  );
+}
+
 
 
 /* ---------- HELPERS ---------- */
