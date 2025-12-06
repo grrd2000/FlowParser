@@ -29,6 +29,8 @@ export function FlowClient() {
   const [kind, setKind] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
 
+  const [selectedTx, setSelectedTx] = useState<TxExt | null>(null);
+
   // 1) Ładowanie wszystkich transakcji (jak na dashboardzie)
   useEffect(() => {
     const fetchData = async () => {
@@ -235,36 +237,56 @@ export function FlowClient() {
             </div>
           </section>
 
-          {/* DÓŁ – TABELA TRANSAKCJI */}
-          <section className="glass-card glass-card-hover-soft p-4 md:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-50">
-                  Transakcje
-                </h2>
-                <p className="text-[11px] text-slate-400">
-                  Wynik działania wszystkich filtrów. To tutaj będziemy
-                  dodawali grupowanie, edycję kategorii i zaawansowane
-                  operacje.
-                </p>
-              </div>
-              <div className="text-[11px] text-slate-400 text-right">
-                Zakres:{" "}
-                <span className="text-slate-200 font-medium">
-                  {rangeText}
-                </span>
-                <br />
-                Wyświetlane:{" "}
-                <span className="text-slate-200 font-medium">
-                  {filtered.length}
-                </span>
-              </div>
+        {/* DÓŁ – TABELA TRANSAKCJI + PANEL SZCZEGÓŁÓW */}
+        <section className="glass-card glass-card-hover-soft p-4 md:p-5">
+        <div className="flex items-center justify-between mb-3">
+            <div>
+            <h2 className="text-sm font-semibold text-slate-50">
+                Transakcje
+            </h2>
+            <p className="text-[11px] text-slate-400">
+                Wynik działania wszystkich filtrów. Po kliknięciu w wiersz po prawej
+                stronie pokazują się szczegóły wybranej transakcji.
+            </p>
             </div>
+            <div className="text-[11px] text-slate-400 text-right">
+            Zakres:{" "}
+            <span className="text-slate-200 font-medium">
+                {rangeText}
+            </span>
+            <br />
+            Wyświetlane:{" "}
+            <span className="text-slate-200 font-medium">
+                {filtered.length}
+            </span>
+            </div>
+        </div>
 
-            <TransactionsTable transactions={filtered} loading={loading} />
+<div className="mt-3">
+  {selectedTx ? (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(260px,1fr)]">
+      <TransactionsTable
+        transactions={filtered}
+        loading={loading}
+        onRowClick={(tx) =>
+          setSelectedTx((prev) => (prev?.id === tx.id ? null : tx))
+        }
+        selectedId={selectedTx.id}
+      />
+      <TransactionSideDetails transaction={selectedTx} />
+    </div>
+  ) : (
+    <TransactionsTable
+      transactions={filtered}
+      loading={loading}
+      onRowClick={(tx) => setSelectedTx(tx)}
+      selectedId={null}
+    />
+  )}
+</div>
 
+        </section>
 
-          </section>
 
         </div>
       </section>
@@ -516,9 +538,13 @@ const transactionColumns: ColumnDef<TxExt>[] = [
 function TransactionsTable({
   transactions,
   loading,
+  onRowClick,
+  selectedId,
 }: {
   transactions: TxExt[];
   loading: boolean;
+  onRowClick: (tx: TxExt) => void;
+  selectedId: number | null;
 }) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "date", desc: true },
@@ -576,10 +602,10 @@ function TransactionsTable({
     <div className="space-y-3">
       {/* PANEL KOLUMN + PAGINACJA GÓRA */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-[11px]">
-        <div className="flex flex-wrap gap-1">
-          <span className="text-slate-400 mr-1">
+        <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+        <span className="text-slate-400 mr-1 whitespace-nowrap">
             Widoczne kolumny:
-          </span>
+        </span>
           {allColumns.map((column) => (
             <button
               key={column.id}
@@ -695,55 +721,41 @@ function TransactionsTable({
 <tbody>
   {pageRows.map((row) => {
     const tx = row.original;
-    const isExpanded = expandedRowId === tx.id;
+    const isSelected = selectedId === tx.id;
     const visibleCells = row.getVisibleCells();
 
     return (
-      <React.Fragment key={row.id}>
-        <tr
-          onClick={() =>
-            setExpandedRowId((prev) => (prev === tx.id ? null : tx.id))
-          }
-          className={[
-            "border-t border-slate-800/60 transition-colors cursor-pointer",
-            isExpanded
-              ? "bg-slate-900/80"
-              : "hover:bg-slate-900/60",
-          ].join(" ")}
-        >
-          {visibleCells.map((cell) => (
-            <td
-              key={cell.id}
-              className={[
-                "px-3 py-1.5 align-middle",
-                cell.column.id === "amount" ||
-                cell.column.id === "is_manual"
-                  ? "text-right"
-                  : "text-left",
-              ].join(" ")}
-            >
-              {flexRender(
-                cell.column.columnDef.cell,
-                cell.getContext()
-              )}
-            </td>
-          ))}
-        </tr>
-
-        {isExpanded && (
-          <tr className="border-t border-slate-800/80 bg-slate-950/80">
-            <td
-              colSpan={visibleCells.length}
-              className="px-3 py-3"
-            >
-              <ExpandedTransactionDetails tx={tx} />
-            </td>
-          </tr>
-        )}
-      </React.Fragment>
+      <tr
+        key={row.id}
+        onClick={() => onRowClick(tx)}
+        className={[
+          "border-t border-slate-800/60 transition-colors cursor-pointer",
+          isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/60",
+        ].join(" ")}
+      >
+        {visibleCells.map((cell) => (
+          <td
+            key={cell.id}
+            className={[
+              "px-3 py-1.5 align-middle",
+              cell.column.id === "amount" ||
+              cell.column.id === "is_manual"
+                ? "text-right"
+                : "text-left",
+            ].join(" ")}
+          >
+            {flexRender(
+              cell.column.columnDef.cell,
+              cell.getContext()
+            )}
+          </td>
+        ))}
+      </tr>
     );
   })}
 </tbody>
+
+
 
 
 
@@ -841,6 +853,108 @@ function MetaCell({ label, value }: { label: string; value: string }) {
   );
 }
 
+/* ---------- BOCZNA KARTA SZCZEGÓŁÓW ---------- */
+
+function TransactionSideDetails({ transaction }: { transaction: TxExt | null }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    // przy montowaniu panelu – krótkie fade/slide-in
+    setVisible(true);
+  }, []);
+
+  if (!transaction) return null;
+
+  const positive = transaction.amountNum >= 0;
+  const operationDate = formatDateDisplay(transaction.date);
+  const valueDate =
+    transaction.value_date &&
+    !Number.isNaN(new Date(transaction.value_date as any).getTime())
+      ? formatDateDisplay(new Date(transaction.value_date as any))
+      : "—";
+
+  return (
+    <aside
+      className={[
+        "rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 md:px-4 md:py-4",
+        "flex flex-col gap-3 text-[11px]",
+        "transition-all duration-200",
+        visible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-3",
+      ].join(" ")}
+    >
+      {/* nagłówek */}
+      <div className="space-y-1">
+        <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+          Szczegóły transakcji
+        </div>
+        <div className="text-sm font-semibold text-slate-50 leading-snug line-clamp-3">
+          {transaction.description}
+        </div>
+      </div>
+
+      {/* kwota + kategoria */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="space-y-0.5">
+          <div className="text-slate-500">Kategoria</div>
+          <div className="text-slate-100">
+            {transaction.category ?? "Bez kategorii"}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span
+            className={[
+              "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+              positive
+                ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
+                : "border-rose-400/60 bg-rose-500/10 text-rose-200",
+            ].join(" ")}
+          >
+            {formatCurrency(transaction.amountNum)}
+          </span>
+          <span className="text-[10px] text-slate-500">
+            {positive ? "Wpływ" : "Wydatek"} · ID {transaction.id}
+          </span>
+        </div>
+      </div>
+
+      {/* meta */}
+      <div className="grid grid-cols-2 gap-2">
+        <DetailCell label="Data operacji" value={operationDate} />
+        <DetailCell label="Data waluty" value={valueDate} />
+        <DetailCell
+          label="Źródło"
+          value={transaction.is_manual ? "Ręczna" : "Import PDF"}
+        />
+        <DetailCell
+          label="Konto (ID)"
+          value={String(transaction.account_id)}
+        />
+      </div>
+
+      {/* opis */}
+      <div className="space-y-1">
+        <div className="text-slate-500">Pełny opis</div>
+        <div className="rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-200 max-h-32 overflow-auto">
+          {transaction.description}
+        </div>
+      </div>
+
+      <div className="mt-auto pt-2 border-t border-white/5 text-[10px] text-slate-500">
+        W „Lab” rozbudujemy ten panel o sugestie kategorii, podobne transakcje
+        i detekcję subskrypcji.
+      </div>
+    </aside>
+  );
+}
+
+function DetailCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-slate-500 text-[10px]">{label}</span>
+      <span className="text-slate-100">{value}</span>
+    </div>
+  );
+}
 
 
 /* ---------- HELPERS ---------- */
