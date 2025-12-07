@@ -1,7 +1,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import type { Transaction } from "@/lib/serverApi";
+
+import {
+  Transaction,
+  fetchTransactions,
+  fetchCategories,
+  updateTransactionCategory,
+  Category,
+} from "@/lib/serverApi";
 
 import {
   ColumnDef,
@@ -32,29 +39,24 @@ export function FlowClient() {
   const [detailTx, setDetailTx] = useState<TxExt | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  const [categories, setCategories] = useState<Category[]>([]);
+
+
   // 1) Ładowanie wszystkich transakcji (jak na dashboardzie)
   useEffect(() => {
-    const fetchData = async () => {
+    const load = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch(`${API_BASE}/transactions`, {
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status}`);
-        }
-        const raw: Transaction[] = await res.json();
-        const parsed = normalizeTransactions(raw);
-        setTransactions(parsed);
-      } catch (e: any) {
+        const [txs, cats] = await Promise.all([
+          fetchTransactions(),
+          fetchCategories(),
+        ]);
+        setTransactions(normalizeTransactions(txs));
+        setCategories(cats);
+      } catch (e) {
         console.error(e);
-        setError(e?.message ?? "Błąd podczas ładowania transakcji.");
-      } finally {
-        setLoading(false);
       }
     };
-    fetchData();
+    load();
   }, []);
 
   // 2) Przetwarzanie wg zakresu, typu (income/expense/all) i wyszukiwarki
@@ -102,6 +104,40 @@ const handleRowClick = (tx: TxExt) => {
   setDetailOpen(true);
 };
 
+const handleChangeCategory = async (txId: number, categoryId: number | null) => {
+  try {
+    const updated = await updateTransactionCategory(txId, categoryId);
+
+    // podbijamy stan tabeli
+    setTransactions((prev) =>
+      prev.map((tx) =>
+        tx.id === txId
+          ? {
+              ...tx,
+              category: updated.category,
+              category_id: updated.category_id,
+              category_source: updated.category_source,
+            }
+          : tx
+      )
+    );
+
+    // jeśli panel pokazuje tę transakcję – też go odśwież
+    setDetailTx((prev) =>
+      prev && prev.id === txId
+        ? {
+            ...prev,
+            category: updated.category,
+            category_id: updated.category_id,
+            category_source: updated.category_source,
+          }
+        : prev
+    );
+  } catch (e) {
+    console.error(e);
+    // tu możesz kiedyś dorzucić toast z błędem
+  }
+};
 
 
   const rangeText = rangeLabel(range, startDate);
@@ -315,7 +351,12 @@ const handleRowClick = (tx: TxExt) => {
   >
     <div className="h-full flex justify-start">
       {detailTx && (
-        <TransactionSideDetails transaction={detailTx} open={detailOpen} />
+          <TransactionSideDetails
+          transaction={detailTx}
+          open={detailOpen}
+          categories={categories}
+          onChangeCategory={handleChangeCategory}
+        />
       )}
     </div>
   </div>
@@ -919,9 +960,13 @@ function MetaCell({ label, value }: { label: string; value: string }) {
 function TransactionSideDetails({
   transaction,
   open,
+  categories,
+  onChangeCategory,
 }: {
   transaction: TxExt;
   open: boolean;
+  categories: Category[];
+  onChangeCategory: (txId: number, categoryId: number | null) => void;
 }) {
   const positive = transaction.amountNum >= 0;
   const operationDate = formatDateDisplay(transaction.date);
@@ -964,17 +1009,31 @@ function TransactionSideDetails({
 
       {/* treść – przewijana wewnątrz, bez zmiany wysokości kontenera przy zwężaniu */}
       <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="space-y-0.5">
-            <div className="text-slate-500">Kategoria</div>
-            <div
-              className={
-                transaction.category ? "text-slate-100" : "text-slate-600"
+          {/* Kategoria + kwota + źródło kategorii */}
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="flex-1">
+            <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
+              Kategoria
+            </div>
+            <select
+              className="mt-1 w-full rounded-full bg-slate-900/70 border border-slate-700/60 px-3 py-1 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/80"
+              value={transaction.category_id ?? ""}
+              onChange={(e) =>
+                onChangeCategory(
+                  transaction.id,
+                  e.target.value === "" ? null : Number(e.target.value)
+                )
               }
             >
-              {transaction.category || "—"}
-            </div>
+              <option value="">— brak kategorii —</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
           </div>
+
           <div className="flex flex-col items-end gap-1">
             <span
               className={[
@@ -986,9 +1045,21 @@ function TransactionSideDetails({
             >
               {formatCurrency(transaction.amountNum)}
             </span>
-            <span className="text-[10px] text-slate-500 whitespace-nowrap">
-              {positive ? "Wpływ" : "Wydatek"} · ID {transaction.id}
-            </span>
+
+            {transaction.category_source && (
+              <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500 whitespace-nowrap">
+                źródło:
+                <span className="ml-1 text-indigo-300/90">
+                  {transaction.category_source}
+                </span>
+              </span>
+            )}
+
+            {!transaction.category_source && (
+              <span className="text-[9px] text-slate-600 whitespace-nowrap">
+                źródło: — unknown —
+              </span>
+            )}
           </div>
         </div>
 
@@ -1045,14 +1116,29 @@ function DetailCell({ label, value }: { label: string; value: string }) {
 /* ---------- HELPERS ---------- */
 
 function normalizeTransactions(transactions: Transaction[]): TxExt[] {
-  return transactions
-    .map((t) => ({
+  return transactions.map((t) => {
+    // 1) próba przez parseDate (Twoja logika)
+    let d = parseDate(t.operation_date);
+
+    // 2) fallback – jeśli parseDate zwróci coś dziwnego
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+      try {
+        // spróbuj natywnego Date – może backend już podaje w ISO (YYYY-MM-DD)
+        d = new Date(t.operation_date as any);
+      } catch {
+        // ostatnia deska ratunku – dzisiaj, żeby nic się nie wywaliło
+        d = new Date();
+      }
+    }
+
+    return {
       ...t,
       amountNum: parseAmount(t.amount as any),
-      date: parseDate(t.operation_date),
-    }))
-    .filter((t) => !Number.isNaN(t.date.getTime()));
+      date: d,
+    };
+  });
 }
+
 
 function parseAmount(raw: string): number {
   if (!raw) return 0;

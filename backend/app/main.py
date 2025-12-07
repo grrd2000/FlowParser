@@ -18,10 +18,11 @@ from app.models import (
     ImportRun,
     RawTransaction,
     Transaction,
-    UserPreference
+    UserPreference,
+    Category,
 )
 
-from app.schemas import UserProfileResponse, UserProfileUpdate, AccountSummary, StatementSummary
+from app.schemas import UserProfileResponse, UserProfileUpdate, AccountSummary, StatementSummary, CategoryOut, CategoryUpdate
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
@@ -836,3 +837,79 @@ def list_raw_transactions(
         }
         for r in rows
     ]
+
+@app.get("/categories", response_model=list[CategoryOut])
+def list_categories(db: Session = Depends(get_db)):
+    # na razie zakładamy jednego usera demo
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cats = (
+        db.query(Category)
+        .filter(Category.user_id == user.id)
+        .order_by(Category.name.asc())
+        .all()
+    )
+    return cats
+
+@app.put("/transactions/{tx_id}/category")
+def update_transaction_category(
+    tx_id: int,
+    payload: CategoryUpdate,
+    db: Session = Depends(get_db),
+):
+    tx = db.get(Transaction, tx_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if payload.category_id is None:
+        # reset kategorii
+        tx.category_id = None
+        tx.category = None
+        tx.category_source = "unknown"
+        tx.category_confidence = None
+    else:
+        cat = db.get(Category, payload.category_id)
+        if not cat:
+            raise HTTPException(status_code=404, detail="Category not found")
+
+        tx.category_id = cat.id
+        tx.category = cat.name  # żeby frontend, który używa "category", miał od razu nazwę
+        tx.category_source = "manual"
+        tx.category_confidence = None  # później ML może nadpisać
+
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+
+def ensure_default_categories(db: Session, user: User):
+    """Tworzy parę podstawowych kategorii dla użytkownika, jeśli jeszcze nie istnieją."""
+    existing = (
+        db.query(Category)
+        .filter(Category.user_id == user.id)
+        .count()
+    )
+    if existing > 0:
+        return
+
+    base_cats = [
+        ("Jedzenie", "#22c55e"),
+        ("Transport", "#3b82f6"),
+        ("Zakupy", "#a855f7"),
+        ("Subskrypcje", "#f97316"),
+        ("Inne", "#9ca3af"),
+    ]
+    for name, color in base_cats:
+        db.add(
+            Category(
+                user_id=user.id,
+                name=name,
+                color=color,
+                is_system=True,
+            )
+        )
+    db.commit()
+

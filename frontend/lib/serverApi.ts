@@ -9,6 +9,8 @@ export type Transaction = {
   amount: string;
   category: string | null;
   is_manual: boolean;
+  category_id?: number | null;
+  category_source?: string | null;
 };
 
 export type UserProfile = {
@@ -110,6 +112,41 @@ export async function fetchStatements(): Promise<StatementSummary[]> {
 
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export type Category = {
+  id: number;
+  name: string;
+  color?: string | null;
+};
+
+export async function fetchCategories(): Promise<Category[]> {
+  const res = await fetch(`${API_BASE_URL}/categories`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch categories");
+  }
+  return res.json();
+}
+
+export async function updateTransactionCategory(
+  txId: number,
+  categoryId: number | null
+): Promise<Transaction> {
+  const res = await fetch(`${API_BASE_URL}/transactions/${txId}/category`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ category_id: categoryId }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to update transaction category");
   }
 
   return res.json();

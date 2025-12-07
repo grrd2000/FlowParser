@@ -7,13 +7,15 @@ from typing import List, Optional
 from sqlalchemy import (
     String,
     Date,
-    DateTime,
     Numeric,
     Integer,
-    ForeignKey,
     func,
+    DateTime,
+    ForeignKey,
+    Boolean,
+    Float,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column, DeclarativeBase
 
 
 class Base(DeclarativeBase):
@@ -264,4 +266,54 @@ class Transaction(Base):
     account: Mapped["Account"] = relationship(back_populates="transactions")
     raw_transaction: Mapped[Optional["RawTransaction"]] = relationship(
         back_populates="transaction"
+    )
+
+    # ID kategorii (FK do Category)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id"),
+        nullable=True,
+    )
+    # Źródło kategorii: unknown | manual | rule | ml
+    category_source: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="unknown",
+    )
+    # Pod ML – pewność klasyfikacji (na razie niewykorzystywane)
+    category_confidence: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+    # relacja do Category
+    category_ref: Mapped["Category | None"] = relationship(
+        back_populates="transactions",
+        lazy="joined",
+    )
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # na razie możesz mieć jednego usera, ale zostawiamy pole pod multi-user
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+
+    name: Mapped[str] = mapped_column(String(64), nullable=False, unique=False)
+    color: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # powiązanie z Transaction (dodamy za chwilę w Transaction)
+    transactions: Mapped[list["Transaction"]] = relationship(
+        back_populates="category_ref",
+        cascade="all,delete",
+        lazy="selectin",
     )

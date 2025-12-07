@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, EmailStr
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Optional
 
 
 class UserPreferencesBase(BaseModel):
@@ -69,3 +70,15 @@ class StatementSummary(BaseModel):
 
     class Config:
         from_attributes = True
+
+class CategoryOut(BaseModel):
+    id: int
+    name: str
+    color: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+class CategoryUpdate(BaseModel):
+    category_id: Optional[int] = None
