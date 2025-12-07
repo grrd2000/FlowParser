@@ -29,7 +29,8 @@ export function FlowClient() {
   const [kind, setKind] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
 
-  const [selectedTx, setSelectedTx] = useState<TxExt | null>(null);
+  const [detailTx, setDetailTx] = useState<TxExt | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // 1) Ładowanie wszystkich transakcji (jak na dashboardzie)
   useEffect(() => {
@@ -78,6 +79,30 @@ export function FlowClient() {
 
     return { filtered: afterSearch, startDate, metrics };
   }, [transactions, range, kind, search]);
+
+const handleRowClick = (tx: TxExt) => {
+  // nic jeszcze nie było otwarte
+  if (!detailTx) {
+    setDetailTx(tx);
+    setDetailOpen(true);
+    return;
+  }
+
+  // kliknięcie w ten sam rekord -> zamykamy z animacją
+  if (detailTx.id === tx.id) {
+    setDetailOpen(false);
+    setTimeout(() => {
+      setDetailTx(null);
+    }, 300); // tyle samo co duration w animacji
+    return;
+  }
+
+  // kliknięcie w inny rekord -> po prostu zmieniamy zawartość, panel zostaje otwarty
+  setDetailTx(tx);
+  setDetailOpen(true);
+};
+
+
 
   const rangeText = rangeLabel(range, startDate);
 
@@ -262,28 +287,45 @@ export function FlowClient() {
             </div>
         </div>
 
-<div className="mt-3">
-  {selectedTx ? (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(260px,1fr)]">
-      <TransactionsTable
-        transactions={filtered}
-        loading={loading}
-        onRowClick={(tx) =>
-          setSelectedTx((prev) => (prev?.id === tx.id ? null : tx))
-        }
-        selectedId={selectedTx.id}
-      />
-      <TransactionSideDetails transaction={selectedTx} />
-    </div>
-  ) : (
+
+<div className="mt-3 flex flex-col lg:flex-row gap-4 items-stretch">
+  {/* LEWO: tabela – rozsuwa się poziomo, ale dokładnie do reszty miejsca */}
+  <div
+    className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
+    style={{
+      flexBasis: detailOpen ? "calc(100% - 320px)" : "100%",
+      flexGrow: 1,
+      flexShrink: 1,
+    }}
+  >
     <TransactionsTable
       transactions={filtered}
       loading={loading}
-      onRowClick={(tx) => setSelectedTx(tx)}
-      selectedId={null}
+      onRowClick={handleRowClick}
+      selectedId={detailOpen && detailTx ? detailTx.id : null}
     />
-  )}
+  </div>
+
+  {/* PRAWO: slot na panel – dokładnie 320px, zero „luzu” po prawej */}
+  <div
+    className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
+    style={{
+      flexBasis: detailOpen ? "320px" : "0px",
+    }}
+  >
+    <div className="h-full flex justify-start">
+      {detailTx && (
+        <TransactionSideDetails transaction={detailTx} open={detailOpen} />
+      )}
+    </div>
+  </div>
 </div>
+
+
+
+
+
+
 
         </section>
 
@@ -462,22 +504,42 @@ const transactionColumns: ColumnDef<TxExt>[] = [
     id: "description",
     accessorKey: "description",
     header: () => "Opis",
-    cell: ({ row }) => (
-      <span className="text-slate-100 truncate max-w-[260px] block">
-        {row.original.description}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const desc = (row.original.description || "").trim();
+      const has = desc.length > 0;
+      return (
+        <span
+          className={[
+            "truncate max-w-[260px] block",
+            has ? "text-slate-100" : "text-slate-600",
+          ].join(" ")}
+        >
+          {has ? desc : "—"}
+        </span>
+      );
+    },
   },
+
   {
     id: "category",
     accessorKey: "category",
     header: () => "Kategoria",
-    cell: ({ row }) => (
-      <span className="text-slate-400 whitespace-nowrap">
-        {row.original.category ?? "—"}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const cat = (row.original.category || "").trim();
+      const has = cat.length > 0;
+      return (
+        <span
+          className={[
+            "whitespace-nowrap",
+            has ? "text-slate-400" : "text-slate-600",
+          ].join(" ")}
+        >
+          {has ? cat : "—"}
+        </span>
+      );
+    },
   },
+
   {
     id: "amount",
     accessorKey: "amountNum",
@@ -519,16 +581,20 @@ const transactionColumns: ColumnDef<TxExt>[] = [
     id: "is_manual",
     header: () => "Źródło",
     cell: ({ row }) => (
-      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900/70 border border-slate-700 text-slate-300">
-        {row.original.is_manual ? "Ręczna" : "Import PDF"}
+      <span
+        className="text-[10px] font-semibold uppercase tracking-[0.16em] whitespace-nowrap text-indigo-300/90"
+      >
+        {row.original.is_manual ? "MANUAL" : "PDF"}
       </span>
     ),
   },
+
+
   {
     id: "account_id",
     header: () => "ID konta",
     cell: ({ row }) => (
-      <span className="text-slate-500">
+      <span className="text-slate-500 whitespace-nowrap">
         {row.original.account_id}
       </span>
     ),
@@ -669,7 +735,7 @@ function TransactionsTable({
 
       {/* TABELA */}
       <div className="max-h-[420px] overflow-auto rounded-2xl border border-white/10 bg-slate-950/40">
-        <table className="min-w-full text-[11px] text-left">
+        <table className="min-w-full table-fixed text-[11px] text-left">
           <thead className="bg-slate-900/80 sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
@@ -686,10 +752,8 @@ function TransactionsTable({
                           : undefined
                       }
                       className={[
-                        "px-3 py-2 font-medium text-slate-300",
-                        canSort
-                          ? "cursor-pointer select-none hover:text-slate-100"
-                          : "",
+                        "px-3 py-2 font-medium text-slate-300 whitespace-nowrap",
+                        canSort ? "cursor-pointer select-none hover:text-slate-100" : "",
                         header.column.id === "amount" ||
                         header.column.id === "is_manual"
                           ? "text-right"
@@ -754,9 +818,6 @@ function TransactionsTable({
     );
   })}
 </tbody>
-
-
-
 
 
         </table>
@@ -855,16 +916,13 @@ function MetaCell({ label, value }: { label: string; value: string }) {
 
 /* ---------- BOCZNA KARTA SZCZEGÓŁÓW ---------- */
 
-function TransactionSideDetails({ transaction }: { transaction: TxExt | null }) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    // przy montowaniu panelu – krótkie fade/slide-in
-    setVisible(true);
-  }, []);
-
-  if (!transaction) return null;
-
+function TransactionSideDetails({
+  transaction,
+  open,
+}: {
+  transaction: TxExt;
+  open: boolean;
+}) {
   const positive = transaction.amountNum >= 0;
   const operationDate = formatDateDisplay(transaction.date);
   const valueDate =
@@ -873,85 +931,112 @@ function TransactionSideDetails({ transaction }: { transaction: TxExt | null }) 
       ? formatDateDisplay(new Date(transaction.value_date as any))
       : "—";
 
+  const desc = (transaction.description || "").trim();
+  const hasDesc = desc.length > 0;
+
   return (
     <aside
       className={[
-        "rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 md:px-4 md:py-4",
-        "flex flex-col gap-3 text-[11px]",
-        "transition-all duration-200",
-        visible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-3",
+        // stała szerokość, żeby treść się nie wrappowała przy animacji
+        "min-w-[320px] max-w-[320px]",
+        "h-full flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
+        "px-3 py-3 md:px-4 md:py-4",
+        "text-[11px]",
+        // mirror animacji: fade-in / fade-out spójny z rozsuwaniem
+        "transition-opacity duration-300 ease-in-out",
+        open ? "opacity-100" : "opacity-0 pointer-events-none",
       ].join(" ")}
     >
       {/* nagłówek */}
-      <div className="space-y-1">
+      <div className="mb-2">
         <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
           Szczegóły transakcji
         </div>
-        <div className="text-sm font-semibold text-slate-50 leading-snug line-clamp-3">
-          {transaction.description}
+        <div
+          className={[
+            "mt-1 text-sm font-semibold leading-snug line-clamp-3",
+            hasDesc ? "text-slate-50" : "text-slate-600",
+          ].join(" ")}
+        >
+          {hasDesc ? desc : "—"}
         </div>
       </div>
 
-      {/* kwota + kategoria */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="space-y-0.5">
-          <div className="text-slate-500">Kategoria</div>
-          <div className="text-slate-100">
-            {transaction.category ?? "Bez kategorii"}
+      {/* treść – przewijana wewnątrz, bez zmiany wysokości kontenera przy zwężaniu */}
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="space-y-0.5">
+            <div className="text-slate-500">Kategoria</div>
+            <div
+              className={
+                transaction.category ? "text-slate-100" : "text-slate-600"
+              }
+            >
+              {transaction.category || "—"}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span
+              className={[
+                "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
+                positive
+                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
+                  : "border-rose-400/60 bg-rose-500/10 text-rose-200",
+              ].join(" ")}
+            >
+              {formatCurrency(transaction.amountNum)}
+            </span>
+            <span className="text-[10px] text-slate-500 whitespace-nowrap">
+              {positive ? "Wpływ" : "Wydatek"} · ID {transaction.id}
+            </span>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <span
+
+        <div className="grid grid-cols-2 gap-2">
+          <DetailCell label="Data operacji" value={operationDate} />
+          <DetailCell label="Data waluty" value={valueDate} />
+          <DetailCell
+            label="Źródło"
+            value={transaction.is_manual ? "Ręczna" : "Import PDF"}
+          />
+          <DetailCell
+            label="Konto (ID)"
+            value={String(transaction.account_id)}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <div className="text-slate-500">Pełny opis</div>
+          <div
             className={[
-              "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold",
-              positive
-                ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
-                : "border-rose-400/60 bg-rose-500/10 text-rose-200",
+              "rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px]",
+              "max-h-32 overflow-auto",
+              hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
-            {formatCurrency(transaction.amountNum)}
-          </span>
-          <span className="text-[10px] text-slate-500">
-            {positive ? "Wpływ" : "Wydatek"} · ID {transaction.id}
-          </span>
+            {hasDesc ? desc : "— brak opisu —"}
+          </div>
         </div>
       </div>
 
-      {/* meta */}
-      <div className="grid grid-cols-2 gap-2">
-        <DetailCell label="Data operacji" value={operationDate} />
-        <DetailCell label="Data waluty" value={valueDate} />
-        <DetailCell
-          label="Źródło"
-          value={transaction.is_manual ? "Ręczna" : "Import PDF"}
-        />
-        <DetailCell
-          label="Konto (ID)"
-          value={String(transaction.account_id)}
-        />
-      </div>
-
-      {/* opis */}
-      <div className="space-y-1">
-        <div className="text-slate-500">Pełny opis</div>
-        <div className="rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-200 max-h-32 overflow-auto">
-          {transaction.description}
-        </div>
-      </div>
-
-      <div className="mt-auto pt-2 border-t border-white/5 text-[10px] text-slate-500">
+      <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
         W „Lab” rozbudujemy ten panel o sugestie kategorii, podobne transakcje
-        i detekcję subskrypcji.
+        i wykryte subskrypcje.
       </div>
     </aside>
   );
 }
 
+
+
+
+
 function DetailCell({ label, value }: { label: string; value: string }) {
+  const has = value !== "—";
   return (
     <div className="flex flex-col">
       <span className="text-slate-500 text-[10px]">{label}</span>
-      <span className="text-slate-100">{value}</span>
+      <span className={has ? "text-slate-100" : "text-slate-600"}>{value}</span>
     </div>
   );
 }
