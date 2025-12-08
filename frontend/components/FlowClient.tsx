@@ -45,6 +45,8 @@ export function FlowClient() {
   // 1) Ładowanie wszystkich transakcji (jak na dashboardzie)
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const [txs, cats] = await Promise.all([
           fetchTransactions(),
@@ -52,8 +54,11 @@ export function FlowClient() {
         ]);
         setTransactions(normalizeTransactions(txs));
         setCategories(cats);
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
+        setError(e?.message ?? "Nie udało się pobrać danych.");
+      } finally {
+        setLoading(false);
       }
     };
     load();
