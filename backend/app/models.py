@@ -268,52 +268,103 @@ class Transaction(Base):
         back_populates="transaction"
     )
 
-    # ID kategorii (FK do Category)
     category_id: Mapped[int | None] = mapped_column(
         ForeignKey("categories.id"),
         nullable=True,
     )
-    # Źródło kategorii: unknown | manual | rule | ml
     category_source: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
-        default="unknown",
+        default="unknown",  # manual | rule | ml | unknown
     )
-    # Pod ML – pewność klasyfikacji (na razie niewykorzystywane)
     category_confidence: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
     )
 
-    # relacja do Category
     category_ref: Mapped["Category | None"] = relationship(
         back_populates="transactions",
         lazy="joined",
     )
 
-
 class Category(Base):
     __tablename__ = "categories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # na razie możesz mieć jednego usera, ale zostawiamy pole pod multi-user
+    # na razie możesz mieć jednego usera, ale zostawiamy pod multi-user
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"),
         nullable=True,
     )
 
-    name: Mapped[str] = mapped_column(String(64), nullable=False, unique=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
     color: Mapped[str | None] = mapped_column(String(16), nullable=True)
     icon: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     created_at: Mapped[DateTime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
-    # powiązanie z Transaction (dodamy za chwilę w Transaction)
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="category_ref",
-        cascade="all,delete",
         lazy="selectin",
+    )
+
+
+class CategoryRule(Base):
+    __tablename__ = "category_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id"),
+        nullable=False,
+    )
+
+    # na razie ograniczamy się do pola description
+    field: Mapped[str] = mapped_column(String(32), nullable=False, default="description")
+    pattern_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="contains",  # contains | startswith | regex
+    )
+    pattern_value: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    category: Mapped["Category"] = relationship(lazy="joined")
+
+
+class ClassificationEvent(Base):
+    __tablename__ = "classification_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id"),
+        nullable=False,
+    )
+    old_category_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    new_category_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    source: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="manual",  # manual | rule | ml
+    )
+
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )

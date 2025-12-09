@@ -20,9 +20,22 @@ from app.models import (
     Transaction,
     UserPreference,
     Category,
+    CategoryRule,
+    ClassificationEvent
 )
 
-from app.schemas import UserProfileResponse, UserProfileUpdate, AccountSummary, StatementSummary, CategoryOut, CategoryUpdate
+from app.schemas import (
+    UserProfileResponse, 
+    UserProfileUpdate, 
+    AccountSummary, 
+    StatementSummary, 
+    CategoryOut, 
+    CategoryUpdatePayload, 
+    CategoryCreate, 
+    CategoryUpdatePayload, 
+    CategoryRuleOut, 
+    CategoryRuleCreate
+)
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
@@ -95,10 +108,45 @@ def get_or_create_user_prefs(db: Session, user: User) -> UserPreference:
     return prefs
 
 
+def ensure_default_categories(db: Session, user: User):
+    """Na starcie tworzy kilka bazowych kategorii, jeśli jeszcze nie istnieją."""
+    existing = (
+        db.query(Category)
+        .filter(Category.user_id == user.id)
+        .count()
+    )
+    if existing > 0:
+        return
+
+    base_cats = [
+        ("Jedzenie", "#22c55e"),
+        ("Transport", "#3b82f6"),
+        ("Zakupy", "#a855f7"),
+        ("Subskrypcje", "#f97316"),
+        ("Inne", "#9ca3af"),
+    ]
+    for name, color in base_cats:
+        db.add(
+            Category(
+                user_id=user.id,
+                name=name,
+                color=color,
+                is_system=True,
+            )
+        )
+    db.commit()
+
+
 @app.on_event("startup")
 def on_startup():
-    # Tworzymy wszystkie tabele według modeli
     Base.metadata.create_all(bind=engine)
+
+    db = SessionLocal()
+    try:
+        user = get_or_create_demo_user(db=db)
+        ensure_default_categories(db=db, user=user)
+    finally:
+        db.close()
 
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
@@ -840,7 +888,6 @@ def list_raw_transactions(
 
 @app.get("/categories", response_model=list[CategoryOut])
 def list_categories(db: Session = Depends(get_db)):
-    # na razie zakładamy jednego usera demo
     user = db.query(User).filter_by(email="demo@example.com").first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -853,35 +900,126 @@ def list_categories(db: Session = Depends(get_db)):
     )
     return cats
 
+
+@app.post("/categories", response_model=CategoryOut)
+def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cat = Category(
+        user_id=user.id,
+        name=payload.name,
+        color=payload.color,
+        is_system=False,
+    )
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return cat
+
 @app.put("/transactions/{tx_id}/category")
 def update_transaction_category(
     tx_id: int,
-    payload: CategoryUpdate,
+    payload: CategoryUpdatePayload,
     db: Session = Depends(get_db),
 ):
-    tx = db.get(Transaction, tx_id)
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+    try:
+        tx = db.get(Transaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
 
-    if payload.category_id is None:
-        # reset kategorii
-        tx.category_id = None
-        tx.category = None
-        tx.category_source = "unknown"
-        tx.category_confidence = None
-    else:
-        cat = db.get(Category, payload.category_id)
-        if not cat:
-            raise HTTPException(status_code=404, detail="Category not found")
+        old_cat = tx.category_id
 
-        tx.category_id = cat.id
-        tx.category = cat.name  # żeby frontend, który używa "category", miał od razu nazwę
-        tx.category_source = "manual"
-        tx.category_confidence = None  # później ML może nadpisać
+        if payload.category_id is None:
+            tx.category_id = None
+            tx.category = None
+            tx.category_source = "unknown"
+            tx.category_confidence = None
+        else:
+            cat = db.get(Category, payload.category_id)
+            if not cat:
+                raise HTTPException(status_code=404, detail="Category not found")
 
+            tx.category_id = cat.id
+            tx.category = cat.name
+            tx.category_source = "manual"
+            tx.category_confidence = None
+
+        event = ClassificationEvent(
+            transaction_id=tx.id,
+            old_category_id=old_cat,
+            new_category_id=tx.category_id,
+            source="manual",
+        )
+        db.add(event)
+
+        db.commit()
+        db.refresh(tx)
+        
+        return {
+            "id": tx.id,
+            "account_id": tx.account_id,
+            "operation_date": tx.operation_date,
+            "value_date": tx.value_date,
+            "description": tx.description,
+            "amount": str(tx.amount),
+            "category": tx.category,
+            "category_id": tx.category_id,
+            "category_source": tx.category_source,
+            "category_confidence": tx.category_confidence,
+            "is_manual": tx.is_manual,
+        }
+
+    except Exception as e:
+        print("🔥 ERROR in update_transaction_category:", e)
+        raise
+
+
+
+
+@app.get("/category-rules", response_model=list[CategoryRuleOut])
+def list_category_rules(db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rules = (
+        db.query(CategoryRule)
+        .filter(CategoryRule.user_id == user.id)
+        .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
+        .all()
+    )
+    return rules
+
+
+@app.post("/category-rules", response_model=CategoryRuleOut)
+def create_category_rule(
+    payload: CategoryRuleCreate,
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cat = db.get(Category, payload.category_id)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    rule = CategoryRule(
+        user_id=user.id,
+        category_id=cat.id,
+        field=payload.field,
+        pattern_type=payload.pattern_type,
+        pattern_value=payload.pattern_value,
+        priority=100,
+        enabled=True,
+    )
+    db.add(rule)
     db.commit()
-    db.refresh(tx)
-    return tx
+    db.refresh(rule)
+    return rule
+
 
 
 

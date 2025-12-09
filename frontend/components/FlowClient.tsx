@@ -113,7 +113,7 @@ const handleChangeCategory = async (txId: number, categoryId: number | null) => 
   try {
     const updated = await updateTransactionCategory(txId, categoryId);
 
-    // podbijamy stan tabeli
+    // 1) podbijamy stan tabeli
     setTransactions((prev) =>
       prev.map((tx) =>
         tx.id === txId
@@ -127,7 +127,7 @@ const handleChangeCategory = async (txId: number, categoryId: number | null) => 
       )
     );
 
-    // jeśli panel pokazuje tę transakcję – też go odśwież
+    // 2) jeśli panel szczegółów pokazuje ten rekord – też go odśwież
     setDetailTx((prev) =>
       prev && prev.id === txId
         ? {
@@ -140,9 +140,10 @@ const handleChangeCategory = async (txId: number, categoryId: number | null) => 
     );
   } catch (e) {
     console.error(e);
-    // tu możesz kiedyś dorzucić toast z błędem
+    // w przyszłości można tu zrobić toast z błędem
   }
 };
+
 
 
   const rangeText = rangeLabel(range, startDate);
@@ -356,7 +357,7 @@ const handleChangeCategory = async (txId: number, categoryId: number | null) => 
   >
     <div className="h-full flex justify-start">
       {detailTx && (
-          <TransactionSideDetails
+        <TransactionSideDetails
           transaction={detailTx}
           open={detailOpen}
           categories={categories}
@@ -1043,7 +1044,7 @@ function TransactionSideDetails({
             <span
               className={[
                 "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
-                positive
+                transaction.amountNum >= 0
                   ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
                   : "border-rose-400/60 bg-rose-500/10 text-rose-200",
               ].join(" ")}
@@ -1067,6 +1068,7 @@ function TransactionSideDetails({
             )}
           </div>
         </div>
+
 
         <div className="grid grid-cols-2 gap-2">
           <DetailCell label="Data operacji" value={operationDate} />

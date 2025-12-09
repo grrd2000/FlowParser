@@ -71,6 +71,7 @@ class StatementSummary(BaseModel):
     class Config:
         from_attributes = True
 
+
 class CategoryOut(BaseModel):
     id: int
     name: str
@@ -80,5 +81,30 @@ class CategoryOut(BaseModel):
         orm_mode = True
 
 
-class CategoryUpdate(BaseModel):
-    category_id: Optional[int] = None
+class CategoryCreate(BaseModel):
+    name: str
+    color: Optional[str] = None
+
+
+class CategoryUpdatePayload(BaseModel):
+    category_id: int | None
+
+
+class CategoryRuleOut(BaseModel):
+    id: int
+    category_id: int
+    field: str
+    pattern_type: str
+    pattern_value: str
+    priority: int
+    enabled: bool
+
+    class Config:
+        orm_mode = True
+
+
+class CategoryRuleCreate(BaseModel):
+    category_id: int
+    pattern_value: str
+    pattern_type: str = "contains"  # albo startswith
+    field: str = "description"
