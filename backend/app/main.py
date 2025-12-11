@@ -35,7 +35,6 @@ from app.schemas import (
     CategoryOut, 
     CategoryUpdatePayload, 
     CategoryCreate, 
-    CategoryUpdatePayload, 
     CategoryRuleOut, 
     CategoryRuleCreate, 
     ApplyRulesResult
@@ -931,62 +930,132 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
     db.refresh(cat)
     return cat
 
+
+MIN_SIMILAR_FOR_SUGGESTION = 5  # od ilu podobnych transakcji warto proponować regułę
+
+
+def build_rule_suggestion(db: Session, tx: Transaction) -> dict | None:
+    """
+    Na podstawie transakcji z nowo ustawioną kategorią
+    próbuje zaproponować prostą regułę typu:
+      - pattern_value: jedno sensowne słowo z opisu
+      - pattern_type: "contains"
+      - category_id: tx.category_id
+    Szuka innych transakcji tego samego użytkownika z podobnym opisem
+    i BEZ kategorii. Jeśli jest ich co najmniej MIN_SIMILAR_FOR_SUGGESTION,
+    zwraca słownik z sugestią.
+    """
+
+    # brak kategorii → brak sensu budowania reguły
+    if tx.category_id is None or not tx.description:
+        return None
+
+    # ustalenie user_id przez konto
+    account = db.query(Account).filter(Account.id == tx.account_id).first()
+    if not account or not account.user_id:
+        return None
+
+    user_id = account.user_id
+
+    # znormalizowany opis + tokeny
+    desc_norm = normalize_text(tx.description)
+    tokens = [t for t in desc_norm.split() if len(t) >= 4]
+
+    if not tokens:
+        return None
+
+    # najprostsza heurystyka: wybierz najdłuższy token jako pattern
+    candidate_pattern = max(tokens, key=len)
+
+    # pobierz inne transakcje tego samego usera bez kategorii
+    other_txs = (
+        db.query(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(
+            Account.user_id == user_id,
+            Transaction.id != tx.id,
+            Transaction.category_id.is_(None),
+        )
+        .all()
+    )
+
+    similar_count = 0
+    for other in other_txs:
+        other_norm = normalize_text(other.description or "")
+        if candidate_pattern in other_norm:
+            similar_count += 1
+
+    if similar_count < MIN_SIMILAR_FOR_SUGGESTION:
+        return None
+
+    return {
+        "pattern_value": candidate_pattern,
+        "pattern_type": "contains",
+        "category_id": tx.category_id,
+        "similar_count": similar_count,
+    }
+
+
+
 @app.put("/transactions/{tx_id}/category")
 def update_transaction_category(
     tx_id: int,
     payload: CategoryUpdatePayload,
     db: Session = Depends(get_db),
 ):
-    try:
-        tx = db.get(Transaction, tx_id)
-        if not tx:
-            raise HTTPException(status_code=404, detail="Transaction not found")
+    tx = db.get(Transaction, tx_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
 
-        old_cat = tx.category_id
+    old_cat_id = tx.category_id
 
-        if payload.category_id is None:
-            tx.category_id = None
-            tx.category = None
-            tx.category_source = "unknown"
-            tx.category_confidence = None
-        else:
-            cat = db.get(Category, payload.category_id)
-            if not cat:
-                raise HTTPException(status_code=404, detail="Category not found")
+    # ustawienie kategorii
+    if payload.category_id is None:
+        tx.category_id = None
+        tx.category = None
+        tx.category_source = "unknown"
+        tx.category_confidence = None
+    else:
+        cat = db.get(Category, payload.category_id)
+        if not cat:
+            raise HTTPException(status_code=404, detail="Category not found")
 
-            tx.category_id = cat.id
-            tx.category = cat.name
-            tx.category_source = "manual"
-            tx.category_confidence = None
+        tx.category_id = cat.id
+        tx.category = cat.name
+        tx.category_source = "manual"
+        tx.category_confidence = None
 
-        event = ClassificationEvent(
-            transaction_id=tx.id,
-            old_category_id=old_cat,
-            new_category_id=tx.category_id,
-            source="manual",
-        )
-        db.add(event)
+    # event z historii
+    event = ClassificationEvent(
+        transaction_id=tx.id,
+        old_category_id=old_cat_id,
+        new_category_id=tx.category_id,
+        source="manual",
+    )
+    db.add(event)
 
-        db.commit()
-        db.refresh(tx)
-        
-        return {
-            "id": tx.id,
-            "account_id": tx.account_id,
-            "operation_date": tx.operation_date,
-            "value_date": tx.value_date,
-            "description": tx.description,
-            "amount": str(tx.amount),
-            "category": tx.category,
-            "category_id": tx.category_id,
-            "category_source": tx.category_source,
-            "category_confidence": tx.category_confidence,
-            "is_manual": tx.is_manual,
-        }
+    db.commit()
+    db.refresh(tx)
 
-    except Exception as e:
-        print("🔥 ERROR in update_transaction_category:", e)
-        raise
+    # spróbuj zbudować sugestię reguły (subtelny hint)
+    rule_suggestion = build_rule_suggestion(db, tx)
+
+    return {
+        "id": tx.id,
+        "account_id": tx.account_id,
+        "operation_date": tx.operation_date,
+        "value_date": tx.value_date,
+        "description": tx.description,
+        "amount": str(tx.amount),
+        "category": tx.category,
+        "category_id": tx.category_id,
+        "category_source": tx.category_source,
+        "category_confidence": tx.category_confidence,
+        "is_manual": tx.is_manual,
+
+        "rule_suggestion": rule_suggestion,
+    }
+
 
 
 

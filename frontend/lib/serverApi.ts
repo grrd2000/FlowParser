@@ -133,6 +133,13 @@ export type CategoryRule = {
   enabled: boolean;
 };
 
+export type RuleSuggestion = {
+  pattern_value: string;
+  pattern_type: "contains" | "startswith";
+  category_id: number;
+  similar_count: number;
+};
+
 export async function fetchCategories(): Promise<Category[]> {
   const res = await fetch(`${API_BASE_URL}/categories`, {
     cache: "no-store",
@@ -148,7 +155,7 @@ export async function fetchCategories(): Promise<Category[]> {
 export async function updateTransactionCategory(
   txId: number,
   categoryId: number | null
-): Promise<Transaction> {
+): Promise<{ transaction: Transaction; rule_suggestion: RuleSuggestion | null }> {
   const res = await fetch(`${API_BASE_URL}/transactions/${txId}/category`, {
     method: "PUT",
     headers: {
@@ -156,13 +163,21 @@ export async function updateTransactionCategory(
     },
     body: JSON.stringify({ category_id: categoryId }),
   });
-
   if (!res.ok) {
-    throw new Error("Failed to update transaction category");
+    throw new Error("Failed to update category");
   }
 
-  return res.json();
+  const data = await res.json();
+
+  const { rule_suggestion, ...txRest } = data;
+
+  return {
+    transaction: txRest as Transaction,
+    rule_suggestion: (rule_suggestion ?? null) as RuleSuggestion | null,
+  };
 }
+
+
 
 export async function fetchCategoryRules(): Promise<CategoryRule[]> {
   const res = await fetch(`${API_BASE_URL}/category-rules`, {

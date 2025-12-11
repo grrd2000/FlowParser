@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 import {
   Transaction,
+  RuleSuggestion,
   fetchTransactions,
   fetchCategories,
   updateTransactionCategory,
@@ -40,7 +41,7 @@ export function FlowClient() {
   const [detailOpen, setDetailOpen] = useState(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
-
+  const [ruleSuggestion, setRuleSuggestion] = useState<(RuleSuggestion & { txId: number }) | null>(null);
 
   // 1) Ładowanie wszystkich transakcji (jak na dashboardzie)
   useEffect(() => {
@@ -111,38 +112,60 @@ const handleRowClick = (tx: TxExt) => {
 
 const handleChangeCategory = async (txId: number, categoryId: number | null) => {
   try {
-    const updated = await updateTransactionCategory(txId, categoryId);
+    const { transaction: updated, rule_suggestion } =
+      await updateTransactionCategory(txId, categoryId);
 
-    // 1) podbijamy stan tabeli
+    // podmień transakcję w stanie
     setTransactions((prev) =>
-      prev.map((tx) =>
-        tx.id === txId
-          ? {
-              ...tx,
-              category: updated.category,
-              category_id: updated.category_id,
-              category_source: updated.category_source,
-            }
-          : tx
-      )
+      prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
     );
 
-    // 2) jeśli panel szczegółów pokazuje ten rekord – też go odśwież
-    setDetailTx((prev) =>
-      prev && prev.id === txId
-        ? {
-            ...prev,
-            category: updated.category,
-            category_id: updated.category_id,
-            category_source: updated.category_source,
-          }
-        : prev
-    );
+    // jeśli backend zaproponował regułę – ustaw subtelny hint
+    if (rule_suggestion) {
+      setRuleSuggestion({ txId, ...rule_suggestion });
+    } else {
+      // jak nie ma – czyścimy hint
+      setRuleSuggestion(null);
+    }
   } catch (e) {
     console.error(e);
-    // w przyszłości można tu zrobić toast z błędem
   }
 };
+
+const handleAcceptRuleSuggestion = async () => {
+  if (!ruleSuggestion) return;
+
+  try {
+    // 1) utwórz regułę na bazie sugestii
+    await createCategoryRule({
+      category_id: ruleSuggestion.category_id,
+      pattern_value: ruleSuggestion.pattern_value,
+      pattern_type: ruleSuggestion.pattern_type,
+      field: "description",
+    });
+
+    // 2) zastosuj reguły
+    await applyCategoryRules();
+
+    // 3) odśwież transakcje (żeby zobaczyć efekt)
+    const [txs, cats] = await Promise.all([
+      fetchTransactions(),
+      fetchCategories(),
+    ]);
+    setTransactions(normalizeTransactions(txs));
+    setCategories(cats);
+
+    // 4) ukryj sugestię
+    setRuleSuggestion(null);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+const handleDismissRuleSuggestion = () => {
+  setRuleSuggestion(null);
+};
+
 
 
 
@@ -356,14 +379,20 @@ const handleChangeCategory = async (txId: number, categoryId: number | null) => 
     }}
   >
     <div className="h-full flex justify-start">
-      {detailTx && (
-        <TransactionSideDetails
-          transaction={detailTx}
-          open={detailOpen}
-          categories={categories}
-          onChangeCategory={handleChangeCategory}
-        />
-      )}
+{detailTx && (
+  <TransactionSideDetails
+    transaction={detailTx}
+    categories={categories}
+    onChangeCategory={handleChangeCategory}
+    ruleSuggestion={
+      ruleSuggestion && ruleSuggestion.txId === detailTx.id
+        ? ruleSuggestion
+        : null
+    }
+    onAcceptRuleSuggestion={handleAcceptRuleSuggestion}
+    onDismissRuleSuggestion={handleDismissRuleSuggestion}
+  />
+)}
     </div>
   </div>
 </div>
@@ -965,14 +994,18 @@ function MetaCell({ label, value }: { label: string; value: string }) {
 
 function TransactionSideDetails({
   transaction,
-  open,
   categories,
   onChangeCategory,
+  ruleSuggestion,
+  onAcceptRuleSuggestion,
+  onDismissRuleSuggestion,
 }: {
   transaction: TxExt;
-  open: boolean;
   categories: Category[];
   onChangeCategory: (txId: number, categoryId: number | null) => void;
+  ruleSuggestion: (RuleSuggestion & { txId: number }) | null;
+  onAcceptRuleSuggestion: () => void;
+  onDismissRuleSuggestion: () => void;
 }) {
   const positive = transaction.amountNum >= 0;
   const operationDate = formatDateDisplay(transaction.date);
@@ -985,124 +1018,182 @@ function TransactionSideDetails({
   const desc = (transaction.description || "").trim();
   const hasDesc = desc.length > 0;
 
-  return (
-    <aside
-      className={[
-        // stała szerokość, żeby treść się nie wrappowała przy animacji
-        "min-w-[320px] max-w-[320px]",
-        "h-full flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
-        "px-3 py-3 md:px-4 md:py-4",
-        "text-[11px]",
-        // mirror animacji: fade-in / fade-out spójny z rozsuwaniem
-        "transition-opacity duration-300 ease-in-out",
-        open ? "opacity-100" : "opacity-0 pointer-events-none",
-      ].join(" ")}
-    >
-      {/* nagłówek */}
-      <div className="mb-2">
-        <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
-          Szczegóły transakcji
-        </div>
-        <div
-          className={[
-            "mt-1 text-sm font-semibold leading-snug line-clamp-3",
-            hasDesc ? "text-slate-50" : "text-slate-600",
-          ].join(" ")}
-        >
-          {hasDesc ? desc : "—"}
-        </div>
+return (
+  <aside
+    className={[
+      // stała szerokość, żeby treść się nie wrappowała przy animacji
+      "min-w-[320px] max-w-[320px]",
+      "h-full flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
+      "px-3 py-3 md:px-4 md:py-4",
+      "text-[11px]",
+      // mirror animacji fade-in / fade-out
+      "transition-opacity duration-300 ease-in-out",
+      open ? "opacity-100" : "opacity-0 pointer-events-none",
+    ].join(" ")}
+  >
+    {/* ---------------------- HEADER ---------------------- */}
+    <div className="mb-2">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+        Szczegóły transakcji
       </div>
 
-      {/* treść – przewijana wewnątrz, bez zmiany wysokości kontenera przy zwężaniu */}
-      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
-          {/* Kategoria + kwota + źródło kategorii */}
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="flex-1">
-            <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
-              Kategoria
-            </div>
-            <select
-              className="mt-1 w-full rounded-full bg-slate-900/70 border border-slate-700/60 px-3 py-1 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/80"
-              value={transaction.category_id ?? ""}
-              onChange={(e) =>
-                onChangeCategory(
-                  transaction.id,
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
-              }
-            >
-              <option value="">— brak kategorii —</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+      <div
+        className={[
+          "mt-1 text-sm font-semibold leading-snug line-clamp-3",
+          hasDesc ? "text-slate-50" : "text-slate-600",
+        ].join(" ")}
+      >
+        {hasDesc ? desc : "—"}
+      </div>
+    </div>
+
+    {/* ---------------------- CONTENT SCROLLABLE ---------------------- */}
+    <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+
+      {/* KATEGORIA + KWOTA + ŹRÓDŁO */}
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <div className="flex-1">
+          <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
+            Kategoria
           </div>
 
-          <div className="flex flex-col items-end gap-1">
-            <span
-              className={[
-                "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
-                transaction.amountNum >= 0
-                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
-                  : "border-rose-400/60 bg-rose-500/10 text-rose-200",
-              ].join(" ")}
-            >
-              {formatCurrency(transaction.amountNum)}
-            </span>
-
-            {transaction.category_source && (
-              <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500 whitespace-nowrap">
-                źródło:
-                <span className="ml-1 text-indigo-300/90">
-                  {transaction.category_source}
-                </span>
-              </span>
-            )}
-
-            {!transaction.category_source && (
-              <span className="text-[9px] text-slate-600 whitespace-nowrap">
-                źródło: — unknown —
-              </span>
-            )}
-          </div>
+          <select
+            className="
+              mt-1 w-full rounded-full bg-slate-900/70 border border-slate-700/60
+              px-3 py-1 text-[11px] text-slate-100 focus:outline-none
+              focus:ring-1 focus:ring-indigo-400/80
+            "
+            value={transaction.category_id ?? ""}
+            onChange={(e) =>
+              onChangeCategory(
+                transaction.id,
+                e.target.value === "" ? null : Number(e.target.value)
+              )
+            }
+          >
+            <option value="">— brak kategorii —</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-
-        <div className="grid grid-cols-2 gap-2">
-          <DetailCell label="Data operacji" value={operationDate} />
-          <DetailCell label="Data waluty" value={valueDate} />
-          <DetailCell
-            label="Źródło"
-            value={transaction.is_manual ? "Ręczna" : "Import PDF"}
-          />
-          <DetailCell
-            label="Konto (ID)"
-            value={String(transaction.account_id)}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <div className="text-slate-500">Pełny opis</div>
-          <div
+        {/* Kwota + Źródło kategorii */}
+        <div className="flex flex-col items-end gap-1">
+          <span
             className={[
-              "rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px]",
-              "max-h-32 overflow-auto",
-              hasDesc ? "text-slate-200" : "text-slate-600 italic",
+              "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
+              transaction.amountNum >= 0
+                ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
+                : "border-rose-400/60 bg-rose-500/10 text-rose-200",
             ].join(" ")}
           >
-            {hasDesc ? desc : "— brak opisu —"}
-          </div>
+            {formatCurrency(transaction.amountNum)}
+          </span>
+
+          {transaction.category_source ? (
+            <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500 whitespace-nowrap">
+              źródło:
+              <span className="ml-1 text-indigo-300/90">
+                {transaction.category_source}
+              </span>
+            </span>
+          ) : (
+            <span className="text-[9px] text-slate-600 whitespace-nowrap">
+              źródło: — unknown —
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
-        W „Lab” rozbudujemy ten panel o sugestie kategorii, podobne transakcje
-        i wykryte subskrypcje.
+      {/* ---------------------- RULE SUGGESTION ---------------------- */}
+      {ruleSuggestion && (
+        <div className="
+          mt-3 rounded-2xl border border-indigo-500/40 bg-indigo-500/10
+          px-3 py-2 text-[11px] text-indigo-100
+          flex items-start justify-between gap-2
+        ">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[12px]">✨</span>
+              <span className="font-medium">
+                Zauważyliśmy powtarzający się wzorzec
+              </span>
+            </div>
+
+            <div className="text-[11px] text-indigo-100/90">
+              W opisie transakcji często pojawia się{" "}
+              <span className="font-semibold">
+                {ruleSuggestion.pattern_value}
+              </span>
+              . Możesz utworzyć regułę, która automatycznie przypisze tę kategorię
+              do podobnych operacji ({ruleSuggestion.similar_count} znalezionych).
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1 shrink-0">
+            <button
+              onClick={onAcceptRuleSuggestion}
+              className="
+                rounded-full bg-indigo-400 text-slate-950 px-3 py-1
+                text-[11px] font-medium hover:bg-indigo-300 transition-colors
+              "
+            >
+              Dodaj regułę
+            </button>
+
+            <button
+              onClick={onDismissRuleSuggestion}
+              className="
+                rounded-full border border-indigo-400/40 text-indigo-100/80
+                px-3 py-1 text-[10px] hover:bg-indigo-500/10 transition-colors
+              "
+            >
+              Nie teraz
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------- METADANE ---------------------- */}
+      <div className="grid grid-cols-2 gap-2">
+        <DetailCell label="Data operacji" value={operationDate} />
+        <DetailCell label="Data waluty" value={valueDate} />
+        <DetailCell
+          label="Źródło"
+          value={transaction.is_manual ? "Ręczna" : "Import PDF"}
+        />
+        <DetailCell
+          label="Konto (ID)"
+          value={String(transaction.account_id)}
+        />
       </div>
-    </aside>
-  );
+
+      {/* ---------------------- PEŁNY OPIS ---------------------- */}
+      <div className="space-y-1">
+        <div className="text-slate-500">Pełny opis</div>
+
+        <div
+          className={[
+            "rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px]",
+            "max-h-32 overflow-auto",
+            hasDesc ? "text-slate-200" : "text-slate-600 italic",
+          ].join(" ")}
+        >
+          {hasDesc ? desc : "— brak opisu —"}
+        </div>
+      </div>
+    </div>
+
+    {/* ---------------------- FOOTER ---------------------- */}
+    <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
+      W „Lab” rozbudujemy ten panel o sugestie kategorii, podobne transakcje
+      i wykryte subskrypcje.
+    </div>
+  </aside>
+);
 }
 
 
