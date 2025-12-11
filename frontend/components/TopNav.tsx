@@ -10,6 +10,7 @@ export function TopNav() {
   const isDashboard =
     pathname === "/" || pathname?.startsWith("/dashboard");
   const isFlow = pathname?.startsWith("/flow");
+  const isLab = pathname?.startsWith("/lab");
 
   return (
     <header
@@ -43,6 +44,7 @@ export function TopNav() {
           >
             <SegmentTab href="/dashboard" label="Dashboard" active={isDashboard} />
             <SegmentTab href="/flow" label="Flow" active={isFlow} />
+            <SegmentTab href="/lab" label="Lab" active={isLab} />
           </div>
         </div>
 

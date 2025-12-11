@@ -123,6 +123,16 @@ export type Category = {
   color?: string | null;
 };
 
+export type CategoryRule = {
+  id: number;
+  category_id: number;
+  field: string;
+  pattern_type: string;
+  pattern_value: string;
+  priority: number;
+  enabled: boolean;
+};
+
 export async function fetchCategories(): Promise<Category[]> {
   const res = await fetch(`${API_BASE_URL}/categories`, {
     cache: "no-store",
@@ -154,3 +164,44 @@ export async function updateTransactionCategory(
   return res.json();
 }
 
+export async function fetchCategoryRules(): Promise<CategoryRule[]> {
+  const res = await fetch(`${API_BASE_URL}/category-rules`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch category rules");
+  }
+  return res.json();
+}
+
+export async function createCategoryRule(payload: {
+  category_id: number;
+  pattern_value: string;
+  pattern_type?: "contains" | "startswith";
+  field?: "description";
+}): Promise<CategoryRule> {
+  const res = await fetch(`${API_BASE_URL}/category-rules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      category_id: payload.category_id,
+      pattern_value: payload.pattern_value,
+      pattern_type: payload.pattern_type ?? "contains",
+      field: payload.field ?? "description",
+    }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to create category rule");
+  }
+  return res.json();
+}
+
+export async function applyCategoryRules(): Promise<{ assigned: number }> {
+  const res = await fetch(`${API_BASE_URL}/category-rules/apply`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to apply category rules");
+  }
+  return res.json();
+}

@@ -5,6 +5,9 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
+import unicodedata
+import re
+
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy import text, select, func
 from sqlalchemy.orm import Session
@@ -34,7 +37,8 @@ from app.schemas import (
     CategoryCreate, 
     CategoryUpdatePayload, 
     CategoryRuleOut, 
-    CategoryRuleCreate
+    CategoryRuleCreate, 
+    ApplyRulesResult
 )
 
 from app.utils.pko_pdf_parser import parse_pko_statement
@@ -717,6 +721,14 @@ async def import_pdf(
             pass
         raise HTTPException(status_code=400, detail=f"Error during import: {e}")
 
+    # po imporcie – zastosuj reguły użytkownika
+    try:
+        user_id = account.user_id
+        auto_by_rules = apply_rules_for_user(db, user_id)
+    except Exception as e:
+        print("Apply rules after import failed:", e)
+        auto_by_rules = 0
+
     return {
         "account_id": account.id,
         "statement_id": statement.id,
@@ -727,6 +739,7 @@ async def import_pdf(
         "error_rows": error_rows,
         "status": run.status,
         "reimport": reimport,
+        # "auto_categorized_by_rules": auto_by_rules,
     }
 
 
@@ -1021,6 +1034,14 @@ def create_category_rule(
     return rule
 
 
+@app.post("/category-rules/apply", response_model=ApplyRulesResult)
+def apply_category_rules(db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    assigned = apply_rules_for_user(db, user.id)
+    return ApplyRulesResult(assigned=assigned)
 
 
 def ensure_default_categories(db: Session, user: User):
@@ -1050,4 +1071,113 @@ def ensure_default_categories(db: Session, user: User):
             )
         )
     db.commit()
+
+
+def normalize_text(s: str | None) -> str:
+    """
+    Normalizuje tekst do dopasowywania:
+    - zamienia na małe litery
+    - usuwa polskie znaki (ą→a, ł→l, ś→s itd.)
+    - wycina znaki specjalne, zostawia cyfry, litery i spacje
+    - redukuje wielokrotne spacje do jednej
+    """
+    if not s:
+        return ""
+
+    # lower-case
+    s = s.lower()
+
+    # rozbij na znaki + usuń znaki łączące (akcenty)
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+
+    # wszystko poza literami, cyframi i spacją → spacja
+    s = re.sub(r"[^0-9a-z\s]", " ", s)
+
+    # redukcja wielu spacji
+    s = re.sub(r"\s+", " ", s).strip()
+
+    return s
+
+
+
+from sqlalchemy import or_
+
+def apply_rules_for_user(db: Session, user_id: int) -> int:
+    rules = (
+        db.query(CategoryRule)
+        .filter(
+            CategoryRule.user_id == user_id,
+            CategoryRule.enabled == True,
+        )
+        .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
+        .all()
+    )
+
+    if not rules:
+        return 0
+
+    txs = (
+        db.query(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(
+            Account.user_id == user_id,
+            or_(
+                Transaction.category_id.is_(None),
+                Transaction.category_source == "unknown",
+            ),
+        )
+        .all()
+    )
+
+    assigned = 0
+
+    for tx in txs:
+        # znormalizowany opis transakcji
+        text_norm = normalize_text(tx.description or "")
+
+        old_cat_id = tx.category_id
+
+        for rule in rules:
+            if rule.field != "description":
+                continue
+
+            # znormalizowany wzorzec
+            pattern_norm = normalize_text(rule.pattern_value or "")
+            if not pattern_norm:
+                continue
+
+            ok = False
+            if rule.pattern_type == "contains":
+                ok = pattern_norm in text_norm
+            elif rule.pattern_type == "startswith":
+                ok = text_norm.startswith(pattern_norm)
+            else:
+                # inne typy na przyszłość (regex, merchant itp.)
+                continue
+
+            if ok:
+                cat = rule.category
+                if not cat:
+                    continue
+
+                tx.category_id = cat.id
+                tx.category = cat.name
+                tx.category_source = "rule"
+                tx.category_confidence = None
+
+                event = ClassificationEvent(
+                    transaction_id=tx.id,
+                    old_category_id=old_cat_id,
+                    new_category_id=tx.category_id,
+                    source="rule",
+                )
+                db.add(event)
+
+                assigned += 1
+                # pierwsza pasująca reguła wygrywa
+                break
+
+    db.commit()
+    return assigned
 

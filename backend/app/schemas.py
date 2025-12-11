@@ -108,3 +108,7 @@ class CategoryRuleCreate(BaseModel):
     pattern_value: str
     pattern_type: str = "contains"  # albo startswith
     field: str = "description"
+
+
+class ApplyRulesResult(BaseModel):
+    assigned: int
