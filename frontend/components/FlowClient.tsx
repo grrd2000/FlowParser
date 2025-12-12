@@ -9,6 +9,8 @@ import {
   fetchCategories,
   updateTransactionCategory,
   Category,
+  createCategoryRule,
+  applyCategoryRules,
 } from "@/lib/serverApi";
 
 import {
@@ -22,14 +24,13 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
 type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
 type TxExt = Transaction & { amountNum: number; date: Date };
 
 export function FlowClient() {
   const [transactions, setTransactions] = useState<TxExt[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,13 +38,16 @@ export function FlowClient() {
   const [kind, setKind] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
 
-  const [detailTx, setDetailTx] = useState<TxExt | null>(null);
+  // ✅ „pro” zaznaczenie: trzymamy ID, a nie cały obiekt
+  const [selectedTxId, setSelectedTxId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [ruleSuggestion, setRuleSuggestion] = useState<(RuleSuggestion & { txId: number }) | null>(null);
+  // sugerowana reguła (wiązana do konkretnego tx)
+  const [ruleSuggestion, setRuleSuggestion] = useState<
+    (RuleSuggestion & { txId: number }) | null
+  >(null);
 
-  // 1) Ładowanie wszystkich transakcji (jak na dashboardzie)
+  // 1) Load data
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -65,7 +69,7 @@ export function FlowClient() {
     load();
   }, []);
 
-  // 2) Przetwarzanie wg zakresu, typu (income/expense/all) i wyszukiwarki
+  // 2) Filter + metrics
   const { filtered, startDate, metrics } = useMemo(() => {
     const { filtered, startDate } = filterByRange(transactions, range);
 
@@ -75,12 +79,12 @@ export function FlowClient() {
       return true;
     });
 
-    const q = search.trim().toLowerCase();
+    const q = normalizeQuery(search);
     const afterSearch =
       q.length === 0
         ? afterKind
         : afterKind.filter((t) =>
-            t.description?.toLowerCase().includes(q)
+            normalizeQuery(t.description ?? "").includes(q)
           );
 
     const metrics = computeMetrics(afterSearch);
@@ -88,86 +92,99 @@ export function FlowClient() {
     return { filtered: afterSearch, startDate, metrics };
   }, [transactions, range, kind, search]);
 
-const handleRowClick = (tx: TxExt) => {
-  // nic jeszcze nie było otwarte
-  if (!detailTx) {
-    setDetailTx(tx);
-    setDetailOpen(true);
-    return;
-  }
+  // ✅ Wyliczamy obiekt zaznaczonej transakcji zawsze z transactions
+  const selectedTx = useMemo(() => {
+    if (!selectedTxId) return null;
+    return transactions.find((t) => t.id === selectedTxId) ?? null;
+  }, [transactions, selectedTxId]);
 
-  // kliknięcie w ten sam rekord -> zamykamy z animacją
-  if (detailTx.id === tx.id) {
-    setDetailOpen(false);
-    setTimeout(() => {
-      setDetailTx(null);
-    }, 300); // tyle samo co duration w animacji
-    return;
-  }
-
-  // kliknięcie w inny rekord -> po prostu zmieniamy zawartość, panel zostaje otwarty
-  setDetailTx(tx);
-  setDetailOpen(true);
-};
-
-const handleChangeCategory = async (txId: number, categoryId: number | null) => {
-  try {
-    const { transaction: updated, rule_suggestion } =
-      await updateTransactionCategory(txId, categoryId);
-
-    // podmień transakcję w stanie
-    setTransactions((prev) =>
-      prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
-    );
-
-    // jeśli backend zaproponował regułę – ustaw subtelny hint
-    if (rule_suggestion) {
-      setRuleSuggestion({ txId, ...rule_suggestion });
-    } else {
-      // jak nie ma – czyścimy hint
-      setRuleSuggestion(null);
+  // ✅ jeśli przez filtry zaznaczony rekord wypadnie z widoku – zamykamy panel
+  useEffect(() => {
+    if (!selectedTxId) return;
+    const stillVisible = filtered.some((t) => t.id === selectedTxId);
+    if (!stillVisible) {
+      setDetailOpen(false);
+      window.setTimeout(() => {
+        setSelectedTxId(null);
+        setRuleSuggestion(null);
+      }, 300);
     }
-  } catch (e) {
-    console.error(e);
-  }
-};
+  }, [filtered, selectedTxId]);
 
-const handleAcceptRuleSuggestion = async () => {
-  if (!ruleSuggestion) return;
+  const handleRowClick = (txId: number) => {
+    // nic nie otwarte
+    if (!selectedTxId) {
+      setSelectedTxId(txId);
+      setDetailOpen(true);
+      return;
+    }
 
-  try {
-    // 1) utwórz regułę na bazie sugestii
-    await createCategoryRule({
-      category_id: ruleSuggestion.category_id,
-      pattern_value: ruleSuggestion.pattern_value,
-      pattern_type: ruleSuggestion.pattern_type,
-      field: "description",
-    });
+    // klik w ten sam → zamknij z animacją
+    if (selectedTxId === txId) {
+      setDetailOpen(false);
+      window.setTimeout(() => {
+        setSelectedTxId(null);
+        setRuleSuggestion(null);
+      }, 300);
+      return;
+    }
 
-    // 2) zastosuj reguły
-    await applyCategoryRules();
+    // klik w inny → przełącz rekord, panel zostaje otwarty
+    setSelectedTxId(txId);
+    setDetailOpen(true);
+  };
 
-    // 3) odśwież transakcje (żeby zobaczyć efekt)
-    const [txs, cats] = await Promise.all([
-      fetchTransactions(),
-      fetchCategories(),
-    ]);
-    setTransactions(normalizeTransactions(txs));
-    setCategories(cats);
+  const handleChangeCategory = async (txId: number, categoryId: number | null) => {
+    try {
+      const { transaction: updated, rule_suggestion } =
+        await updateTransactionCategory(txId, categoryId);
 
-    // 4) ukryj sugestię
+      // ✅ podmień transakcję w stanie (a panel i tak weźmie świeżą przez selectedTxId)
+      setTransactions((prev) =>
+        prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
+      );
+
+      // sugestia reguły
+      if (rule_suggestion) {
+        setRuleSuggestion({ txId, ...rule_suggestion });
+      } else {
+        setRuleSuggestion(null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAcceptRuleSuggestion = async () => {
+    if (!ruleSuggestion) return;
+
+    try {
+      await createCategoryRule({
+        category_id: ruleSuggestion.category_id,
+        pattern_value: ruleSuggestion.pattern_value,
+        pattern_type: ruleSuggestion.pattern_type,
+        field: "description",
+      });
+
+      await applyCategoryRules();
+
+      // refresh
+      const [txs, cats] = await Promise.all([
+        fetchTransactions(),
+        fetchCategories(),
+      ]);
+      setTransactions(normalizeTransactions(txs));
+      setCategories(cats);
+
+      setRuleSuggestion(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDismissRuleSuggestion = () => {
     setRuleSuggestion(null);
-  } catch (e) {
-    console.error(e);
-  }
-};
-
-const handleDismissRuleSuggestion = () => {
-  setRuleSuggestion(null);
-};
-
-
-
+  };
 
   const rangeText = rangeLabel(range, startDate);
 
@@ -201,29 +218,23 @@ const handleDismissRuleSuggestion = () => {
           onKindChange={setKind}
         />
 
-        {/* PRAWY OBSZAR – KPI + PANEL „EXPERIMENTS” + TABELA */}
+        {/* PRAWY OBSZAR – KPI + TABELA */}
         <div className="space-y-4">
-          {/* GÓRNE KPI + ZAKRES */}
+          {/* KPI */}
           <section className="grid gap-4 md:grid-cols-3">
             <KpiCard
               label="Liczba transakcji"
-              value={
-                loading ? "—" : filtered.length.toLocaleString("pl-PL")
-              }
+              value={loading ? "—" : filtered.length.toLocaleString("pl-PL")}
               subtitle="W wybranym zakresie i filtrach"
             />
             <KpiCard
               label="Wydatki"
-              value={
-                loading ? "—" : formatCurrency(-Math.min(metrics.expense, 0))
-              }
+              value={loading ? "—" : formatCurrency(-Math.min(metrics.expense, 0))}
               subtitle="Suma ujemnych przepływów"
             />
             <KpiCard
               label="Wpływy"
-              value={
-                loading ? "—" : formatCurrency(Math.max(metrics.income, 0))
-              }
+              value={loading ? "—" : formatCurrency(Math.max(metrics.income, 0))}
               subtitle="Suma dodatnich przepływów"
             />
           </section>
@@ -258,161 +269,78 @@ const handleDismissRuleSuggestion = () => {
             </div>
           </section>
 
-          {/* „EXPERIMENTS / SUMMARY” – miejsce na wykresy w kolejnych krokach */}
-          <section className="grid gap-4 lg:grid-cols-2">
-            <div className="glass-card glass-card-hover-soft p-4 md:p-5">
-              <h2 className="text-sm font-semibold text-slate-50 mb-2">
-                Podsumowanie przepływów
-              </h2>
-              <p className="text-[11px] text-slate-400 mb-3">
-                Szybkie liczby dla aktualnych filtrów. W kolejnych krokach
-                dorzucimy tu wykresy porównawcze, rozkład kategorii i
-                eksperymenty analityczne.
-              </p>
-              <div className="grid grid-cols-2 gap-3 text-[11px]">
-                <SummaryRow
-                  label="Średnia kwota transakcji"
-                  value={
-                    loading
-                      ? "—"
-                      : filtered.length === 0
-                      ? "—"
-                      : formatCurrency(
-                          metrics.sum / Math.max(filtered.length, 1)
-                        )
-                  }
-                />
-                <SummaryRow
-                  label="Średni wydatek"
-                  value={
-                    loading || metrics.expense === 0
-                      ? "—"
-                      : formatCurrency(
-                          metrics.expense / metrics.expenseCount
-                        )
-                  }
-                />
-                <SummaryRow
-                  label="Średni wpływ"
-                  value={
-                    loading || metrics.income === 0
-                      ? "—"
-                      : formatCurrency(
-                          metrics.income / metrics.incomeCount
-                        )
-                  }
-                />
-                <SummaryRow
-                  label="Balance netto"
-                  value={loading ? "—" : formatCurrency(metrics.net)}
-                />
+          {/* DÓŁ – TABELA + SZCZEGÓŁY */}
+          <section className="glass-card glass-card-hover-soft p-4 md:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-50">Transakcje</h2>
+                <p className="text-[11px] text-slate-400">
+                  Po kliknięciu w wiersz po prawej stronie pokazują się szczegóły.
+                </p>
+              </div>
+              <div className="text-[11px] text-slate-400 text-right">
+                Zakres:{" "}
+                <span className="text-slate-200 font-medium">{rangeText}</span>
+                <br />
+                Wyświetlane:{" "}
+                <span className="text-slate-200 font-medium">
+                  {filtered.length}
+                </span>
               </div>
             </div>
 
-            <div className="glass-card glass-card-hover-soft p-4 md:p-5">
-              <h2 className="text-sm font-semibold text-slate-50 mb-2">
-                Przestrzeń eksperymentów
-              </h2>
-              <p className="text-[11px] text-slate-400 mb-3">
-                Tutaj dorzucimy zaawansowane widoki: segmentację kategorii,
-                porównanie okresów, rozkład według kont oraz eksperymenty
-                z modelami ML. Na razie traktuj to jako miejsce na przyszłe
-                klocki.
-              </p>
-              <ul className="text-[11px] text-slate-300 space-y-1">
-                <li>• Wykrywanie subskrypcji</li>
-                <li>• Grupowanie podobnych transakcji</li>
-                <li>• Personalizowane presety filtrów</li>
-              </ul>
+            <div className="mt-3 flex flex-col lg:flex-row gap-4 items-stretch">
+              {/* LEWO: tabela */}
+              <div
+                className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
+                style={{
+                  flexBasis: detailOpen ? "calc(100% - 320px)" : "100%",
+                  flexGrow: 1,
+                  flexShrink: 1,
+                }}
+              >
+                <TransactionsTable
+                  transactions={filtered}
+                  loading={loading}
+                  onRowClick={(tx) => handleRowClick(tx.id)}
+                  selectedId={detailOpen && selectedTxId ? selectedTxId : null}
+                />
+              </div>
+
+              {/* PRAWO: panel */}
+              <div
+                className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
+                style={{
+                  flexBasis: detailOpen ? "320px" : "0px",
+                }}
+              >
+                <div className="h-full flex justify-start">
+                  {selectedTx && (
+                    <TransactionSideDetails
+                      open={detailOpen}
+                      transaction={selectedTx}
+                      categories={categories}
+                      onChangeCategory={handleChangeCategory}
+                      ruleSuggestion={
+                        ruleSuggestion && ruleSuggestion.txId === selectedTx.id
+                          ? ruleSuggestion
+                          : null
+                      }
+                      onAcceptRuleSuggestion={handleAcceptRuleSuggestion}
+                      onDismissRuleSuggestion={handleDismissRuleSuggestion}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           </section>
-
-        {/* DÓŁ – TABELA TRANSAKCJI + PANEL SZCZEGÓŁÓW */}
-        <section className="glass-card glass-card-hover-soft p-4 md:p-5">
-        <div className="flex items-center justify-between mb-3">
-            <div>
-            <h2 className="text-sm font-semibold text-slate-50">
-                Transakcje
-            </h2>
-            <p className="text-[11px] text-slate-400">
-                Wynik działania wszystkich filtrów. Po kliknięciu w wiersz po prawej
-                stronie pokazują się szczegóły wybranej transakcji.
-            </p>
-            </div>
-            <div className="text-[11px] text-slate-400 text-right">
-            Zakres:{" "}
-            <span className="text-slate-200 font-medium">
-                {rangeText}
-            </span>
-            <br />
-            Wyświetlane:{" "}
-            <span className="text-slate-200 font-medium">
-                {filtered.length}
-            </span>
-            </div>
-        </div>
-
-
-<div className="mt-3 flex flex-col lg:flex-row gap-4 items-stretch">
-  {/* LEWO: tabela – rozsuwa się poziomo, ale dokładnie do reszty miejsca */}
-  <div
-    className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
-    style={{
-      flexBasis: detailOpen ? "calc(100% - 320px)" : "100%",
-      flexGrow: 1,
-      flexShrink: 1,
-    }}
-  >
-    <TransactionsTable
-      transactions={filtered}
-      loading={loading}
-      onRowClick={handleRowClick}
-      selectedId={detailOpen && detailTx ? detailTx.id : null}
-    />
-  </div>
-
-  {/* PRAWO: slot na panel – dokładnie 320px, zero „luzu” po prawej */}
-  <div
-    className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
-    style={{
-      flexBasis: detailOpen ? "320px" : "0px",
-    }}
-  >
-    <div className="h-full flex justify-start">
-{detailTx && (
-  <TransactionSideDetails
-    transaction={detailTx}
-    categories={categories}
-    onChangeCategory={handleChangeCategory}
-    ruleSuggestion={
-      ruleSuggestion && ruleSuggestion.txId === detailTx.id
-        ? ruleSuggestion
-        : null
-    }
-    onAcceptRuleSuggestion={handleAcceptRuleSuggestion}
-    onDismissRuleSuggestion={handleDismissRuleSuggestion}
-  />
-)}
-    </div>
-  </div>
-</div>
-
-
-
-
-
-
-
-        </section>
-
-
         </div>
       </section>
     </div>
   );
 }
 
-/* ---------- LEWY PANEL: SIDEBAR FLOW ---------- */
+/* ---------- LEWY PANEL ---------- */
 
 function FlowSidebar({
   range,
@@ -432,8 +360,7 @@ function FlowSidebar({
           Filtry
         </div>
         <p className="text-[11px] text-slate-500">
-          To jest panel filtrów – będziemy go rozbudowywać o konta, kategorie
-          i presety.
+          Panel filtrów – będziemy go rozbudowywać o konta, kategorie i presety.
         </p>
       </div>
 
@@ -442,10 +369,7 @@ function FlowSidebar({
           Typ przepływu
         </div>
         <div className="flex flex-wrap gap-1">
-          <ChipButton
-            active={kind === "all"}
-            onClick={() => onKindChange("all")}
-          >
+          <ChipButton active={kind === "all"} onClick={() => onKindChange("all")}>
             Wszystkie
           </ChipButton>
           <ChipButton
@@ -523,7 +447,7 @@ function ChipButton({
   );
 }
 
-/* ---------- KPI / SUMMARY / TABLE ---------- */
+/* ---------- KPI ---------- */
 
 function KpiCard({
   label,
@@ -540,41 +464,26 @@ function KpiCard({
         <div className="text-[11px] uppercase tracking-wide text-slate-400">
           {label}
         </div>
-        <div className="mt-2 text-xl font-semibold text-slate-50">
-          {value}
-        </div>
+        <div className="mt-2 text-xl font-semibold text-slate-50">{value}</div>
       </div>
       <div className="mt-3 text-[11px] text-slate-500">{subtitle}</div>
     </div>
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-slate-400">{label}</span>
-      <span className="text-slate-100">{value}</span>
-    </div>
-  );
-}
-
-/* ---------- TRANSAKCYJNA TABELA – TANSTACK ---------- */
+/* ---------- TABLE ---------- */
 
 const transactionColumns: ColumnDef<TxExt>[] = [
   {
     id: "date",
     accessorKey: "date",
     header: () => "Data",
-    cell: ({ row }) => {
-      const d = row.original.date;
-      return (
-        <span className="whitespace-nowrap text-slate-300">
-          {formatDateDisplay(d)}
-        </span>
-      );
-    },
-    sortingFn: (a, b) =>
-      a.original.date.getTime() - b.original.date.getTime(),
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap text-slate-300">
+        {formatDateDisplay(row.original.date)}
+      </span>
+    ),
+    sortingFn: (a, b) => a.original.date.getTime() - b.original.date.getTime(),
   },
   {
     id: "description",
@@ -595,7 +504,6 @@ const transactionColumns: ColumnDef<TxExt>[] = [
       );
     },
   },
-
   {
     id: "category",
     accessorKey: "category",
@@ -604,38 +512,30 @@ const transactionColumns: ColumnDef<TxExt>[] = [
       const cat = (row.original.category || "").trim();
       const has = cat.length > 0;
       return (
-        <span
-          className={[
-            "whitespace-nowrap",
-            has ? "text-slate-400" : "text-slate-600",
-          ].join(" ")}
-        >
+        <span className={has ? "text-slate-400 whitespace-nowrap" : "text-slate-600 whitespace-nowrap"}>
           {has ? cat : "—"}
         </span>
       );
     },
   },
-
   {
     id: "amount",
     accessorKey: "amountNum",
     header: () => "Kwota",
     cell: ({ row }) => {
       const val = row.original.amountNum;
-      const positive = val >= 0;
       return (
         <span
           className={[
             "font-medium whitespace-nowrap",
-            positive ? "text-emerald-300" : "text-rose-300",
+            val >= 0 ? "text-emerald-300" : "text-rose-300",
           ].join(" ")}
         >
           {formatCurrency(val)}
         </span>
       );
     },
-    sortingFn: (a, b) =>
-      a.original.amountNum - b.original.amountNum,
+    sortingFn: (a, b) => a.original.amountNum - b.original.amountNum,
   },
   {
     id: "value_date",
@@ -644,8 +544,7 @@ const transactionColumns: ColumnDef<TxExt>[] = [
       const raw = row.original.value_date as any;
       if (!raw) return <span className="text-slate-500">—</span>;
       const d = new Date(raw);
-      if (Number.isNaN(d.getTime()))
-        return <span className="text-slate-500">—</span>;
+      if (Number.isNaN(d.getTime())) return <span className="text-slate-500">—</span>;
       return (
         <span className="whitespace-nowrap text-slate-400">
           {formatDateDisplay(d)}
@@ -657,22 +556,16 @@ const transactionColumns: ColumnDef<TxExt>[] = [
     id: "is_manual",
     header: () => "Źródło",
     cell: ({ row }) => (
-      <span
-        className="text-[10px] font-semibold uppercase tracking-[0.16em] whitespace-nowrap text-indigo-300/90"
-      >
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] whitespace-nowrap text-indigo-300/90">
         {row.original.is_manual ? "MANUAL" : "PDF"}
       </span>
     ),
   },
-
-
   {
     id: "account_id",
     header: () => "ID konta",
     cell: ({ row }) => (
-      <span className="text-slate-500 whitespace-nowrap">
-        {row.original.account_id}
-      </span>
+      <span className="text-slate-500 whitespace-nowrap">{row.original.account_id}</span>
     ),
   },
 ];
@@ -688,35 +581,30 @@ function TransactionsTable({
   onRowClick: (tx: TxExt) => void;
   selectedId: number | null;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "date", desc: true },
-  ]);
-  const [columnVisibility, setColumnVisibility] =
-    useState<VisibilityState>({
-      date: true,
-      description: true,
-      category: true,
-      amount: true,
-      value_date: false,
-      is_manual: true,
-      account_id: false,
-    });
+  const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    date: true,
+    description: true,
+    category: true,
+    amount: true,
+    value_date: false,
+    is_manual: true,
+    account_id: false,
+  });
 
   const table = useReactTable({
     data: transactions,
     columns: transactionColumns,
-    state: {
-      sorting,
-      columnVisibility,
-    },
+    state: { sorting, columnVisibility },
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    autoResetPageIndex: false,
+    autoResetSorting: false,
+    autoResetFilters: false,
   });
-
-  const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
 
   if (loading) {
     return (
@@ -734,20 +622,14 @@ function TransactionsTable({
     );
   }
 
-  const allColumns = table
-    .getAllLeafColumns()
-    .filter((col) => col.id !== "_selector");
-
+  const allColumns = table.getAllLeafColumns().filter((col) => col.id !== "_selector");
   const pageRows = table.getRowModel().rows;
 
   return (
     <div className="space-y-3">
-      {/* PANEL KOLUMN + PAGINACJA GÓRA */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-[11px]">
         <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-        <span className="text-slate-400 mr-1 whitespace-nowrap">
-            Widoczne kolumny:
-        </span>
+          <span className="text-slate-400 mr-1 whitespace-nowrap">Widoczne kolumny:</span>
           {allColumns.map((column) => (
             <button
               key={column.id}
@@ -782,13 +664,9 @@ function TransactionsTable({
         <div className="flex items-center gap-2 text-slate-400">
           <span>
             Strona{" "}
-            <span className="text-slate-100">
-              {table.getState().pagination.pageIndex + 1}
-            </span>{" "}
+            <span className="text-slate-100">{table.getState().pagination.pageIndex + 1}</span>{" "}
             z{" "}
-            <span className="text-slate-100">
-              {table.getPageCount() || 1}
-            </span>
+            <span className="text-slate-100">{table.getPageCount() || 1}</span>
           </span>
           <button
             type="button"
@@ -809,7 +687,6 @@ function TransactionsTable({
         </div>
       </div>
 
-      {/* TABELA */}
       <div className="max-h-[420px] overflow-auto rounded-2xl border border-white/10 bg-slate-950/40">
         <table className="min-w-full table-fixed text-[11px] text-left">
           <thead className="bg-slate-900/80 sticky top-0 z-10">
@@ -822,35 +699,19 @@ function TransactionsTable({
                   return (
                     <th
                       key={header.id}
-                      onClick={
-                        canSort
-                          ? header.column.getToggleSortingHandler()
-                          : undefined
-                      }
+                      onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                       className={[
                         "px-3 py-2 font-medium text-slate-300 whitespace-nowrap",
                         canSort ? "cursor-pointer select-none hover:text-slate-100" : "",
-                        header.column.id === "amount" ||
-                        header.column.id === "is_manual"
+                        header.column.id === "amount" || header.column.id === "is_manual"
                           ? "text-right"
                           : "text-left",
                       ].join(" ")}
                     >
                       <div className="inline-flex items-center gap-1">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        {sortDir === "asc" && (
-                          <span className="text-[9px] text-slate-400">
-                            ▲
-                          </span>
-                        )}
-                        {sortDir === "desc" && (
-                          <span className="text-[9px] text-slate-400">
-                            ▼
-                          </span>
-                        )}
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {sortDir === "asc" && <span className="text-[9px] text-slate-400">▲</span>}
+                        {sortDir === "desc" && <span className="text-[9px] text-slate-400">▼</span>}
                       </div>
                     </th>
                   );
@@ -858,141 +719,49 @@ function TransactionsTable({
               </tr>
             ))}
           </thead>
-<tbody>
-  {pageRows.map((row) => {
-    const tx = row.original;
-    const isSelected = selectedId === tx.id;
-    const visibleCells = row.getVisibleCells();
 
-    return (
-      <tr
-        key={row.id}
-        onClick={() => onRowClick(tx)}
-        className={[
-          "border-t border-slate-800/60 transition-colors cursor-pointer",
-          isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/60",
-        ].join(" ")}
-      >
-        {visibleCells.map((cell) => (
-          <td
-            key={cell.id}
-            className={[
-              "px-3 py-1.5 align-middle",
-              cell.column.id === "amount" ||
-              cell.column.id === "is_manual"
-                ? "text-right"
-                : "text-left",
-            ].join(" ")}
-          >
-            {flexRender(
-              cell.column.columnDef.cell,
-              cell.getContext()
-            )}
-          </td>
-        ))}
-      </tr>
-    );
-  })}
-</tbody>
+          <tbody>
+            {pageRows.map((row) => {
+              const tx = row.original;
+              const isSelected = selectedId === tx.id;
+              const visibleCells = row.getVisibleCells();
 
-
+              return (
+                <tr
+                  key={row.id}
+                  onClick={() => onRowClick(tx)}
+                  className={[
+                    "border-t border-slate-800/60 transition-colors cursor-pointer",
+                    isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/60",
+                  ].join(" ")}
+                >
+                  {visibleCells.map((cell) => (
+                    <td
+                      key={cell.id}
+                      className={[
+                        "px-3 py-1.5 align-middle",
+                        cell.column.id === "amount" || cell.column.id === "is_manual"
+                          ? "text-right"
+                          : "text-left",
+                      ].join(" ")}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
         </table>
       </div>
     </div>
   );
 }
 
-
-
-
-
-function MetaRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-slate-200">{value}</span>
-    </div>
-  );
-}
-
-function ExpandedTransactionDetails({ tx }: { tx: TxExt }) {
-  const positive = tx.amountNum >= 0;
-
-  const operationDate = formatDateDisplay(tx.date);
-  const valueDate =
-    tx.value_date &&
-    !Number.isNaN(new Date(tx.value_date as any).getTime())
-      ? formatDateDisplay(new Date(tx.value_date as any))
-      : "—";
-
-  return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-3 md:px-4 md:py-3 space-y-3">
-      {/* top: description + amount */}
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-        <div className="space-y-1">
-          <div className="text-[11px] text-slate-400">
-            {tx.category ?? "Bez kategorii"}
-          </div>
-          <div className="text-[12px] md:text-[13px] font-medium text-slate-50 leading-snug">
-            {tx.description}
-          </div>
-        </div>
-        <div className="flex flex-col items-start md:items-end gap-1">
-          <span
-            className={[
-              "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold",
-              positive
-                ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
-                : "border-rose-400/60 bg-rose-500/10 text-rose-200",
-            ].join(" ")}
-          >
-            {formatCurrency(tx.amountNum)}
-          </span>
-          <span className="text-[11px] text-slate-500">
-            {positive ? "Wpływ" : "Wydatek"} · ID: {tx.id}
-          </span>
-        </div>
-      </div>
-
-      {/* meta grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] md:text-[11px]">
-        <MetaCell label="Data operacji" value={operationDate} />
-        <MetaCell label="Data waluty" value={valueDate} />
-        <MetaCell
-          label="Źródło"
-          value={tx.is_manual ? "Ręczna" : "Import PDF"}
-        />
-        <MetaCell
-          label="ID konta"
-          value={String(tx.account_id)}
-        />
-      </div>
-
-      {/* pełny opis (na razie ten sam, ale w przyszłości raw / AI-notes) */}
-      <div className="space-y-1">
-        <div className="text-[10px] text-slate-500">
-          Pełny opis
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-200 whitespace-pre-wrap">
-          {tx.description}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MetaCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-slate-100">{value}</span>
-    </div>
-  );
-}
-
-/* ---------- BOCZNA KARTA SZCZEGÓŁÓW ---------- */
+/* ---------- DETAILS PANEL ---------- */
 
 function TransactionSideDetails({
+  open,
   transaction,
   categories,
   onChangeCategory,
@@ -1000,6 +769,7 @@ function TransactionSideDetails({
   onAcceptRuleSuggestion,
   onDismissRuleSuggestion,
 }: {
+  open: boolean;
   transaction: TxExt;
   categories: Category[];
   onChangeCategory: (txId: number, categoryId: number | null) => void;
@@ -1007,7 +777,6 @@ function TransactionSideDetails({
   onAcceptRuleSuggestion: () => void;
   onDismissRuleSuggestion: () => void;
 }) {
-  const positive = transaction.amountNum >= 0;
   const operationDate = formatDateDisplay(transaction.date);
   const valueDate =
     transaction.value_date &&
@@ -1018,187 +787,146 @@ function TransactionSideDetails({
   const desc = (transaction.description || "").trim();
   const hasDesc = desc.length > 0;
 
-return (
-  <aside
-    className={[
-      // stała szerokość, żeby treść się nie wrappowała przy animacji
-      "min-w-[320px] max-w-[320px]",
-      "h-full flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
-      "px-3 py-3 md:px-4 md:py-4",
-      "text-[11px]",
-      // mirror animacji fade-in / fade-out
-      "transition-opacity duration-300 ease-in-out",
-      open ? "opacity-100" : "opacity-0 pointer-events-none",
-    ].join(" ")}
-  >
-    {/* ---------------------- HEADER ---------------------- */}
-    <div className="mb-2">
-      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
-        Szczegóły transakcji
-      </div>
-
-      <div
-        className={[
-          "mt-1 text-sm font-semibold leading-snug line-clamp-3",
-          hasDesc ? "text-slate-50" : "text-slate-600",
-        ].join(" ")}
-      >
-        {hasDesc ? desc : "—"}
-      </div>
-    </div>
-
-    {/* ---------------------- CONTENT SCROLLABLE ---------------------- */}
-    <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
-
-      {/* KATEGORIA + KWOTA + ŹRÓDŁO */}
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="flex-1">
-          <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
-            Kategoria
-          </div>
-
-          <select
-            className="
-              mt-1 w-full rounded-full bg-slate-900/70 border border-slate-700/60
-              px-3 py-1 text-[11px] text-slate-100 focus:outline-none
-              focus:ring-1 focus:ring-indigo-400/80
-            "
-            value={transaction.category_id ?? ""}
-            onChange={(e) =>
-              onChangeCategory(
-                transaction.id,
-                e.target.value === "" ? null : Number(e.target.value)
-              )
-            }
-          >
-            <option value="">— brak kategorii —</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
+  return (
+    <aside
+      className={[
+        "min-w-[320px] max-w-[320px]",
+        "h-full flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
+        "px-3 py-3 md:px-4 md:py-4",
+        "text-[11px]",
+        "transition-opacity duration-300 ease-in-out",
+        open ? "opacity-100" : "opacity-0 pointer-events-none",
+      ].join(" ")}
+    >
+      <div className="mb-2">
+        <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+          Szczegóły transakcji
         </div>
-
-        {/* Kwota + Źródło kategorii */}
-        <div className="flex flex-col items-end gap-1">
-          <span
-            className={[
-              "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
-              transaction.amountNum >= 0
-                ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
-                : "border-rose-400/60 bg-rose-500/10 text-rose-200",
-            ].join(" ")}
-          >
-            {formatCurrency(transaction.amountNum)}
-          </span>
-
-          {transaction.category_source ? (
-            <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500 whitespace-nowrap">
-              źródło:
-              <span className="ml-1 text-indigo-300/90">
-                {transaction.category_source}
-              </span>
-            </span>
-          ) : (
-            <span className="text-[9px] text-slate-600 whitespace-nowrap">
-              źródło: — unknown —
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* ---------------------- RULE SUGGESTION ---------------------- */}
-      {ruleSuggestion && (
-        <div className="
-          mt-3 rounded-2xl border border-indigo-500/40 bg-indigo-500/10
-          px-3 py-2 text-[11px] text-indigo-100
-          flex items-start justify-between gap-2
-        ">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[12px]">✨</span>
-              <span className="font-medium">
-                Zauważyliśmy powtarzający się wzorzec
-              </span>
-            </div>
-
-            <div className="text-[11px] text-indigo-100/90">
-              W opisie transakcji często pojawia się{" "}
-              <span className="font-semibold">
-                {ruleSuggestion.pattern_value}
-              </span>
-              . Możesz utworzyć regułę, która automatycznie przypisze tę kategorię
-              do podobnych operacji ({ruleSuggestion.similar_count} znalezionych).
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1 shrink-0">
-            <button
-              onClick={onAcceptRuleSuggestion}
-              className="
-                rounded-full bg-indigo-400 text-slate-950 px-3 py-1
-                text-[11px] font-medium hover:bg-indigo-300 transition-colors
-              "
-            >
-              Dodaj regułę
-            </button>
-
-            <button
-              onClick={onDismissRuleSuggestion}
-              className="
-                rounded-full border border-indigo-400/40 text-indigo-100/80
-                px-3 py-1 text-[10px] hover:bg-indigo-500/10 transition-colors
-              "
-            >
-              Nie teraz
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ---------------------- METADANE ---------------------- */}
-      <div className="grid grid-cols-2 gap-2">
-        <DetailCell label="Data operacji" value={operationDate} />
-        <DetailCell label="Data waluty" value={valueDate} />
-        <DetailCell
-          label="Źródło"
-          value={transaction.is_manual ? "Ręczna" : "Import PDF"}
-        />
-        <DetailCell
-          label="Konto (ID)"
-          value={String(transaction.account_id)}
-        />
-      </div>
-
-      {/* ---------------------- PEŁNY OPIS ---------------------- */}
-      <div className="space-y-1">
-        <div className="text-slate-500">Pełny opis</div>
-
         <div
           className={[
-            "rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px]",
-            "max-h-32 overflow-auto",
-            hasDesc ? "text-slate-200" : "text-slate-600 italic",
+            "mt-1 text-sm font-semibold leading-snug line-clamp-3",
+            hasDesc ? "text-slate-50" : "text-slate-600",
           ].join(" ")}
         >
-          {hasDesc ? desc : "— brak opisu —"}
+          {hasDesc ? desc : "—"}
         </div>
       </div>
-    </div>
 
-    {/* ---------------------- FOOTER ---------------------- */}
-    <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
-      W „Lab” rozbudujemy ten panel o sugestie kategorii, podobne transakcje
-      i wykryte subskrypcje.
-    </div>
-  </aside>
-);
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="flex-1">
+            <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
+              Kategoria
+            </div>
+
+            <select
+              className="
+                mt-1 w-full rounded-full bg-slate-900/70 border border-slate-700/60
+                px-3 py-1 text-[11px] text-slate-100 focus:outline-none
+                focus:ring-1 focus:ring-indigo-400/80
+              "
+              value={transaction.category_id ?? ""}
+              onChange={(e) =>
+                onChangeCategory(
+                  transaction.id,
+                  e.target.value === "" ? null : Number(e.target.value)
+                )
+              }
+            >
+              <option value="">— brak kategorii —</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col items-end gap-1">
+            <span
+              className={[
+                "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
+                transaction.amountNum >= 0
+                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
+                  : "border-rose-400/60 bg-rose-500/10 text-rose-200",
+              ].join(" ")}
+            >
+              {formatCurrency(transaction.amountNum)}
+            </span>
+
+            {transaction.category_source ? (
+              <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500 whitespace-nowrap">
+                źródło:
+                <span className="ml-1 text-indigo-300/90">
+                  {transaction.category_source}
+                </span>
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-600 whitespace-nowrap">
+                źródło: — unknown —
+              </span>
+            )}
+          </div>
+        </div>
+
+        {ruleSuggestion && (
+          <div className="mt-3 rounded-2xl border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-[11px] text-indigo-100 flex items-start justify-between gap-2">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[12px]">✨</span>
+                <span className="font-medium">Zauważyliśmy powtarzający się wzorzec</span>
+              </div>
+              <div className="text-[11px] text-indigo-100/90">
+                W opisie transakcji często pojawia się{" "}
+                <span className="font-semibold">{ruleSuggestion.pattern_value}</span>.{" "}
+                Możesz utworzyć regułę ({ruleSuggestion.similar_count} znalezionych).
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 shrink-0">
+              <button
+                onClick={onAcceptRuleSuggestion}
+                className="rounded-full bg-indigo-400 text-slate-950 px-3 py-1 text-[11px] font-medium hover:bg-indigo-300 transition-colors"
+              >
+                Dodaj regułę
+              </button>
+              <button
+                onClick={onDismissRuleSuggestion}
+                className="rounded-full border border-indigo-400/40 text-indigo-100/80 px-3 py-1 text-[10px] hover:bg-indigo-500/10 transition-colors"
+              >
+                Nie teraz
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <DetailCell label="Data operacji" value={operationDate} />
+          <DetailCell label="Data waluty" value={valueDate} />
+          <DetailCell label="Źródło" value={transaction.is_manual ? "Ręczna" : "Import PDF"} />
+          <DetailCell label="Konto (ID)" value={String(transaction.account_id)} />
+        </div>
+
+        <div className="space-y-1">
+          <div className="text-slate-500">Pełny opis</div>
+          <div
+            className={[
+              "rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px]",
+              "max-h-32 overflow-auto",
+              hasDesc ? "text-slate-200" : "text-slate-600 italic",
+            ].join(" ")}
+          >
+            {hasDesc ? desc : "— brak opisu —"}
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
+        W „Lab” rozbudujemy ten panel o sugestie kategorii, podobne transakcje
+        i wykryte subskrypcje.
+      </div>
+    </aside>
+  );
 }
-
-
-
-
 
 function DetailCell({ label, value }: { label: string; value: string }) {
   const has = value !== "—";
@@ -1210,21 +938,16 @@ function DetailCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-
 /* ---------- HELPERS ---------- */
 
 function normalizeTransactions(transactions: Transaction[]): TxExt[] {
   return transactions.map((t) => {
-    // 1) próba przez parseDate (Twoja logika)
     let d = parseDate(t.operation_date);
 
-    // 2) fallback – jeśli parseDate zwróci coś dziwnego
     if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
       try {
-        // spróbuj natywnego Date – może backend już podaje w ISO (YYYY-MM-DD)
         d = new Date(t.operation_date as any);
       } catch {
-        // ostatnia deska ratunku – dzisiaj, żeby nic się nie wywaliło
         d = new Date();
       }
     }
@@ -1237,30 +960,23 @@ function normalizeTransactions(transactions: Transaction[]): TxExt[] {
   });
 }
 
-
 function parseAmount(raw: string): number {
   if (!raw) return 0;
-  const cleaned = raw
-    .replace(/\s/g, "")
-    .replace("PLN", "")
-    .replace(",", ".");
+  const cleaned = raw.replace(/\s/g, "").replace("PLN", "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
 }
 
 function parseDate(raw: string | null | undefined): Date {
   if (!raw) return new Date(NaN);
-  const d = new Date(raw);
-  return d;
+  return new Date(raw);
 }
 
 function filterByRange(data: TxExt[], range: RangeKey) {
   if (data.length === 0) {
     return { filtered: [] as TxExt[], startDate: null as Date | null };
   }
-  const sorted = [...data].sort(
-    (a, b) => a.date.getTime() - b.date.getTime()
-  );
+  const sorted = [...data].sort((a, b) => a.date.getTime() - b.date.getTime());
   const lastDate = sorted[sorted.length - 1].date;
   const start = computeStartDate(lastDate, range);
   if (!start) {
@@ -1317,11 +1033,7 @@ function computeMetrics(data: TxExt[]) {
 
 function rangeLabel(range: RangeKey, startDate: Date | null) {
   if (!startDate) return "całej historii";
-  const opts: Intl.DateTimeFormatOptions = {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  };
+  const opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" };
   return `okres od ${startDate.toLocaleDateString("pl-PL", opts)}`;
 }
 
@@ -1354,4 +1066,14 @@ function formatDateDisplay(d: Date) {
     month: "2-digit",
     day: "2-digit",
   });
+}
+
+// 🧠 human-friendly normalize: lower + remove Polish diacritics + trim spaces
+function normalizeQuery(input: string): string {
+  return (input ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

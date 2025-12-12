@@ -37,7 +37,11 @@ from app.schemas import (
     CategoryCreate, 
     CategoryRuleOut, 
     CategoryRuleCreate, 
-    ApplyRulesResult
+    ApplyRulesResult,
+    LabSuggestionOut,
+    LabInsightsOut,
+    EnableRulePayload,
+    EnableRuleResult
 )
 
 from app.utils.pko_pdf_parser import parse_pko_statement
@@ -211,28 +215,12 @@ def wipe_statement_data(db: Session, statement_id: int) -> None:
 
 @app.get("/user/me", response_model=UserProfileResponse)
 def get_my_profile(db: Session = Depends(get_db)):
-    user = get_or_create_demo_user(db)
+    user = get_current_user(db)
     prefs = get_or_create_user_prefs(db, user)
 
     return UserProfileResponse(
         id=user.id,
-        name=user.full_name,
-        email=user.email,
-        currency=prefs.currency,
-        default_range=prefs.default_range,
-        default_granularity=prefs.default_granularity,
-        theme=prefs.theme,
-    )
-
-
-@app.get("/user/me", response_model=UserProfileResponse)
-def get_my_profile(db: Session = Depends(get_db)):
-    user = get_current_user(db)  # ⬅ tu już NIC się nie tworzy
-    prefs = get_or_create_user_prefs(db, user)
-
-    return UserProfileResponse(
-        id=user.id,
-        name=user.full_name,  # lub user.name – jak masz w modelu
+        name=user.full_name, 
         email=user.email,
         currency=prefs.currency,
         default_range=prefs.default_range,
@@ -420,6 +408,8 @@ def list_transactions(
             "amount": str(t.amount),
             "balance_after": str(t.balance_after) if t.balance_after is not None else None,
             "category": t.category,
+            "category_id": t.category_id,
+            "category_source": t.category_source,
             "is_manual": t.is_manual,
         }
         for t in rows
@@ -900,7 +890,7 @@ def list_raw_transactions(
 
 @app.get("/categories", response_model=list[CategoryOut])
 def list_categories(db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
+    user = get_current_user(db)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -915,7 +905,7 @@ def list_categories(db: Session = Depends(get_db)):
 
 @app.post("/categories", response_model=CategoryOut)
 def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
+    user = get_current_user(db)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1062,7 +1052,7 @@ def update_transaction_category(
 
 @app.get("/category-rules", response_model=list[CategoryRuleOut])
 def list_category_rules(db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
+    user = get_current_user(db)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1080,7 +1070,8 @@ def create_category_rule(
     payload: CategoryRuleCreate,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter_by(email="demo@example.com").first()
+    user = get_current_user(db)
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1105,12 +1096,192 @@ def create_category_rule(
 
 @app.post("/category-rules/apply", response_model=ApplyRulesResult)
 def apply_category_rules(db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
+    user = get_current_user(db)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     assigned = apply_rules_for_user(db, user.id)
     return ApplyRulesResult(assigned=assigned)
+
+
+@app.get("/lab/insights", response_model=LabInsightsOut)
+def lab_insights(db: Session = Depends(get_db)):
+    user = get_current_user(db)
+    user_id = user.id
+
+    # coverage
+    total = (
+        db.query(func.count(Transaction.id))
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == user_id)
+        .scalar()
+        or 0
+    )
+    categorized = (
+        db.query(func.count(Transaction.id))
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == user_id, Transaction.category_id.isnot(None))
+        .scalar()
+        or 0
+    )
+    pct = (categorized / total * 100.0) if total else 0.0
+
+    # sources
+    manual_cnt = (
+        db.query(func.count(Transaction.id))
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == user_id, Transaction.category_source == "manual")
+        .scalar()
+        or 0
+    )
+    rule_cnt = (
+        db.query(func.count(Transaction.id))
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == user_id, Transaction.category_source == "rule")
+        .scalar()
+        or 0
+    )
+
+    # Zdarzenia manualne -> sugestie
+    events = (
+        db.query(ClassificationEvent, Transaction, Category)
+        .join(Transaction, ClassificationEvent.transaction_id == Transaction.id)
+        .join(Account, Transaction.account_id == Account.id)
+        .join(Category, ClassificationEvent.new_category_id == Category.id)
+        .filter(
+            Account.user_id == user_id,
+            ClassificationEvent.source == "manual",
+            ClassificationEvent.new_category_id.isnot(None),
+        )
+        .order_by(ClassificationEvent.created_at.desc())
+        .limit(2000)
+        .all()
+    )
+
+    grouped: dict[tuple[str, int], dict] = {}
+
+    for ev, tx, cat in events:
+        pattern = extract_candidate_pattern(tx.description)
+        if not pattern:
+            continue
+
+        key = (pattern, int(ev.new_category_id))
+        if key not in grouped:
+            grouped[key] = {
+                "pattern_value": pattern,
+                "pattern_type": "contains",
+                "category_id": int(ev.new_category_id),
+                "category_name": cat.name,
+                "manual_occurrences": 0,
+            }
+        grouped[key]["manual_occurrences"] += 1
+
+    # próg: tylko sensowne
+    candidates = [v for v in grouped.values() if v["manual_occurrences"] >= 3]
+
+    # nie pokazuj sugestii, jeśli reguła już istnieje
+    def rule_exists(pattern_value: str, category_id: int) -> bool:
+        q = db.query(CategoryRule.id).filter(
+            CategoryRule.user_id == user_id,
+            CategoryRule.field == "description",
+            CategoryRule.pattern_type == "contains",
+            CategoryRule.pattern_value == pattern_value,
+            CategoryRule.category_id == category_id,
+            CategoryRule.enabled == True,
+        )
+        return db.query(q.exists()).scalar() is True
+
+    suggestions: list[LabSuggestionOut] = []
+    for cand in candidates:
+        if rule_exists(cand["pattern_value"], cand["category_id"]):
+            continue
+
+        # ile jest "do automatyzacji" (bez kategorii)
+        pot = (
+            db.query(func.count(Transaction.id))
+            .join(Account, Transaction.account_id == Account.id)
+            .filter(
+                Account.user_id == user_id,
+                Transaction.category_id.is_(None),
+                func.lower(Transaction.description).contains(cand["pattern_value"]),
+            )
+            .scalar()
+            or 0
+        )
+        if pot <= 0:
+            continue
+
+        suggestion_key = f'{cand["pattern_value"]}:{cand["category_id"]}'
+
+        suggestions.append(
+            LabSuggestionOut(
+                suggestion_key=suggestion_key,
+                pattern_value=cand["pattern_value"],
+                pattern_type="contains",
+                category_id=cand["category_id"],
+                category_name=cand["category_name"],
+                manual_occurrences=cand["manual_occurrences"],
+                potential_matches=int(pot),
+            )
+        )
+
+    suggestions.sort(key=lambda s: (s.potential_matches, s.manual_occurrences), reverse=True)
+    suggestions = suggestions[:12]
+
+    return LabInsightsOut(
+        coverage_total=int(total),
+        coverage_categorized=int(categorized),
+        coverage_pct=float(round(pct, 2)),
+        assignments_manual=int(manual_cnt),
+        assignments_rule=int(rule_cnt),
+        suggestions=suggestions,
+    )
+
+
+@app.post("/lab/enable-rule", response_model=EnableRuleResult)
+def enable_rule(payload: EnableRulePayload, db: Session = Depends(get_db)):
+    user = get_current_user(db)
+    user_id = user.id
+
+    cat = db.get(Category, payload.category_id)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    pattern_value = normalize_text(payload.pattern_value)
+    if not pattern_value:
+        raise HTTPException(status_code=400, detail="pattern_value required")
+
+    existing = (
+        db.query(CategoryRule)
+        .filter(
+            CategoryRule.user_id == user_id,
+            CategoryRule.field == "description",
+            CategoryRule.pattern_type == payload.pattern_type,
+            CategoryRule.pattern_value == pattern_value,
+            CategoryRule.category_id == payload.category_id,
+        )
+        .first()
+    )
+
+    created = False
+    if not existing:
+        rule = CategoryRule(
+            user_id=user_id,
+            category_id=payload.category_id,
+            field="description",
+            pattern_type=payload.pattern_type,
+            pattern_value=pattern_value,
+            priority=100,
+            enabled=True,
+        )
+        db.add(rule)
+        db.commit()
+        created = True
+
+    applied = apply_rules_for_user(db, user_id)
+
+    return EnableRuleResult(created=created, applied=int(applied or 0))
+
 
 
 def ensure_default_categories(db: Session, user: User):
@@ -1168,6 +1339,20 @@ def normalize_text(s: str | None) -> str:
 
     return s
 
+
+STOP_TOKENS = {
+    "pln", "ref", "zlec", "zlecenie", "transakcja", "platnosc",
+    "karta", "przelew", "oplata", "opłata", "saldo", "data"
+}
+
+def extract_candidate_pattern(description: str | None) -> str | None:
+    if not description:
+        return None
+    desc_norm = normalize_text(description)
+    tokens = [t for t in desc_norm.split() if len(t) >= 4 and t not in STOP_TOKENS]
+    if not tokens:
+        return None
+    return max(tokens, key=len)
 
 
 from sqlalchemy import or_

@@ -220,3 +220,4 @@ export async function applyCategoryRules(): Promise<{ assigned: number }> {
   }
   return res.json();
 }
+

@@ -112,3 +112,30 @@ class CategoryRuleCreate(BaseModel):
 
 class ApplyRulesResult(BaseModel):
     assigned: int
+
+
+class LabSuggestionOut(BaseModel):
+    suggestion_key: str
+    pattern_value: str
+    pattern_type: str
+    category_id: int
+    category_name: str
+    manual_occurrences: int
+    potential_matches: int
+
+class LabInsightsOut(BaseModel):
+    coverage_total: int
+    coverage_categorized: int
+    coverage_pct: float
+    assignments_manual: int
+    assignments_rule: int
+    suggestions: list[LabSuggestionOut]
+
+class EnableRulePayload(BaseModel):
+    pattern_value: str
+    pattern_type: str = "contains"
+    category_id: int
+
+class EnableRuleResult(BaseModel):
+    created: bool
+    applied: int
