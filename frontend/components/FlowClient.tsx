@@ -38,14 +38,21 @@ export function FlowClient() {
   const [kind, setKind] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
 
-  // ✅ „pro” zaznaczenie: trzymamy ID, a nie cały obiekt
+  // ✅ trzymamy ID, a nie cały obiekt (żeby panel zawsze brał świeże dane ze stanu)
   const [selectedTxId, setSelectedTxId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // sugerowana reguła (wiązana do konkretnego tx)
+  // ✅ sugestia automatyzacji (wiązana do konkretnej transakcji)
   const [ruleSuggestion, setRuleSuggestion] = useState<
     (RuleSuggestion & { txId: number }) | null
   >(null);
+
+  // ✅ “Nie teraz” – chowamy sugestię tylko dla aktualnie klikniętej transakcji
+  const [dismissedSuggestionForTx, setDismissedSuggestionForTx] = useState<
+    number | null
+  >(null);
+
+  const [enablingSuggestion, setEnablingSuggestion] = useState(false);
 
   // 1) Load data
   useEffect(() => {
@@ -83,16 +90,14 @@ export function FlowClient() {
     const afterSearch =
       q.length === 0
         ? afterKind
-        : afterKind.filter((t) =>
-            normalizeQuery(t.description ?? "").includes(q)
-          );
+        : afterKind.filter((t) => normalizeQuery(t.description ?? "").includes(q));
 
     const metrics = computeMetrics(afterSearch);
 
     return { filtered: afterSearch, startDate, metrics };
   }, [transactions, range, kind, search]);
 
-  // ✅ Wyliczamy obiekt zaznaczonej transakcji zawsze z transactions
+  // ✅ zaznaczona transakcja zawsze z aktualnego stanu
   const selectedTx = useMemo(() => {
     if (!selectedTxId) return null;
     return transactions.find((t) => t.id === selectedTxId) ?? null;
@@ -107,6 +112,7 @@ export function FlowClient() {
       window.setTimeout(() => {
         setSelectedTxId(null);
         setRuleSuggestion(null);
+        setDismissedSuggestionForTx(null);
       }, 300);
     }
   }, [filtered, selectedTxId]);
@@ -116,6 +122,8 @@ export function FlowClient() {
     if (!selectedTxId) {
       setSelectedTxId(txId);
       setDetailOpen(true);
+      setRuleSuggestion(null);
+      setDismissedSuggestionForTx(null);
       return;
     }
 
@@ -125,6 +133,7 @@ export function FlowClient() {
       window.setTimeout(() => {
         setSelectedTxId(null);
         setRuleSuggestion(null);
+        setDismissedSuggestionForTx(null);
       }, 300);
       return;
     }
@@ -132,6 +141,8 @@ export function FlowClient() {
     // klik w inny → przełącz rekord, panel zostaje otwarty
     setSelectedTxId(txId);
     setDetailOpen(true);
+    setRuleSuggestion(null);
+    setDismissedSuggestionForTx(null);
   };
 
   const handleChangeCategory = async (txId: number, categoryId: number | null) => {
@@ -139,16 +150,18 @@ export function FlowClient() {
       const { transaction: updated, rule_suggestion } =
         await updateTransactionCategory(txId, categoryId);
 
-      // ✅ podmień transakcję w stanie (a panel i tak weźmie świeżą przez selectedTxId)
+      // ✅ aktualizacja “in place” (nie resetuje tabeli)
       setTransactions((prev) =>
         prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
       );
 
-      // sugestia reguły
+      // ✅ sugestia automatyzacji po ręcznej decyzji usera
       if (rule_suggestion) {
         setRuleSuggestion({ txId, ...rule_suggestion });
+        setDismissedSuggestionForTx(null);
       } else {
         setRuleSuggestion(null);
+        setDismissedSuggestionForTx(null);
       }
     } catch (e) {
       console.error(e);
@@ -158,7 +171,9 @@ export function FlowClient() {
   const handleAcceptRuleSuggestion = async () => {
     if (!ruleSuggestion) return;
 
+    setEnablingSuggestion(true);
     try {
+      // tworzymy regułę w tle (user widzi tylko “automatyzację”)
       await createCategoryRule({
         category_id: ruleSuggestion.category_id,
         pattern_value: ruleSuggestion.pattern_value,
@@ -166,9 +181,10 @@ export function FlowClient() {
         field: "description",
       });
 
+      // stosujemy reguły do istniejących danych
       await applyCategoryRules();
 
-      // refresh
+      // refresh danych (tabela nie powinna resetować paginacji bo autoResetPageIndex=false)
       const [txs, cats] = await Promise.all([
         fetchTransactions(),
         fetchCategories(),
@@ -177,12 +193,16 @@ export function FlowClient() {
       setCategories(cats);
 
       setRuleSuggestion(null);
+      setDismissedSuggestionForTx(null);
     } catch (e) {
       console.error(e);
+    } finally {
+      setEnablingSuggestion(false);
     }
   };
 
   const handleDismissRuleSuggestion = () => {
+    if (ruleSuggestion?.txId) setDismissedSuggestionForTx(ruleSuggestion.txId);
     setRuleSuggestion(null);
   };
 
@@ -258,6 +278,7 @@ export function FlowClient() {
                 </button>
               ))}
             </div>
+
             <div className="flex-1 flex justify-end">
               <input
                 type="text"
@@ -283,9 +304,7 @@ export function FlowClient() {
                 <span className="text-slate-200 font-medium">{rangeText}</span>
                 <br />
                 Wyświetlane:{" "}
-                <span className="text-slate-200 font-medium">
-                  {filtered.length}
-                </span>
+                <span className="text-slate-200 font-medium">{filtered.length}</span>
               </div>
             </div>
 
@@ -310,9 +329,7 @@ export function FlowClient() {
               {/* PRAWO: panel */}
               <div
                 className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
-                style={{
-                  flexBasis: detailOpen ? "320px" : "0px",
-                }}
+                style={{ flexBasis: detailOpen ? "320px" : "0px" }}
               >
                 <div className="h-full flex justify-start">
                   {selectedTx && (
@@ -321,8 +338,11 @@ export function FlowClient() {
                       transaction={selectedTx}
                       categories={categories}
                       onChangeCategory={handleChangeCategory}
+                      enablingSuggestion={enablingSuggestion}
                       ruleSuggestion={
-                        ruleSuggestion && ruleSuggestion.txId === selectedTx.id
+                        ruleSuggestion &&
+                        ruleSuggestion.txId === selectedTx.id &&
+                        dismissedSuggestionForTx !== selectedTx.id
                           ? ruleSuggestion
                           : null
                       }
@@ -365,32 +385,22 @@ function FlowSidebar({
       </div>
 
       <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">
-          Typ przepływu
-        </div>
+        <div className="text-[11px] font-medium text-slate-300">Typ przepływu</div>
         <div className="flex flex-wrap gap-1">
           <ChipButton active={kind === "all"} onClick={() => onKindChange("all")}>
             Wszystkie
           </ChipButton>
-          <ChipButton
-            active={kind === "income"}
-            onClick={() => onKindChange("income")}
-          >
+          <ChipButton active={kind === "income"} onClick={() => onKindChange("income")}>
             Wpływy
           </ChipButton>
-          <ChipButton
-            active={kind === "expense"}
-            onClick={() => onKindChange("expense")}
-          >
+          <ChipButton active={kind === "expense"} onClick={() => onKindChange("expense")}>
             Wydatki
           </ChipButton>
         </div>
       </div>
 
       <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">
-          Presety zakresów
-        </div>
+        <div className="text-[11px] font-medium text-slate-300">Presety zakresów</div>
         <div className="grid grid-cols-3 gap-1 text-[11px]">
           {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
             <button
@@ -461,9 +471,7 @@ function KpiCard({
   return (
     <div className="glass-card glass-card-hover-strong p-4 flex flex-col justify-between">
       <div>
-        <div className="text-[11px] uppercase tracking-wide text-slate-400">
-          {label}
-        </div>
+        <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
         <div className="mt-2 text-xl font-semibold text-slate-50">{value}</div>
       </div>
       <div className="mt-3 text-[11px] text-slate-500">{subtitle}</div>
@@ -546,9 +554,7 @@ const transactionColumns: ColumnDef<TxExt>[] = [
       const d = new Date(raw);
       if (Number.isNaN(d.getTime())) return <span className="text-slate-500">—</span>;
       return (
-        <span className="whitespace-nowrap text-slate-400">
-          {formatDateDisplay(d)}
-        </span>
+        <span className="whitespace-nowrap text-slate-400">{formatDateDisplay(d)}</span>
       );
     },
   },
@@ -766,6 +772,7 @@ function TransactionSideDetails({
   categories,
   onChangeCategory,
   ruleSuggestion,
+  enablingSuggestion,
   onAcceptRuleSuggestion,
   onDismissRuleSuggestion,
 }: {
@@ -774,6 +781,7 @@ function TransactionSideDetails({
   categories: Category[];
   onChangeCategory: (txId: number, categoryId: number | null) => void;
   ruleSuggestion: (RuleSuggestion & { txId: number }) | null;
+  enablingSuggestion: boolean;
   onAcceptRuleSuggestion: () => void;
   onDismissRuleSuggestion: () => void;
 }) {
@@ -863,35 +871,47 @@ function TransactionSideDetails({
               </span>
             ) : (
               <span className="text-[9px] text-slate-600 whitespace-nowrap">
-                źródło: — unknown —
+                źródło: —
               </span>
             )}
           </div>
         </div>
 
+        {/* ✅ Dyskretna “automatyzacja podobnych” (bez słowa "reguła" w UX) */}
         {ruleSuggestion && (
-          <div className="mt-3 rounded-2xl border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-[11px] text-indigo-100 flex items-start justify-between gap-2">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
+          <div className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] text-slate-100 font-medium flex items-center gap-1.5">
                 <span className="text-[12px]">✨</span>
-                <span className="font-medium">Zauważyliśmy powtarzający się wzorzec</span>
+                Automatyzacja podobnych
               </div>
-              <div className="text-[11px] text-indigo-100/90">
-                W opisie transakcji często pojawia się{" "}
-                <span className="font-semibold">{ruleSuggestion.pattern_value}</span>.{" "}
-                Możesz utworzyć regułę ({ruleSuggestion.similar_count} znalezionych).
+              <div className="mt-1 text-[10px] text-slate-400">
+                Często pojawia się{" "}
+                <span className="text-indigo-200 font-semibold">
+                  {ruleSuggestion.pattern_value}
+                </span>
+                . Chcesz automatycznie przypisać tę kategorię do podobnych transakcji
+                ({ruleSuggestion.similar_count})?
               </div>
             </div>
-            <div className="flex flex-col gap-1 shrink-0">
+
+            <div className="shrink-0 flex flex-col items-end gap-1">
               <button
                 onClick={onAcceptRuleSuggestion}
-                className="rounded-full bg-indigo-400 text-slate-950 px-3 py-1 text-[11px] font-medium hover:bg-indigo-300 transition-colors"
+                disabled={enablingSuggestion}
+                className="
+                  rounded-full border border-indigo-400/60 bg-indigo-500/20
+                  px-3 py-1 text-[11px] font-medium text-indigo-100
+                  hover:bg-indigo-500/30 transition-colors
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                "
               >
-                Dodaj regułę
+                {enablingSuggestion ? "Włączanie…" : "Włącz"}
               </button>
               <button
                 onClick={onDismissRuleSuggestion}
-                className="rounded-full border border-indigo-400/40 text-indigo-100/80 px-3 py-1 text-[10px] hover:bg-indigo-500/10 transition-colors"
+                className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                type="button"
               >
                 Nie teraz
               </button>
@@ -915,14 +935,13 @@ function TransactionSideDetails({
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
-            {hasDesc ? desc : "— brak opisu —"}
+            {hasDesc ? desc : "—"}
           </div>
         </div>
       </div>
 
       <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
-        W „Lab” rozbudujemy ten panel o sugestie kategorii, podobne transakcje
-        i wykryte subskrypcje.
+        Ten panel będzie się dalej “inteligentnie” rozbudowywał w Lab (podpowiedzi, podobne transakcje, subskrypcje).
       </div>
     </aside>
   );
@@ -1033,7 +1052,11 @@ function computeMetrics(data: TxExt[]) {
 
 function rangeLabel(range: RangeKey, startDate: Date | null) {
   if (!startDate) return "całej historii";
-  const opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" };
+  const opts: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  };
   return `okres od ${startDate.toLocaleDateString("pl-PL", opts)}`;
 }
 

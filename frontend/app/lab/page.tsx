@@ -2,7 +2,6 @@
 
 import React from "react";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
 
 import {
   Category,
@@ -13,8 +12,9 @@ import {
   applyCategoryRules,
 } from "@/lib/serverApi";
 
-export default function LabPage() {
+import { LabClient } from "@/components/LabClient";
 
+export default function LabPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [rules, setRules] = useState<CategoryRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,16 +50,18 @@ export default function LabPage() {
     load();
   }, []);
 
-
-    const handleCreateRule = async (e: React.FormEvent) => {
+  const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
     setInfo(null);
+
     if (!selectedCategoryId || !patternValue.trim()) {
       setError("Wybierz kategorię i wpisz wzorzec.");
       return;
     }
+
     setSavingRule(true);
     setError(null);
+
     try {
       const rule = await createCategoryRule({
         category_id: Number(selectedCategoryId),
@@ -92,7 +94,6 @@ export default function LabPage() {
     }
   };
 
-
   return (
     <div className="relative flex h-full flex-col gap-6">
       {/* Header labu */}
@@ -102,16 +103,16 @@ export default function LabPage() {
         </h1>
         <p className="text-sm md:text-[13px] text-slate-400 max-w-xl">
           Inteligentna warstwa Twojej aplikacji finansowej. Tutaj uczysz system,
-          a system później pomaga Tobie – reguły, automatyczne kategorie
-          i w przyszłości &bdquo;AI asystent&rdquo; dla Twoich wydatków.
+          a system później pomaga Tobie – reguły, automatyczne kategorie i w
+          przyszłości &bdquo;AI asystent&rdquo; dla Twoich wydatków.
         </p>
       </div>
 
-      {/* Grid z trzema głównymi sekcjami */}
+      {/* Grid: lewo (rules) + prawo (AI Assistant) */}
       <div className="grid gap-6 xl:grid-cols-[1.25fr,1fr]">
         {/* Lewa kolumna: overview + rules */}
         <div className="flex flex-col gap-6">
-          {/* Smart Overview */}
+          {/* Smart Overview (na razie statyczne, możesz potem spiąć z /lab/insights) */}
           <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-900/50 bg-gradient-to-br from-slate-900/60 via-slate-900/30 to-slate-900/60 shadow-[0_0_0_1px_rgba(15,23,42,0.7)] backdrop-blur-xl">
             <div className="absolute -top-16 -right-20 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
             <div className="absolute -bottom-16 -left-24 h-40 w-40 rounded-full bg-pink-500/10 blur-3xl" />
@@ -132,7 +133,6 @@ export default function LabPage() {
                 </div>
               </div>
 
-              {/* trzy proste kafelki (na razie statyczne) */}
               <div className="grid gap-3 sm:grid-cols-3 text-[11px] sm:text-xs">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-3 py-2.5">
                   <div className="text-slate-500 mb-1">Pokrycie kategorii</div>
@@ -163,7 +163,7 @@ export default function LabPage() {
             </div>
           </section>
 
-          {/* Smart Rules – spięte z backendem */}
+          {/* Smart Rules */}
           <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/60 shadow-[0_0_0_1px_rgba(15,23,42,0.7)] backdrop-blur-xl">
             <div className="absolute -top-10 left-10 h-24 w-24 rounded-full bg-indigo-500/15 blur-3xl" />
             <div className="absolute -bottom-16 right-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl" />
@@ -183,6 +183,7 @@ export default function LabPage() {
                     System zastosuje je do nowych i istniejących transakcji.
                   </p>
                 </div>
+
                 <button
                   type="button"
                   onClick={handleApplyRules}
@@ -383,43 +384,11 @@ export default function LabPage() {
           </section>
         </div>
 
-        {/* Prawa kolumna: AI suggestions */}
-        <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/70 shadow-[0_0_0_1px_rgba(15,23,42,0.7)] backdrop-blur-xl flex flex-col">
-          <div className="absolute -top-10 right-6 h-24 w-24 rounded-full bg-emerald-500/15 blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-purple-500/10 blur-3xl" />
-
-          <div className="relative px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-slate-800/80">
-            <h2 className="text-sm font-medium text-slate-100 flex items-center gap-2">
-              AI suggestions
-              <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 px-2 py-0.5 text-[10px] text-slate-300">
-                w przygotowaniu
-              </span>
-            </h2>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Tutaj pojawią się inteligentne podpowiedzi kategorii
-              dla nowych transakcji, oparte o Twoją historię i reguły.
-              Bez żadnych technicznych szczegółów – po prostu &bdquo;asystent&rdquo;,
-              który zna Twój styl wydawania pieniędzy.
-            </p>
-          </div>
-
-          <div className="relative flex-1 p-5 sm:p-6 flex items-center justify-center">
-            <div className="max-w-xs text-center space-y-2">
-              <div className="mx-auto h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500/60 to-emerald-400/70 flex items-center justify-center text-lg">
-                ✨
-              </div>
-              <div className="text-sm font-medium text-slate-100">
-                AI lab jeszcze się uczy
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Gdy zaczniesz częściej przypisywać kategorie i tworzyć reguły,
-                ten moduł zacznie proponować rozwiązania zanim sam o nich pomyślisz.
-              </p>
-            </div>
-          </div>
-        </section>
+        {/* Prawa kolumna: AI Assistant (LabClient) */}
+        <div className="flex flex-col gap-6">
+          <LabClient />
+        </div>
       </div>
     </div>
   );
-
 }

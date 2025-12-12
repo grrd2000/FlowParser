@@ -221,3 +221,41 @@ export async function applyCategoryRules(): Promise<{ assigned: number }> {
   return res.json();
 }
 
+export type LabSuggestion = {
+  suggestion_key: string;
+  pattern_value: string;
+  pattern_type: "contains" | "startswith";
+  category_id: number;
+  category_name: string;
+  manual_occurrences: number;
+  potential_matches: number;
+};
+
+export type LabInsights = {
+  coverage_total: number;
+  coverage_categorized: number;
+  coverage_pct: number;
+  assignments_manual: number;
+  assignments_rule: number;
+  suggestions: LabSuggestion[];
+};
+
+export async function fetchLabInsights(): Promise<LabInsights> {
+  const res = await fetch(`${API_BASE_URL}/lab/insights`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch lab insights");
+  return res.json();
+}
+
+export async function enableLabRule(payload: {
+  pattern_value: string;
+  pattern_type: "contains" | "startswith";
+  category_id: number;
+}): Promise<{ created: boolean; applied: number }> {
+  const res = await fetch(`${API_BASE_URL}/lab/enable-rule`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to enable rule");
+  return res.json();
+}

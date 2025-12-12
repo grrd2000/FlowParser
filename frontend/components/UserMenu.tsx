@@ -154,6 +154,24 @@ export function UserMenu() {
                     wyciągi
                   </span>
                 </Link>
+                {/* <Link
+                  href="/lab"
+                  className="
+                    flex items-center justify-between gap-3
+                    rounded-xl px-3 py-2
+                    text-[12px] text-slate-200
+                    hover:bg-white/5 hover:text-white
+                    transition-colors
+                  "
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/15 border border-indigo-400/30">
+                      ✨
+                    </span>
+                    AI Assistant
+                  </span>
+                  <span className="text-[10px] text-slate-500">Lab</span>
+                </Link> */}
               </nav>
             </div>
 
