@@ -72,20 +72,6 @@ class StatementSummary(BaseModel):
         from_attributes = True
 
 
-class CategoryOut(BaseModel):
-    id: int
-    name: str
-    color: Optional[str] = None
-
-    class Config:
-        orm_mode = True
-
-
-class CategoryCreate(BaseModel):
-    name: str
-    color: Optional[str] = None
-
-
 class CategoryUpdatePayload(BaseModel):
     category_id: int | None
 
@@ -108,6 +94,19 @@ class CategoryRuleCreate(BaseModel):
     pattern_value: str
     pattern_type: str = "contains"  # albo startswith
     field: str = "description"
+
+
+class CategoryRuleUpdate(BaseModel):
+    category_id: Optional[int] = None
+    pattern_value: Optional[str] = None
+    pattern_type: Optional[str] = None
+    field: Optional[str] = None
+    priority: Optional[int] = None
+    enabled: Optional[bool] = None
+
+
+class CategoryRuleReorder(BaseModel):
+    rule_ids: list[int]
 
 
 class ApplyRulesResult(BaseModel):
@@ -139,3 +138,26 @@ class EnableRulePayload(BaseModel):
 class EnableRuleResult(BaseModel):
     created: bool
     applied: int
+
+
+class CategoryOut(BaseModel):
+    id: int
+    name: str
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    is_system: bool
+
+    class Config:
+        orm_mode = True
+
+
+class CategoryCreate(BaseModel):
+    name: str
+    color: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None

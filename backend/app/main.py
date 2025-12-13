@@ -28,20 +28,23 @@ from app.models import (
 )
 
 from app.schemas import (
-    UserProfileResponse, 
-    UserProfileUpdate, 
-    AccountSummary, 
-    StatementSummary, 
-    CategoryOut, 
-    CategoryUpdatePayload, 
-    CategoryCreate, 
-    CategoryRuleOut, 
-    CategoryRuleCreate, 
+    UserProfileResponse,
+    UserProfileUpdate,
+    AccountSummary,
+    StatementSummary,
+    CategoryOut,
+    CategoryUpdatePayload,
+    CategoryCreate,
+    CategoryUpdate,              # <-- DODAJ
+    CategoryRuleOut,
+    CategoryRuleCreate,
+    CategoryRuleUpdate,          # <-- DODAJ
+    CategoryRuleReorder,         # <-- DODAJ
     ApplyRulesResult,
-    LabSuggestionOut,
     LabInsightsOut,
+    EnableRuleResult,
     EnableRulePayload,
-    EnableRuleResult
+    LabSuggestionOut
 )
 
 from app.utils.pko_pdf_parser import parse_pko_statement
@@ -566,8 +569,8 @@ async def import_pdf(
         else:
             existing_stmt = None
 
-        print(dup_query)
-        print(dup_query.first())
+        # print(dup_query)
+        # print(dup_query.first())
 
         if existing_stmt:
             print("Found existing statement – reimporting:", existing_stmt.id)
@@ -713,8 +716,7 @@ async def import_pdf(
 
     # po imporcie – zastosuj reguły użytkownika
     try:
-        user_id = account.user_id
-        auto_by_rules = apply_rules_for_user(db, user_id)
+        auto_by_rules = apply_rules_for_statement(db, user.id, statement.id)
     except Exception as e:
         print("Apply rules after import failed:", e)
         auto_by_rules = 0
@@ -920,6 +922,282 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(cat)
     return cat
+
+
+from sqlalchemy import func
+
+@app.put("/categories/{category_id}", response_model=CategoryOut)
+def update_category(category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cat = db.get(Category, category_id)
+    if not cat or cat.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    # opcjonalnie: unikalna nazwa per user
+    if payload.name:
+        dup = (
+            db.query(Category)
+            .filter(
+                Category.user_id == user.id,
+                func.lower(Category.name) == payload.name.lower(),
+                Category.id != cat.id,
+            )
+            .first()
+        )
+        if dup:
+            raise HTTPException(status_code=409, detail="Category name already exists")
+
+    if payload.name is not None:
+        cat.name = payload.name.strip()
+    if payload.color is not None:
+        cat.color = payload.color
+    if payload.icon is not None:
+        cat.icon = payload.icon
+
+    db.commit()
+    db.refresh(cat)
+    return cat
+
+
+@app.delete("/categories/{category_id}")
+def delete_category(
+    category_id: int,
+    unassign: bool = Query(False),
+    delete_rules: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(db)
+
+    cat = (
+        db.query(Category)
+        .filter(Category.id == category_id, Category.user_id == user.id)
+        .first()
+    )
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    tx_count = (
+        db.query(func.count(Transaction.id))
+        .filter(Transaction.category_id == category_id)
+        .scalar()
+    ) or 0
+
+    rule_count = (
+        db.query(func.count(CategoryRule.id))
+        .filter(
+            CategoryRule.user_id == user.id,
+            CategoryRule.category_id == category_id,
+        )
+        .scalar()
+    ) or 0
+
+    # Jeśli jest używana i user nie wybrał trybu "force" → 403 z detalami
+    if (tx_count > 0 or rule_count > 0) and not (unassign and (delete_rules or rule_count == 0)):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Category is in use",
+                "tx_count": tx_count,
+                "rule_count": rule_count,
+                "actions": {
+                    "unassign": True,
+                    "delete_rules": True,
+                },
+            },
+        )
+
+    # 1) odłącz kategorię od transakcji
+    if unassign and tx_count > 0:
+        db.query(Transaction).filter(Transaction.category_id == category_id).update(
+            {
+                Transaction.category_id: None,
+                Transaction.category: None,
+                Transaction.category_source: "unknown",
+                Transaction.category_confidence: None,
+            },
+            synchronize_session=False,
+        )
+
+    # 2) usuń reguły prowadzące do tej kategorii (jeśli wybrano)
+    if delete_rules and rule_count > 0:
+        db.query(CategoryRule).filter(
+            CategoryRule.user_id == user.id,
+            CategoryRule.category_id == category_id,
+        ).delete(synchronize_session=False)
+
+    # Jeśli nadal są reguły (user nie wybrał delete_rules) → blokuj
+    remaining_rules = (
+        db.query(func.count(CategoryRule.id))
+        .filter(CategoryRule.user_id == user.id, CategoryRule.category_id == category_id)
+        .scalar()
+    ) or 0
+    if remaining_rules > 0:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Category is used by rules",
+                "tx_count": tx_count,
+                "rule_count": remaining_rules,
+            },
+        )
+
+    db.delete(cat)
+    db.commit()
+
+    return {"ok": True}
+
+
+
+
+@app.get("/categories/stats")
+def category_stats(db: Session = Depends(get_db)):
+    user = get_current_user(db)
+
+    rows = (
+        db.query(Transaction.category_id, func.count(Transaction.id))
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(Account.user_id == user.id)
+        .filter(Transaction.category_id.isnot(None))
+        .group_by(Transaction.category_id)
+        .all()
+    )
+
+    # {category_id: tx_count}
+    return {int(cat_id): int(cnt) for (cat_id, cnt) in rows}
+
+
+@app.put("/category-rules/{rule_id}", response_model=CategoryRuleOut)
+def update_category_rule(rule_id: int, payload: CategoryRuleUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rule = db.get(CategoryRule, rule_id)
+    if not rule or rule.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    if payload.category_id is not None:
+        cat = db.get(Category, payload.category_id)
+        if not cat or cat.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Category not found")
+        rule.category_id = cat.id
+
+    if payload.pattern_value is not None:
+        rule.pattern_value = payload.pattern_value.strip()
+    if payload.pattern_type is not None:
+        rule.pattern_type = payload.pattern_type
+    if payload.field is not None:
+        rule.field = payload.field
+    if payload.priority is not None:
+        rule.priority = int(payload.priority)
+    if payload.enabled is not None:
+        rule.enabled = bool(payload.enabled)
+
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@app.delete("/category-rules/{rule_id}")
+def delete_category_rule(rule_id: int, db: Session = Depends(get_db)):
+    user = get_current_user(db)
+
+    rule = (
+        db.query(CategoryRule)
+        .filter(CategoryRule.id == rule_id, CategoryRule.user_id == user.id)
+        .first()
+    )
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    # znajdź transakcje, którym TA reguła mogła nadać kategorię
+    q = (
+        db.query(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(
+            Account.user_id == user.id,
+            Transaction.is_manual == False,
+            Transaction.category_source == "rule",
+            Transaction.category_id == rule.category_id,
+        )
+    )
+
+    affected = 0
+    for tx in q.all():
+        text_norm = normalize_text(tx.description or "")
+
+        pattern_norm = normalize_text(rule.pattern_value or "")
+        if not pattern_norm:
+            continue
+
+        ok = False
+        if rule.pattern_type == "contains":
+            ok = pattern_norm in text_norm
+        elif rule.pattern_type == "startswith":
+            ok = text_norm.startswith(pattern_norm)
+        elif rule.pattern_type == "token":
+            toks = tokenize(rule.pattern_value or "")
+            token = toks[0] if toks else None
+            if token:
+                ok = description_contains_token(tx.description or "", token)
+
+        if ok:
+            old_cat_id = tx.category_id
+            tx.category_id = None
+            tx.category = None
+            tx.category_source = "unknown"
+            tx.category_confidence = None
+
+            db.add(
+                ClassificationEvent(
+                    transaction_id=tx.id,
+                    old_category_id=old_cat_id,
+                    new_category_id=None,
+                    source="rule_deleted",
+                )
+            )
+            affected += 1
+
+    db.delete(rule)
+    db.commit()
+    return {"ok": True, "detached": affected}
+
+
+@app.post("/category-rules/reorder", response_model=list[CategoryRuleOut])
+def reorder_category_rules(payload: CategoryRuleReorder, db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email="demo@example.com").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rules = (
+        db.query(CategoryRule)
+        .filter(CategoryRule.user_id == user.id)
+        .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
+        .all()
+    )
+    existing_ids = [r.id for r in rules]
+    if set(existing_ids) != set(payload.rule_ids):
+        raise HTTPException(status_code=400, detail="rule_ids must contain exactly all current rule ids")
+
+    # nadajemy priorytety w równych krokach, stabilnie
+    id_to_rule = {r.id: r for r in rules}
+    for idx, rid in enumerate(payload.rule_ids):
+        id_to_rule[rid].priority = (idx + 1) * 10
+
+    db.commit()
+
+    # zwróć w nowej kolejności
+    out = (
+        db.query(CategoryRule)
+        .filter(CategoryRule.user_id == user.id)
+        .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
+        .all()
+    )
+    return out
+
 
 
 MIN_SIMILAR_FOR_SUGGESTION = 5  # od ilu podobnych transakcji warto proponować regułę
@@ -1456,6 +1734,100 @@ def extract_candidate_pattern(description: str | None) -> str | None:
     if not tokens:
         return None
     return max(tokens, key=len)
+
+def apply_rules_for_statement(db: Session, user_id: int, statement_id: int) -> int:
+    """
+    Stosuje reguły użytkownika TYLKO do transakcji należących do danego statementu,
+    które są jeszcze bez kategorii / unknown i nie są manualne.
+
+    Dzięki temu: po imporcie nowego miesiąca reguły działają od razu,
+    bez mielnia całej historii.
+    """
+    rules = (
+        db.query(CategoryRule)
+        .filter(
+            CategoryRule.user_id == user_id,
+            CategoryRule.enabled == True,
+        )
+        .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
+        .all()
+    )
+    if not rules:
+        return 0
+
+    txs = (
+        db.query(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .join(RawTransaction, Transaction.raw_transaction_id == RawTransaction.id)
+        .filter(
+            Account.user_id == user_id,
+            RawTransaction.statement_id == statement_id,
+            Transaction.is_manual == False,
+            or_(
+                Transaction.category_id.is_(None),
+                Transaction.category_source.is_(None),
+                Transaction.category_source == "unknown",
+            ),
+        )
+        .all()
+    )
+
+    assigned = 0
+
+    for tx in txs:
+        text_norm = normalize_text(tx.description or "")
+
+        old_cat_id = tx.category_id
+
+        for rule in rules:
+            if rule.field != "description":
+                continue
+
+            pattern_norm = normalize_text(rule.pattern_value or "")
+            if not pattern_norm:
+                continue
+
+            ok = False
+            if rule.pattern_type == "contains":
+                ok = pattern_norm in text_norm
+
+            elif rule.pattern_type == "startswith":
+                ok = text_norm.startswith(pattern_norm)
+
+            elif rule.pattern_type == "token":
+                # pattern_value dla token to pojedynczy token (np. "zabka")
+                toks = tokenize(rule.pattern_value or "")
+                token = toks[0] if toks else None
+                if token:
+                    ok = description_contains_token(tx.description or "", token)
+
+            else:
+                continue
+
+            if ok:
+                cat = rule.category
+                if not cat:
+                    continue
+
+                tx.category_id = cat.id
+                tx.category = cat.name
+                tx.category_source = "rule"
+                tx.category_confidence = None
+
+                db.add(
+                    ClassificationEvent(
+                        transaction_id=tx.id,
+                        old_category_id=old_cat_id,
+                        new_category_id=tx.category_id,
+                        source="rule",
+                    )
+                )
+
+                assigned += 1
+                break
+
+    db.commit()
+    return assigned
 
 
 from sqlalchemy import or_

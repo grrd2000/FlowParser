@@ -57,7 +57,7 @@ def normalize_text(s: str) -> str:
     s = NON_ALNUM_RE.sub(" ", s)
     s = MULTISPACE_RE.sub(" ", s).strip()
 
-    print(f"Normalized text: {s}")
+    # print(f"Normalized text: {s}")
     return s
 
 
