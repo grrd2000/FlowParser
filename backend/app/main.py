@@ -1293,6 +1293,98 @@ def enable_rule(payload: EnableRulePayload, db: Session = Depends(get_db)):
 
     return EnableRuleResult(created=created, applied=int(applied or 0))
 
+@app.get("/lab/overview")
+def lab_overview(db: Session = Depends(get_db)):
+    """
+    Zwraca 'AI-ready' metryki dla zakładki Lab (bez technicznych detali).
+    """
+    total = db.query(Transaction).count()
+    categorized = db.query(Transaction).filter(Transaction.category_id.isnot(None)).count()
+
+    manual = db.query(ClassificationEvent).filter(ClassificationEvent.source == "manual").count()
+    rule = db.query(ClassificationEvent).filter(ClassificationEvent.source == "rule").count()
+
+    pct = round((categorized / total * 100.0), 2) if total else 0.0
+
+    return {
+        "coverage_total": total,
+        "coverage_categorized": categorized,
+        "coverage_pct": pct,
+        "assignments_manual": manual,
+        "assignments_rule": rule,
+    }
+
+@app.get("/category-rules")
+def list_category_rules(db: Session = Depends(get_db)):
+    user = get_current_user(db)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rules = (
+        db.query(CategoryRule, Category.name)
+        .join(Category, Category.id == CategoryRule.category_id)
+        .filter(CategoryRule.user_id == user.id)
+        .order_by(CategoryRule.enabled.desc(), CategoryRule.priority.desc(), CategoryRule.id.desc())
+        .all()
+    )
+
+    # UI-friendly payload
+    out = []
+    for rule, cat_name in rules:
+        # “ile razy użyto” – na razie z eventów; później można zmaterializować
+        used = (
+            db.query(ClassificationEvent)
+            .filter(ClassificationEvent.source == "rule")
+            .join(Transaction, Transaction.id == ClassificationEvent.transaction_id)
+            .filter(Transaction.category_id == rule.category_id)
+            .count()
+        )
+
+        out.append({
+            "id": rule.id,
+            "enabled": rule.enabled,
+            "priority": rule.priority,
+            "field": rule.field,
+            "pattern_type": rule.pattern_type,
+            "pattern_value": rule.pattern_value,
+            "category_id": rule.category_id,
+            "category_name": cat_name,
+            "used_count": used,
+        })
+    return out
+
+
+@app.put("/category-rules/{rule_id}/toggle")
+def toggle_category_rule(rule_id: int, db: Session = Depends(get_db)):
+    user = get_current_user(db)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rule = db.get(CategoryRule, rule_id)
+    if not rule or rule.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    rule.enabled = not rule.enabled
+    db.commit()
+    db.refresh(rule)
+
+    return {"id": rule.id, "enabled": rule.enabled}
+
+
+@app.delete("/category-rules/{rule_id}")
+def delete_category_rule(rule_id: int, db: Session = Depends(get_db)):
+    user = get_current_user(db)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rule = db.get(CategoryRule, rule_id)
+    if not rule or rule.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    db.delete(rule)
+    db.commit()
+    return {"ok": True}
+
 
 
 def ensure_default_categories(db: Session, user: User):

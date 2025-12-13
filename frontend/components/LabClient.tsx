@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  fetchLabInsights,
-  enableLabRule,
-  LabInsights,
-  LabSuggestion,
-} from "@/lib/serverApi";
+import { fetchLabInsights, enableLabRule, LabInsights, LabSuggestion } from "@/lib/serverApi";
 
 const DISMISSED_KEY = "flowparser.dismissed_suggestions.v1";
 
@@ -62,12 +57,14 @@ export function LabClient() {
   const onEnable = async (s: LabSuggestion) => {
     setBusyKey(s.suggestion_key);
     setLastApplied(null);
+
     try {
       const res = await enableLabRule({
         pattern_value: s.pattern_value,
         pattern_type: s.pattern_type,
         category_id: s.category_id,
       });
+
       setLastApplied({ key: s.suggestion_key, applied: res.applied });
       await load();
     } finally {
@@ -84,7 +81,7 @@ export function LabClient() {
 
   if (loading) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-slate-950/50 backdrop-blur-xl p-6 text-[12px] text-slate-400">
+      <section className="glass-card p-6 text-[12px] text-slate-400">
         Ładowanie modułu AI…
       </section>
     );
@@ -96,22 +93,18 @@ export function LabClient() {
   const total = data.coverage_total;
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-950/50 backdrop-blur-xl overflow-hidden">
+    <section className="glass-card overflow-hidden">
       <div className="px-6 sm:px-7 pt-6 pb-5 border-b border-white/10">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
-              AI Assistant
-              <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-slate-300">
-                learning
-              </span>
-            </h2>
-            <p className="mt-1 text-[11px] text-slate-400 max-w-xl">
-              Ten moduł uczy się Twoich decyzji i podpowiada automatyzacje w tle.
-              Bez technicznego gadania — po prostu „włącz” i działa.
-            </p>
-          </div>
-        </div>
+        <h2 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
+          AI Assistant
+          <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-slate-300">
+            learning
+          </span>
+        </h2>
+        <p className="mt-1 text-[11px] text-slate-400 max-w-xl">
+          Ten moduł uczy się Twoich decyzji i podpowiada automatyzacje w tle.
+          Bez technicznego gadania — po prostu „włącz” i działa.
+        </p>
       </div>
 
       <div className="p-6 sm:p-7 space-y-4">

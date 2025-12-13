@@ -1,7 +1,6 @@
 "use client";
 
-import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Category,
@@ -10,6 +9,8 @@ import {
   fetchCategoryRules,
   createCategoryRule,
   applyCategoryRules,
+  fetchLabInsights,
+  LabInsights,
 } from "@/lib/serverApi";
 
 import { LabClient } from "@/components/LabClient";
@@ -17,6 +18,8 @@ import { LabClient } from "@/components/LabClient";
 export default function LabPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [rules, setRules] = useState<CategoryRule[]>([]);
+  const [insights, setInsights] = useState<LabInsights | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [savingRule, setSavingRule] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -33,13 +36,17 @@ export default function LabPage() {
     const load = async () => {
       setLoading(true);
       setError(null);
+
       try {
-        const [cats, rls] = await Promise.all([
+        const [cats, rls, lab] = await Promise.all([
           fetchCategories(),
           fetchCategoryRules(),
+          fetchLabInsights(),
         ]);
+
         setCategories(cats);
         setRules(rls);
+        setInsights(lab);
       } catch (e: any) {
         console.error(e);
         setError(e?.message ?? "Nie udało się pobrać danych do Lab.");
@@ -47,8 +54,29 @@ export default function LabPage() {
         setLoading(false);
       }
     };
+
     load();
   }, []);
+
+  const overview = useMemo(() => {
+    if (!insights) {
+      return {
+        coveragePct: "—",
+        autoAssignments: "—",
+        toReview: "—",
+      };
+    }
+
+    const total = insights.coverage_total ?? 0;
+    const categorized = insights.coverage_categorized ?? 0;
+    const uncategorized = Math.max(0, total - categorized);
+
+    return {
+      coveragePct: `${insights.coverage_pct}%`,
+      autoAssignments: `${insights.assignments_rule.toLocaleString("pl-PL")}`,
+      toReview: `${uncategorized.toLocaleString("pl-PL")}`,
+    };
+  }, [insights]);
 
   const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +96,7 @@ export default function LabPage() {
         pattern_value: patternValue.trim(),
         pattern_type: patternType,
       });
+
       setRules((prev) => [...prev, rule]);
       setPatternValue("");
       setInfo("Nowa reguła została zapisana.");
@@ -83,6 +112,7 @@ export default function LabPage() {
     setApplying(true);
     setError(null);
     setInfo(null);
+
     try {
       const res = await applyCategoryRules();
       setInfo(`Zastosowano reguły do ${res.assigned} transakcji.`);
@@ -96,24 +126,23 @@ export default function LabPage() {
 
   return (
     <div className="relative flex h-full flex-col gap-6">
-      {/* Header labu */}
+      {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
           Lab
         </h1>
         <p className="text-sm md:text-[13px] text-slate-400 max-w-xl">
           Inteligentna warstwa Twojej aplikacji finansowej. Tutaj uczysz system,
-          a system później pomaga Tobie – reguły, automatyczne kategorie i w
-          przyszłości &bdquo;AI asystent&rdquo; dla Twoich wydatków.
+          a system później pomaga Tobie — reguły, automatyczne kategorie i w
+          przyszłości „AI asystent” dla Twoich wydatków.
         </p>
       </div>
 
-      {/* Grid: lewo (rules) + prawo (AI Assistant) */}
       <div className="grid gap-6 xl:grid-cols-[1.25fr,1fr]">
-        {/* Lewa kolumna: overview + rules */}
+        {/* LEWO: overview + rules */}
         <div className="flex flex-col gap-6">
-          {/* Smart Overview (na razie statyczne, możesz potem spiąć z /lab/insights) */}
-          <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-900/50 bg-gradient-to-br from-slate-900/60 via-slate-900/30 to-slate-900/60 shadow-[0_0_0_1px_rgba(15,23,42,0.7)] backdrop-blur-xl">
+          {/* Smart Overview */}
+          <section className="glass-card glass-card-hover-soft relative overflow-hidden">
             <div className="absolute -top-16 -right-20 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
             <div className="absolute -bottom-16 -left-24 h-40 w-40 rounded-full bg-pink-500/10 blur-3xl" />
 
@@ -127,36 +156,42 @@ export default function LabPage() {
                     </span>
                   </h2>
                   <p className="mt-1 text-[11px] text-slate-400 max-w-md">
-                    W skrócie: jak bardzo Twoje finanse są już &bdquo;ogarnięte&rdquo;
+                    W skrócie: jak bardzo Twoje finanse są już „ogarnięte”
                     przez automatyczne reguły i inteligentne kategorie.
                   </p>
                 </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3 text-[11px] sm:text-xs">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-3 py-2.5">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
                   <div className="text-slate-500 mb-1">Pokrycie kategorii</div>
-                  <div className="text-lg font-semibold text-slate-50">—</div>
+                  <div className="text-lg font-semibold text-slate-50">
+                    {loading ? "—" : overview.coveragePct}
+                  </div>
                   <div className="text-[10px] text-slate-500">
-                    Docelowo: ile % transakcji ma sensowną kategorię
+                    Ile % transakcji ma kategorię
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-3 py-2.5">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
                   <div className="text-slate-500 mb-1">
                     Automatyczne przypisania
                   </div>
-                  <div className="text-lg font-semibold text-slate-50">—</div>
+                  <div className="text-lg font-semibold text-slate-50">
+                    {loading ? "—" : overview.autoAssignments}
+                  </div>
                   <div className="text-[10px] text-slate-500">
-                    Reguły + AI vs ręczne przypisania
+                    Reguły + AI vs ręczne
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-3 py-2.5">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
                   <div className="text-slate-500 mb-1">Do przejrzenia</div>
-                  <div className="text-lg font-semibold text-slate-50">—</div>
+                  <div className="text-lg font-semibold text-slate-50">
+                    {loading ? "—" : overview.toReview}
+                  </div>
                   <div className="text-[10px] text-slate-500">
-                    Transakcje, gdzie system nie jest pewny
+                    Transakcje bez kategorii
                   </div>
                 </div>
               </div>
@@ -164,7 +199,7 @@ export default function LabPage() {
           </section>
 
           {/* Smart Rules */}
-          <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/60 shadow-[0_0_0_1px_rgba(15,23,42,0.7)] backdrop-blur-xl">
+          <section className="glass-card glass-card-hover-soft relative overflow-hidden">
             <div className="absolute -top-10 left-10 h-24 w-24 rounded-full bg-indigo-500/15 blur-3xl" />
             <div className="absolute -bottom-16 right-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl" />
 
@@ -173,13 +208,12 @@ export default function LabPage() {
                 <div>
                   <h2 className="text-sm font-medium text-slate-100 flex items-center gap-2">
                     Smart rules
-                    <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 px-2 py-0.5 text-[10px] text-slate-300">
-                      automatyczne zasady kategoryzacji
+                    <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-300">
+                      automatyczne zasady
                     </span>
                   </h2>
                   <p className="mt-1 text-[11px] text-slate-400 max-w-md">
-                    Definiuj reguły typu
-                    &bdquo;jeśli opis zawiera BIEDRONKA → kategoria Jedzenie&rdquo;.
+                    Definiuj reguły typu „jeśli opis zawiera BIEDRONKA → kategoria Jedzenie”.
                     System zastosuje je do nowych i istniejących transakcji.
                   </p>
                 </div>
@@ -191,8 +225,8 @@ export default function LabPage() {
                   className={[
                     "rounded-full border px-3 py-1.5 text-[11px] font-medium",
                     applying || loading
-                      ? "border-slate-700 bg-slate-900/60 text-slate-500 cursor-not-allowed"
-                      : "border-indigo-500/70 bg-indigo-500/15 text-indigo-100 hover:bg-indigo-500/25 transition-colors",
+                      ? "border-white/10 bg-white/5 text-slate-500 cursor-not-allowed"
+                      : "border-indigo-400/60 bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/30 transition-colors",
                   ].join(" ")}
                 >
                   {applying ? "Zastosowywanie..." : "Zastosuj reguły"}
@@ -200,20 +234,20 @@ export default function LabPage() {
               </div>
 
               {error && (
-                <div className="mb-2 rounded-md bg-rose-500/10 border border-rose-500/40 px-3 py-1.5 text-[11px] text-rose-200">
+                <div className="mb-2 rounded-2xl bg-rose-500/10 border border-rose-500/40 px-3 py-2 text-[11px] text-rose-200">
                   {error}
                 </div>
               )}
 
               {info && (
-                <div className="mb-2 rounded-md bg-emerald-500/10 border border-emerald-500/40 px-3 py-1.5 text-[11px] text-emerald-200">
+                <div className="mb-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/40 px-3 py-2 text-[11px] text-emerald-200">
                   {info}
                 </div>
               )}
 
               <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.3fr)]">
                 {/* Lista reguł */}
-                <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 px-4 py-3 min-h-[120px]">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 min-h-[120px]">
                   {loading && (
                     <div className="text-[11px] text-slate-400">
                       Ładowanie reguł...
@@ -221,10 +255,9 @@ export default function LabPage() {
                   )}
 
                   {!loading && rules.length === 0 && (
-                    <div className="text-[11px] text-slate-500">
-                      Nie masz jeszcze żadnych reguł. Dodaj pierwszą po prawej
-                      stronie, a system zacznie automatycznie przypisywać
-                      kategorie.
+                    <div className="text-[11px] text-slate-400">
+                      Nie masz jeszcze żadnych reguł. Dodaj pierwszą po prawej stronie,
+                      albo w Flow kliknij „Włącz” przy sugestii ✨.
                     </div>
                   )}
 
@@ -241,22 +274,17 @@ export default function LabPage() {
                         </thead>
                         <tbody>
                           {rules.map((rule) => {
-                            const cat = categories.find(
-                              (c) => c.id === rule.category_id
-                            );
+                            const cat = categories.find((c) => c.id === rule.category_id);
                             return (
                               <tr
                                 key={rule.id}
-                                className="border-t border-slate-800/80 hover:bg-slate-900/80 transition-colors"
+                                className="border-t border-white/10 hover:bg-white/5 transition-colors"
                               >
                                 <td className="py-2 pr-4 align-middle">
-                                  <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5">
+                                  <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 border border-white/10">
                                     <span
                                       className="w-1.5 h-1.5 rounded-full mr-1.5"
-                                      style={{
-                                        backgroundColor:
-                                          cat?.color ?? "#a5b4fc",
-                                      }}
+                                      style={{ backgroundColor: cat?.color ?? "#a5b4fc" }}
                                     />
                                     <span className="text-[11px] text-slate-100">
                                       {cat?.name ?? "?"}
@@ -285,31 +313,23 @@ export default function LabPage() {
                   )}
                 </div>
 
-                {/* Formularz dodania reguły */}
-                <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 px-4 py-3">
+                {/* Formularz */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <h3 className="text-[12px] font-medium text-slate-100 mb-1.5">
                     Dodaj nową regułę
                   </h3>
                   <p className="text-[10px] text-slate-500 mb-3">
-                    Reguła będzie stosowana do opisu transakcji. Im prostsze
-                    zasady, tym łatwiej utrzymać porządek.
+                    Proste reguły = mniej chaosu. Najlepiej: sklep/usługa → kategoria.
                   </p>
 
-                  <form
-                    onSubmit={handleCreateRule}
-                    className="space-y-3 text-[11px]"
-                  >
+                  <form onSubmit={handleCreateRule} className="space-y-3 text-[11px]">
                     <div className="space-y-1">
                       <label className="text-slate-400">Kategoria</label>
                       <select
-                        className="w-full rounded-full bg-slate-950/60 border border-slate-700/70 px-3 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/80"
+                        className="w-full rounded-full bg-slate-950/60 border border-white/10 px-3 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/80"
                         value={selectedCategoryId}
                         onChange={(e) =>
-                          setSelectedCategoryId(
-                            e.target.value === ""
-                              ? ""
-                              : Number(e.target.value)
-                          )
+                          setSelectedCategoryId(e.target.value === "" ? "" : Number(e.target.value))
                         }
                       >
                         <option value="">— wybierz kategorię —</option>
@@ -322,12 +342,10 @@ export default function LabPage() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-slate-400">
-                        Wzorzec w opisie transakcji
-                      </label>
+                      <label className="text-slate-400">Wzorzec w opisie</label>
                       <input
-                        className="w-full rounded-full bg-slate-950/60 border border-slate-700/70 px-3 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/80"
-                        placeholder='np. "BIEDRONKA", "SPOTIFY"'
+                        className="w-full rounded-full bg-slate-950/60 border border-white/10 px-3 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/80"
+                        placeholder='np. "ZABKA", "BIEDRONKA", "SPOTIFY"'
                         value={patternValue}
                         onChange={(e) => setPatternValue(e.target.value)}
                       />
@@ -335,15 +353,15 @@ export default function LabPage() {
 
                     <div className="space-y-1">
                       <label className="text-slate-400">Typ dopasowania</label>
-                      <div className="inline-flex rounded-full bg-slate-900/70 border border-slate-700/70 p-1">
+                      <div className="inline-flex rounded-full bg-white/5 border border-white/10 p-1">
                         <button
                           type="button"
                           onClick={() => setPatternType("contains")}
                           className={[
                             "px-3 py-1 text-[11px] rounded-full",
                             patternType === "contains"
-                              ? "bg-white text-slate-900"
-                              : "text-slate-300",
+                              ? "bg-white/80 text-slate-900"
+                              : "text-slate-300 hover:bg-white/10",
                           ].join(" ")}
                         >
                           zawiera
@@ -354,8 +372,8 @@ export default function LabPage() {
                           className={[
                             "px-3 py-1 text-[11px] rounded-full",
                             patternType === "startswith"
-                              ? "bg-white text-slate-900"
-                              : "text-slate-300",
+                              ? "bg-white/80 text-slate-900"
+                              : "text-slate-300 hover:bg-white/10",
                           ].join(" ")}
                         >
                           zaczyna się od
@@ -384,7 +402,7 @@ export default function LabPage() {
           </section>
         </div>
 
-        {/* Prawa kolumna: AI Assistant (LabClient) */}
+        {/* PRAWO: AI Assistant */}
         <div className="flex flex-col gap-6">
           <LabClient />
         </div>

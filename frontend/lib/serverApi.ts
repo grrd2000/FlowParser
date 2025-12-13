@@ -259,3 +259,48 @@ export async function enableLabRule(payload: {
   if (!res.ok) throw new Error("Failed to enable rule");
   return res.json();
 }
+
+export type LabOverview = {
+  coverage_total: number;
+  coverage_categorized: number;
+  coverage_pct: number;
+  assignments_manual: number;
+  assignments_rule: number;
+};
+
+export async function fetchLabOverview(): Promise<LabOverview> {
+  const res = await fetch(`${API_BASE_URL}/lab/overview`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch lab overview");
+  return res.json();
+}
+
+export type CategoryRuleUI = {
+  id: number;
+  enabled: boolean;
+  priority: number;
+  field: string;
+  pattern_type: string;
+  pattern_value: string;
+  category_id: number;
+  category_name: string;
+  used_count: number;
+};
+
+
+export async function toggleCategoryRule(ruleId: number): Promise<{ id: number; enabled: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/category-rules/${ruleId}/toggle`, {
+    method: "PUT",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to toggle rule");
+  return res.json();
+}
+
+export async function deleteCategoryRule(ruleId: number): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/category-rules/${ruleId}`, {
+    method: "DELETE",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to delete rule");
+  return res.json();
+}
