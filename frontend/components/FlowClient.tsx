@@ -1,5 +1,8 @@
 "use client";
 
+import * as Tooltip from "@radix-ui/react-tooltip";
+import * as Popover from "@radix-ui/react-popover";
+import * as Slider from "@radix-ui/react-slider";
 import React, { useEffect, useMemo, useState } from "react";
 
 import {
@@ -26,6 +29,7 @@ import {
 
 type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
 type TxExt = Transaction & { amountNum: number; date: Date };
+type Density = "compact" | "comfortable";
 
 type AutomationBanner = {
   txId: number;
@@ -41,27 +45,37 @@ export function FlowClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // presety dat i filtr typu
   const [range, setRange] = useState<RangeKey>("3m");
   const [kind, setKind] = useState<"all" | "income" | "expense">("all");
-  const [search, setSearch] = useState("");
 
-  // ✅ trzymamy ID, a nie cały obiekt (żeby panel zawsze brał świeże dane ze stanu)
+  // panel filtrów
+  const [search, setSearch] = useState("");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [includeUncategorized, setIncludeUncategorized] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "pdf" | "manual">(
+    "all"
+  );
+  const [amountAbs, setAmountAbs] = useState(true);
+  const [amountMin, setAmountMin] = useState<number | null>(null);
+  const [amountMax, setAmountMax] = useState<number | null>(null);
+  const [density, setDensity] = useState<Density>("compact");
+
+  // zaznaczenie (ID + open)
   const [selectedTxId, setSelectedTxId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // ✅ sugestia automatyzacji (wiązana do konkretnej transakcji)
+  // sugestia automatyzacji
   const [ruleSuggestion, setRuleSuggestion] = useState<
     (RuleSuggestion & { txId: number }) | null
   >(null);
 
-  // ✅ “Nie teraz” – chowamy sugestię tylko dla aktualnie klikniętej transakcji
   const [dismissedSuggestionForTx, setDismissedSuggestionForTx] = useState<
     number | null
   >(null);
 
   const [enablingSuggestion, setEnablingSuggestion] = useState(false);
 
-  // ✅ dyskretny status po “Włącz” (bez toastów)
   const [automationBanner, setAutomationBanner] = useState<AutomationBanner>(
     null
   );
@@ -88,36 +102,92 @@ export function FlowClient() {
     load();
   }, []);
 
+  // domain suwaka kwoty (z całego zbioru)
+  const amountDomain = useMemo(() => {
+    const vals = transactions
+      .map((t) => Math.abs(t.amountNum ?? 0))
+      .filter((n) => Number.isFinite(n));
+
+    if (vals.length === 0) return { min: 0, max: 0 };
+
+    const min = Math.floor(Math.min(...vals));
+    const max = Math.ceil(Math.max(...vals));
+    return { min, max };
+  }, [transactions]);
+
   // 2) Filter + metrics
   const { filtered, startDate, metrics } = useMemo(() => {
-    const { filtered, startDate } = filterByRange(transactions, range);
+    // range
+    const { filtered: afterRange, startDate } = filterByRange(transactions, range);
 
-    const afterKind = filtered.filter((t) => {
+    // kind
+    const afterKind = afterRange.filter((t) => {
       if (kind === "income") return t.amountNum >= 0;
       if (kind === "expense") return t.amountNum < 0;
       return true;
     });
 
+    // search
     const q = normalizeQuery(search);
     const afterSearch =
       q.length === 0
         ? afterKind
-        : afterKind.filter((t) =>
-            normalizeQuery(t.description ?? "").includes(q)
-          );
+        : afterKind.filter((t) => normalizeQuery(t.description ?? "").includes(q));
 
-    const metrics = computeMetrics(afterSearch);
+    // categories
+    const afterCategories = afterSearch.filter((t) => {
+      const hasCat = t.category_id != null;
 
-    return { filtered: afterSearch, startDate, metrics };
-  }, [transactions, range, kind, search]);
+      if (selectedCategoryIds.length === 0 && !includeUncategorized) return true;
+      if (hasCat && selectedCategoryIds.includes(t.category_id!)) return true;
+      if (!hasCat && includeUncategorized) return true;
 
-  // ✅ zaznaczona transakcja zawsze z aktualnego stanu
+      return false;
+    });
+
+    // source
+    const afterSource = afterCategories.filter((t) => {
+      if (sourceFilter === "all") return true;
+      if (sourceFilter === "manual") return t.is_manual === true;
+      if (sourceFilter === "pdf") return t.is_manual === false;
+      return true;
+    });
+
+    // amount range
+    const aMin = amountMin;
+    const aMax = amountMax;
+    const afterAmount =
+      aMin == null && aMax == null
+        ? afterSource
+        : afterSource.filter((t) => {
+            const base = amountAbs ? Math.abs(t.amountNum ?? 0) : (t.amountNum ?? 0);
+            if (aMin != null && base < aMin) return false;
+            if (aMax != null && base > aMax) return false;
+            return true;
+          });
+
+    const metrics = computeMetrics(afterAmount);
+    return { filtered: afterAmount, startDate, metrics };
+  }, [
+    transactions,
+    range,
+    kind,
+    search,
+    selectedCategoryIds,
+    includeUncategorized,
+    sourceFilter,
+    amountMin,
+    amountMax,
+    amountAbs,
+  ]);
+
+  // zaznaczona transakcja zawsze z aktualnego stanu
   const selectedTx = useMemo(() => {
     if (!selectedTxId) return null;
     return transactions.find((t) => t.id === selectedTxId) ?? null;
   }, [transactions, selectedTxId]);
 
-  // ✅ jeśli przez filtry zaznaczony rekord wypadnie z widoku – zamykamy panel
+  // jeśli przez filtry zaznaczony rekord wypadnie z widoku – zamykamy panel
   useEffect(() => {
     if (!selectedTxId) return;
     const stillVisible = filtered.some((t) => t.id === selectedTxId);
@@ -127,12 +197,11 @@ export function FlowClient() {
         setSelectedTxId(null);
         setRuleSuggestion(null);
         setDismissedSuggestionForTx(null);
-      }, 300);
+      }, 260);
     }
   }, [filtered, selectedTxId]);
 
   const handleRowClick = (txId: number) => {
-    // nic nie otwarte
     if (!selectedTxId) {
       setSelectedTxId(txId);
       setDetailOpen(true);
@@ -141,18 +210,16 @@ export function FlowClient() {
       return;
     }
 
-    // klik w ten sam → zamknij z animacją
     if (selectedTxId === txId) {
       setDetailOpen(false);
       window.setTimeout(() => {
         setSelectedTxId(null);
         setRuleSuggestion(null);
         setDismissedSuggestionForTx(null);
-      }, 300);
+      }, 260);
       return;
     }
 
-    // klik w inny → przełącz rekord, panel zostaje otwarty
     setSelectedTxId(txId);
     setDetailOpen(true);
     setRuleSuggestion(null);
@@ -164,15 +231,12 @@ export function FlowClient() {
       const { transaction: updated, rule_suggestion } =
         await updateTransactionCategory(txId, categoryId);
 
-      // ✅ aktualizacja “in place” (nie resetuje tabeli)
       setTransactions((prev) =>
         prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
       );
 
-      // jeśli user zmienia kategorię ręcznie – czyścimy banner “włączone”
       setAutomationBanner((prev) => (prev?.txId === txId ? null : prev));
 
-      // ✅ sugestia automatyzacji po ręcznej decyzji usera
       if (rule_suggestion) {
         setRuleSuggestion({ txId, ...rule_suggestion });
         setDismissedSuggestionForTx(null);
@@ -200,7 +264,6 @@ export function FlowClient() {
 
       await applyCategoryRules();
 
-      // ✅ banner do UI (bez toastów, w kontekście panelu)
       setAutomationBanner({
         txId: snap.txId,
         categoryName: snap.category_name ?? null,
@@ -231,6 +294,33 @@ export function FlowClient() {
 
   const rangeText = rangeLabel(range, startDate);
 
+  const activeFiltersCount = useMemo(() => {
+    let n = 0;
+    if (normalizeQuery(search).length > 0) n++;
+    if (selectedCategoryIds.length > 0) n++;
+    if (includeUncategorized) n++;
+    if (sourceFilter !== "all") n++;
+    if (amountMin != null || amountMax != null) n++;
+    return n;
+  }, [
+    search,
+    selectedCategoryIds,
+    includeUncategorized,
+    sourceFilter,
+    amountMin,
+    amountMax,
+  ]);
+
+  const resetSmartFilters = () => {
+    setSearch("");
+    setSelectedCategoryIds([]);
+    setIncludeUncategorized(false);
+    setSourceFilter("all");
+    setAmountAbs(true);
+    setAmountMin(null);
+    setAmountMax(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -251,88 +341,74 @@ export function FlowClient() {
         </div>
       )}
 
-      {/* GŁÓWNY LAYOUT: LEWY PANEL + PRAWY WORKSPACE */}
-      <section className="grid gap-4 lg:grid-cols-[260px,minmax(0,1fr)]">
-        {/* LEWY PANEL – FILTRY / PRESETY */}
-        <FlowSidebar
+      <section className="space-y-4">
+        {/* KPI */}
+        <section className="grid gap-4 md:grid-cols-3">
+          <KpiCard
+            label="Liczba transakcji"
+            value={loading ? "—" : filtered.length.toLocaleString("pl-PL")}
+            subtitle="W wybranym zakresie i filtrach"
+          />
+          <KpiCard
+            label="Wydatki"
+            value={loading ? "—" : formatCurrency(-Math.min(metrics.expense, 0))}
+            subtitle="Suma ujemnych przepływów"
+          />
+          <KpiCard
+            label="Wpływy"
+            value={loading ? "—" : formatCurrency(Math.max(metrics.income, 0))}
+            subtitle="Suma dodatnich przepływów"
+          />
+        </section>
+
+        {/* FILTERS */}
+        <FlowFiltersBar
           range={range}
-          onRangeChange={setRange}
+          setRange={setRange}
           kind={kind}
-          onKindChange={setKind}
+          setKind={setKind}
+          search={search}
+          setSearch={setSearch}
+          categories={categories}
+          selectedCategoryIds={selectedCategoryIds}
+          setSelectedCategoryIds={setSelectedCategoryIds}
+          includeUncategorized={includeUncategorized}
+          setIncludeUncategorized={setIncludeUncategorized}
+          sourceFilter={sourceFilter}
+          setSourceFilter={setSourceFilter}
+          amountDomain={amountDomain}
+          amountAbs={amountAbs}
+          setAmountAbs={setAmountAbs}
+          amountMin={amountMin}
+          amountMax={amountMax}
+          setAmountMin={setAmountMin}
+          setAmountMax={setAmountMax}
+          density={density}
+          setDensity={setDensity}
+          activeFiltersCount={activeFiltersCount}
+          onReset={resetSmartFilters}
         />
 
-        {/* PRAWY OBSZAR – KPI + TABELA */}
-        <div className="space-y-4">
-          {/* KPI */}
-          <section className="grid gap-4 md:grid-cols-3">
-            <KpiCard
-              label="Liczba transakcji"
-              value={loading ? "—" : filtered.length.toLocaleString("pl-PL")}
-              subtitle="W wybranym zakresie i filtrach"
-            />
-            <KpiCard
-              label="Wydatki"
-              value={loading ? "—" : formatCurrency(-Math.min(metrics.expense, 0))}
-              subtitle="Suma ujemnych przepływów"
-            />
-            <KpiCard
-              label="Wpływy"
-              value={loading ? "—" : formatCurrency(Math.max(metrics.income, 0))}
-              subtitle="Suma dodatnich przepływów"
-            />
-          </section>
-
-          {/* RANGE + SEARCH */}
-          <section className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 backdrop-blur-xl px-1 py-1 shadow-inner shadow-black/30">
-              {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setRange(key)}
-                  className={[
-                    "px-3 py-1 text-[11px] rounded-full font-medium transition-all border",
-                    range === key
-                      ? "bg-white/80 text-slate-900 border-white shadow-md shadow-white/40"
-                      : "bg-white/0 text-slate-100/80 border-transparent hover:bg-white/15 hover:text-white",
-                  ].join(" ")}
-                >
-                  {rangeLabelShort(key)}
-                </button>
-              ))}
+        {/* TABLE + DETAILS */}
+        <section className="glass-card glass-card-hover-soft p-4 md:p-5 overflow-hidden">
+          <div className="flex items-center justify-between mb-3 gap-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-slate-50">Transakcje</h2>
+              <p className="text-[11px] text-slate-400">
+                Hover na opisie pokazuje pełną treść. Kliknij wiersz, aby rozsunąć szczegóły.
+              </p>
             </div>
-
-            <div className="flex-1 flex justify-end">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Szukaj w opisie..."
-                className="w-full md:w-64 rounded-full border border-white/10 bg-slate-950/40 px-3 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-400/70 focus:ring-1 focus:ring-indigo-400/50"
-              />
+            <div className="text-[11px] text-slate-400 text-right whitespace-nowrap">
+              Zakres:{" "}
+              <span className="text-slate-200 font-medium">{rangeText}</span>
+              <br />
+              Wyświetlane:{" "}
+              <span className="text-slate-200 font-medium">{filtered.length}</span>
             </div>
-          </section>
+          </div>
 
-          {/* DÓŁ – TABELA + SZCZEGÓŁY */}
-          <section className="glass-card glass-card-hover-soft p-4 md:p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-50">Transakcje</h2>
-                <p className="text-[11px] text-slate-400">
-                  Po kliknięciu w wiersz po prawej stronie pokazują się szczegóły.
-                </p>
-              </div>
-              <div className="text-[11px] text-slate-400 text-right">
-                Zakres:{" "}
-                <span className="text-slate-200 font-medium">{rangeText}</span>
-                <br />
-                Wyświetlane:{" "}
-                <span className="text-slate-200 font-medium">{filtered.length}</span>
-              </div>
-            </div>
-
-            <div className="mt-3 flex flex-col lg:flex-row gap-4 items-stretch">
-              {/* LEWO: tabela */}
+          <Tooltip.Provider delayDuration={180}>
+            <div className="mt-3 flex flex-col lg:flex-row gap-4 items-stretch h-[560px] md:h-[600px] xl:h-[640px]">
               <div
                 className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
                 style={{
@@ -346,12 +422,12 @@ export function FlowClient() {
                   loading={loading}
                   onRowClick={(tx) => handleRowClick(tx.id)}
                   selectedId={detailOpen && selectedTxId ? selectedTxId : null}
+                  density={density}
                 />
               </div>
 
-              {/* PRAWO: panel */}
               <div
-                className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
+                className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0 h-full min-h-0"
                 style={{ flexBasis: detailOpen ? "320px" : "0px" }}
               >
                 <div className="h-full flex justify-start">
@@ -381,84 +457,335 @@ export function FlowClient() {
                 </div>
               </div>
             </div>
-          </section>
-        </div>
+          </Tooltip.Provider>
+        </section>
       </section>
     </div>
   );
 }
 
-/* ---------- LEWY PANEL ---------- */
+/* ---------- FILTER BAR ---------- */
 
-function FlowSidebar({
+function FlowFiltersBar({
   range,
-  onRangeChange,
+  setRange,
   kind,
-  onKindChange,
+  setKind,
+  search,
+  setSearch,
+  categories,
+  selectedCategoryIds,
+  setSelectedCategoryIds,
+  includeUncategorized,
+  setIncludeUncategorized,
+  sourceFilter,
+  setSourceFilter,
+  amountDomain,
+  amountAbs,
+  setAmountAbs,
+  amountMin,
+  amountMax,
+  setAmountMin,
+  setAmountMax,
+  density,
+  setDensity,
+  activeFiltersCount,
+  onReset,
 }: {
   range: RangeKey;
-  onRangeChange: (r: RangeKey) => void;
+  setRange: (r: RangeKey) => void;
   kind: "all" | "income" | "expense";
-  onKindChange: (k: "all" | "income" | "expense") => void;
+  setKind: (k: "all" | "income" | "expense") => void;
+
+  search: string;
+  setSearch: (v: string) => void;
+  categories: Category[];
+  selectedCategoryIds: number[];
+  setSelectedCategoryIds: (v: number[]) => void;
+  includeUncategorized: boolean;
+  setIncludeUncategorized: (v: boolean) => void;
+  sourceFilter: "all" | "pdf" | "manual";
+  setSourceFilter: (v: "all" | "pdf" | "manual") => void;
+  amountDomain: { min: number; max: number };
+  amountAbs: boolean;
+  setAmountAbs: (v: boolean) => void;
+  amountMin: number | null;
+  amountMax: number | null;
+  setAmountMin: (v: number | null) => void;
+  setAmountMax: (v: number | null) => void;
+  density: Density;
+  setDensity: (v: Density) => void;
+  activeFiltersCount: number;
+  onReset: () => void;
 }) {
+  const [localQ, setLocalQ] = useState(search);
+
+  useEffect(() => setLocalQ(search), [search]);
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearch(localQ), 180);
+    return () => window.clearTimeout(t);
+  }, [localQ, setSearch]);
+
+  const selectedLabel =
+    selectedCategoryIds.length > 0 || includeUncategorized
+      ? `Wybrane: ${selectedCategoryIds.length}${includeUncategorized ? " + brak" : ""}`
+      : "Wszystkie";
+
+  const step = useMemo(() => {
+    const max = amountDomain.max ?? 0;
+    if (max <= 2000) return 1;
+    if (max <= 20000) return 5;
+    return 10;
+  }, [amountDomain.max]);
+
+  const sliderMin = amountMin ?? amountDomain.min;
+  const sliderMax = amountMax ?? amountDomain.max;
+
   return (
-    <aside className="glass-card p-4 space-y-4 h-fit">
-      <div className="space-y-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-          Filtry
+    <div className="glass-card glass-card-hover-soft px-4 py-4 space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
+        <div className="space-y-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+            Typ przepływu
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <ChipButton active={kind === "all"} onClick={() => setKind("all")}>
+              Wszystkie
+            </ChipButton>
+            <ChipButton active={kind === "income"} onClick={() => setKind("income")}>
+              Wpływy
+            </ChipButton>
+            <ChipButton active={kind === "expense"} onClick={() => setKind("expense")}>
+              Wydatki
+            </ChipButton>
+          </div>
         </div>
-        <p className="text-[11px] text-slate-500">
-          Panel filtrów – będziemy go rozbudowywać o konta, kategorie i presety.
-        </p>
+
+        <div className="space-y-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+            Presety zakresów
+          </div>
+
+          <div className="grid grid-cols-5 gap-2">
+            {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setRange(key)}
+                className={[
+                  "rounded-full px-3 py-1.5 border text-[11px] transition-all",
+                  range === key
+                    ? "bg-white/80 text-slate-900 border-white shadow-sm"
+                    : "bg-white/0 text-slate-300 border-white/10 hover:bg-white/10",
+                ].join(" ")}
+              >
+                {rangeLabelShort(key)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">Typ przepływu</div>
-        <div className="flex flex-wrap gap-1">
-          <ChipButton active={kind === "all"} onClick={() => onKindChange("all")}>
-            Wszystkie
-          </ChipButton>
-          <ChipButton active={kind === "income"} onClick={() => onKindChange("income")}>
-            Wpływy
-          </ChipButton>
-          <ChipButton active={kind === "expense"} onClick={() => onKindChange("expense")}>
-            Wydatki
-          </ChipButton>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex-1 min-w-[220px]">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+            Szukaj w opisie
+          </div>
+          <input
+            value={localQ}
+            onChange={(e) => setLocalQ(e.target.value)}
+            placeholder='np. "zabka", "spotify", "uber"'
+            className="mt-1 w-full rounded-full bg-slate-950/60 border border-white/10 px-3 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-400/80"
+          />
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">Presety zakresów</div>
-        <div className="grid grid-cols-3 gap-1 text-[11px]">
-          {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onRangeChange(key)}
-              className={[
-                "rounded-full px-2 py-1 border transition-all",
-                range === key
-                  ? "bg-white/80 text-slate-900 border-white"
-                  : "bg-white/0 text-slate-300 border-white/10 hover:bg-white/10",
-              ].join(" ")}
+        <div className="min-w-[200px]">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+            Kategorie
+          </div>
+
+          <Popover.Root>
+            <Popover.Trigger asChild>
+              <button
+                type="button"
+                className="mt-1 w-full rounded-full bg-white/5 border border-white/10 px-3 py-1.5 text-[12px] text-slate-200 hover:bg-white/10 transition-colors text-left"
+              >
+                {selectedLabel}
+              </button>
+            </Popover.Trigger>
+
+            <Popover.Portal>
+              <Popover.Content
+                align="start"
+                className="z-50 w-[340px] rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-xl p-3 shadow-xl"
+              >
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-2">
+                  Filtr kategorii
+                </div>
+
+                <label className="flex items-center gap-2 text-[12px] text-slate-200 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={includeUncategorized}
+                    onChange={(e) => setIncludeUncategorized(e.target.checked)}
+                  />
+                  Brak kategorii
+                </label>
+
+                <div className="max-h-56 overflow-auto pr-1 space-y-1">
+                  {categories.map((c) => {
+                    const checked = selectedCategoryIds.includes(c.id);
+                    return (
+                      <label
+                        key={c.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: c.color ?? "#a5b4fc" }}
+                          />
+                          <span className="text-[12px] text-slate-200 truncate">
+                            {c.name}
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = new Set(selectedCategoryIds);
+                            if (e.target.checked) next.add(c.id);
+                            else next.delete(c.id);
+                            setSelectedCategoryIds([...next]);
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategoryIds([]);
+                      setIncludeUncategorized(false);
+                    }}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-300 hover:bg-white/10 transition-colors"
+                  >
+                    Wyczyść
+                  </button>
+                  <Popover.Close asChild>
+                    <button
+                      type="button"
+                      className="rounded-full bg-indigo-400 text-slate-950 px-3 py-1.5 text-[11px] font-medium hover:bg-indigo-300 transition-colors"
+                    >
+                      Gotowe
+                    </button>
+                  </Popover.Close>
+                </div>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        </div>
+
+        <div className="min-w-[270px]">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+              Kwota (range)
+            </div>
+            <label className="text-[10px] text-slate-500 flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={amountAbs}
+                onChange={(e) => setAmountAbs(e.target.checked)}
+              />
+              abs
+            </label>
+          </div>
+
+          <div className="mt-2">
+            <Slider.Root
+              min={amountDomain.min}
+              max={amountDomain.max}
+              step={step}
+              value={[sliderMin, sliderMax]}
+              onValueChange={(v) => {
+                setAmountMin(v[0] === amountDomain.min ? null : v[0]);
+                setAmountMax(v[1] === amountDomain.max ? null : v[1]);
+              }}
+              className="relative flex items-center select-none touch-none h-6"
             >
-              {rangeLabelShort(key)}
-            </button>
-          ))}
+              <Slider.Track className="bg-white/10 relative grow rounded-full h-[6px]">
+                <Slider.Range className="absolute bg-indigo-400/70 rounded-full h-full" />
+              </Slider.Track>
+              <Slider.Thumb className="block w-4 h-4 bg-white rounded-full shadow border border-white/30" />
+              <Slider.Thumb className="block w-4 h-4 bg-white rounded-full shadow border border-white/30" />
+            </Slider.Root>
+
+            <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+              <span>{formatCurrency(sliderMin)}</span>
+              <span>{formatCurrency(sliderMax)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-[160px]">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+            Źródło
+          </div>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value as any)}
+            className="mt-1 w-full rounded-full bg-white/5 border border-white/10 px-3 py-1.5 text-[12px] text-slate-200 hover:bg-white/10 transition-colors"
+          >
+            <option value="all">Wszystkie</option>
+            <option value="pdf">Import PDF</option>
+            <option value="manual">Ręczne</option>
+          </select>
+        </div>
+
+        <div className="min-w-[180px]">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+            Widok
+          </div>
+          <div className="mt-1 inline-flex rounded-full border border-white/10 bg-white/5 p-1">
+            {(["compact", "comfortable"] as Density[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setDensity(k)}
+                className={[
+                  "px-3 py-1 text-[11px] rounded-full",
+                  density === k
+                    ? "bg-white/80 text-slate-900"
+                    : "text-slate-300 hover:bg-white/10",
+                ].join(" ")}
+              >
+                {k === "compact" ? "Compact" : "Comfort"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onReset}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-300 hover:bg-white/10 transition-colors"
+          >
+            Reset
+          </button>
+          <div className="text-[11px] text-slate-500 whitespace-nowrap">
+            Filtry: <span className="text-slate-200">{activeFiltersCount}</span>
+          </div>
         </div>
       </div>
-
-      <div className="border-t border-white/10 pt-3 text-[11px] text-slate-500">
-        W kolejnych etapach:
-        <ul className="mt-1 space-y-0.5 list-disc list-inside">
-          <li>Filtry po koncie</li>
-          <li>Filtry po kategorii</li>
-          <li>Zapisywanie presetów</li>
-        </ul>
-      </div>
-    </aside>
+    </div>
   );
 }
+
+/* ---------- UI BITS ---------- */
 
 function ChipButton({
   active,
@@ -485,8 +812,6 @@ function ChipButton({
   );
 }
 
-/* ---------- KPI ---------- */
-
 function KpiCard({
   label,
   value,
@@ -499,7 +824,9 @@ function KpiCard({
   return (
     <div className="glass-card glass-card-hover-strong p-4 flex flex-col justify-between">
       <div>
-        <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
+        <div className="text-[11px] uppercase tracking-wide text-slate-400">
+          {label}
+        </div>
         <div className="mt-2 text-xl font-semibold text-slate-50">{value}</div>
       </div>
       <div className="mt-3 text-[11px] text-slate-500">{subtitle}</div>
@@ -508,6 +835,16 @@ function KpiCard({
 }
 
 /* ---------- TABLE ---------- */
+
+const COL_W = {
+  date: "w-[110px]",
+  description: "w-auto",
+  category: "w-[160px]",
+  amount: "w-[130px]",
+  value_date: "w-[120px]",
+  is_manual: "w-[80px]",
+  account_id: "w-[90px]",
+};
 
 const transactionColumns: ColumnDef<TxExt>[] = [
   {
@@ -525,18 +862,58 @@ const transactionColumns: ColumnDef<TxExt>[] = [
     id: "description",
     accessorKey: "description",
     header: () => "Opis",
-    cell: ({ row }) => {
+    cell: ({ row, table }) => {
       const desc = (row.original.description || "").trim();
       const has = desc.length > 0;
+
+      const density = (table.options.meta as any)?.density as Density | undefined;
+      const compact = density !== "comfortable";
+
+      // stała wysokość wiersza: w comfort zawsze “rezerwujemy” 2 linie
+      const fixedH = compact ? "min-h-[1.25rem]" : "min-h-[2.5rem]";
+      const renderMode = compact ? "truncate" : "line-clamp-2";
+
       return (
-        <span
-          className={[
-            "truncate max-w-[260px] block",
-            has ? "text-slate-100" : "text-slate-600",
-          ].join(" ")}
-        >
-          {has ? desc : "—"}
-        </span>
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <div
+              className={[
+                "block max-w-[520px] overflow-hidden",
+                renderMode,
+                fixedH,
+                has ? "text-slate-100" : "text-slate-600",
+                // długie tokeny (numery) nie mają spacji → niech się łamią w środku,
+                // ale dalej trzymamy line-clamp
+                "break-all",
+              ].join(" ")}
+              title={has ? desc : "—"}
+            >
+              {has ? desc : "—"}
+            </div>
+          </Tooltip.Trigger>
+
+          <Tooltip.Portal>
+            <Tooltip.Content
+              side="top"
+              align="start"
+              className="
+                z-50 max-w-[720px]
+                rounded-2xl border border-white/10 bg-slate-950/80
+                backdrop-blur-xl px-4 py-3
+                text-[12px] text-slate-200
+                shadow-xl
+              "
+            >
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-1">
+                Pełny opis
+              </div>
+              <div className="leading-snug whitespace-pre-wrap break-words">
+                {has ? desc : "—"}
+              </div>
+              <Tooltip.Arrow className="fill-white/10" />
+            </Tooltip.Content>
+          </Tooltip.Portal>
+        </Tooltip.Root>
       );
     },
   },
@@ -552,14 +929,9 @@ const transactionColumns: ColumnDef<TxExt>[] = [
 
       return (
         <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={
-              has ? "text-slate-400 whitespace-nowrap" : "text-slate-600 whitespace-nowrap"
-            }
-          >
+          <span className={has ? "text-slate-400 truncate" : "text-slate-600"}>
             {has ? cat : "—"}
           </span>
-
           {has && isAuto && (
             <span className="text-[9px] uppercase tracking-[0.16em] text-indigo-300/90 whitespace-nowrap">
               AUTO
@@ -593,10 +965,14 @@ const transactionColumns: ColumnDef<TxExt>[] = [
     header: () => "Data waluty",
     cell: ({ row }) => {
       const raw = row.original.value_date as any;
-      if (!raw) return <span className="text-slate-500">—</span>;
+      if (!raw) return <span className="text-slate-600">—</span>;
       const d = new Date(raw);
-      if (Number.isNaN(d.getTime())) return <span className="text-slate-500">—</span>;
-      return <span className="whitespace-nowrap text-slate-400">{formatDateDisplay(d)}</span>;
+      if (Number.isNaN(d.getTime())) return <span className="text-slate-600">—</span>;
+      return (
+        <span className="whitespace-nowrap text-slate-400">
+          {formatDateDisplay(d)}
+        </span>
+      );
     },
   },
   {
@@ -622,13 +998,17 @@ function TransactionsTable({
   loading,
   onRowClick,
   selectedId,
+  density,
 }: {
   transactions: TxExt[];
   loading: boolean;
   onRowClick: (tx: TxExt) => void;
   selectedId: number | null;
+  density: Density;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "date", desc: true },
+  ]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     date: true,
     description: true,
@@ -638,6 +1018,8 @@ function TransactionsTable({
     is_manual: true,
     account_id: false,
   });
+
+  const pageSize = density === "compact" ? 18 : 12;
 
   const table = useReactTable({
     data: transactions,
@@ -651,67 +1033,84 @@ function TransactionsTable({
     autoResetPageIndex: false,
     autoResetSorting: false,
     autoResetFilters: false,
+    meta: { density },
+    initialState: {
+      pagination: { pageIndex: 0, pageSize },
+    },
   });
 
-  if (loading) {
-    return (
-      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
-        Ładowanie transakcji...
-      </div>
-    );
-  }
+  // 1) zmiana density → zmień pageSize, ale nie teleportuj użytkownika
+  useEffect(() => {
+    const current = table.getState().pagination.pageIndex;
+    table.setPageSize(pageSize);
+    table.setPageIndex(current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageSize]);
 
-  if (transactions.length === 0) {
-    return (
-      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
-        Brak transakcji dla aktualnych filtrów.
-      </div>
-    );
-  }
+  // 2) ✅ clamp pageIndex gdy liczba stron spadnie po filtrach
+  useEffect(() => {
+    const pageCount = table.getPageCount();
+    const idx = table.getState().pagination.pageIndex;
+    if (pageCount <= 0) {
+      if (idx !== 0) table.setPageIndex(0);
+      return;
+    }
+    const last = Math.max(0, pageCount - 1);
+    if (idx > last) table.setPageIndex(last);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions.length, sorting, columnVisibility, pageSize]);
 
-  const allColumns = table.getAllLeafColumns().filter((col) => col.id !== "_selector");
-  const pageRows = table.getRowModel().rows;
+  const rowPad = density === "comfortable" ? "py-2.5" : "py-1.5";
 
+  // ✅ stała wysokość całego komponentu tabeli (żeby nie “skakała”)
   return (
-    <div className="space-y-3">
+    <div className="h-full flex flex-col gap-3 min-h-0">
+      {/* toolbar (kolumny + paginacja) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-[11px]">
         <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-          <span className="text-slate-400 mr-1 whitespace-nowrap">Widoczne kolumny:</span>
-          {allColumns.map((column) => (
-            <button
-              key={column.id}
-              type="button"
-              onClick={column.getToggleVisibilityHandler()}
-              className={[
-                "px-2 py-0.5 rounded-full border transition-all",
-                column.getIsVisible()
-                  ? "bg-white/80 text-slate-900 border-white shadow-sm"
-                  : "bg-slate-900/60 text-slate-300 border-slate-600 hover:bg-slate-800",
-              ].join(" ")}
-            >
-              {column.id === "date"
-                ? "Data"
-                : column.id === "description"
-                ? "Opis"
-                : column.id === "category"
-                ? "Kategoria"
-                : column.id === "amount"
-                ? "Kwota"
-                : column.id === "value_date"
-                ? "Data waluty"
-                : column.id === "is_manual"
-                ? "Źródło"
-                : column.id === "account_id"
-                ? "ID konta"
-                : column.id}
-            </button>
-          ))}
+          <span className="text-slate-400 mr-1 whitespace-nowrap">
+            Widoczne kolumny:
+          </span>
+          {table
+            .getAllLeafColumns()
+            .filter((col) => col.id !== "_selector")
+            .map((column) => (
+              <button
+                key={column.id}
+                type="button"
+                onClick={column.getToggleVisibilityHandler()}
+                className={[
+                  "px-2 py-0.5 rounded-full border transition-all",
+                  column.getIsVisible()
+                    ? "bg-white/80 text-slate-900 border-white shadow-sm"
+                    : "bg-slate-900/60 text-slate-300 border-slate-600 hover:bg-slate-800",
+                ].join(" ")}
+              >
+                {column.id === "date"
+                  ? "Data"
+                  : column.id === "description"
+                  ? "Opis"
+                  : column.id === "category"
+                  ? "Kategoria"
+                  : column.id === "amount"
+                  ? "Kwota"
+                  : column.id === "value_date"
+                  ? "Data waluty"
+                  : column.id === "is_manual"
+                  ? "Źródło"
+                  : column.id === "account_id"
+                  ? "ID konta"
+                  : column.id}
+              </button>
+            ))}
         </div>
 
         <div className="flex items-center gap-2 text-slate-400">
           <span>
             Strona{" "}
-            <span className="text-slate-100">{table.getState().pagination.pageIndex + 1}</span>{" "}
+            <span className="text-slate-100">
+              {table.getState().pagination.pageIndex + 1}
+            </span>{" "}
             z{" "}
             <span className="text-slate-100">{table.getPageCount() || 1}</span>
           </span>
@@ -734,72 +1133,101 @@ function TransactionsTable({
         </div>
       </div>
 
-      <div className="max-h-[420px] overflow-auto rounded-2xl border border-white/10 bg-slate-950/40">
-        <table className="min-w-full table-fixed text-[11px] text-left">
-          <thead className="bg-slate-900/80 sticky top-0 z-10">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  if (header.isPlaceholder) return null;
-                  const canSort = header.column.getCanSort();
-                  const sortDir = header.column.getIsSorted();
+      {/* table area – flex-1, stały rozmiar */}
+      <div className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40">
+        {loading ? (
+          <div className="h-full flex items-center justify-center text-[11px] text-slate-500">
+            Ładowanie transakcji...
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-[11px] text-slate-500">
+            Brak transakcji dla aktualnych filtrów.
+          </div>
+        ) : (
+          <div className="h-full overflow-auto">
+            <table className="w-full table-fixed text-[11px] text-left">
+              <thead className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/80 backdrop-blur">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      if (header.isPlaceholder) return null;
+                      const canSort = header.column.getCanSort();
+                      const sortDir = header.column.getIsSorted();
+                      const colId = header.column.id as keyof typeof COL_W;
+
+                      return (
+                        <th
+                          key={header.id}
+                          onClick={
+                            canSort ? header.column.getToggleSortingHandler() : undefined
+                          }
+                          className={[
+                            "px-3 py-2 font-medium text-slate-300 whitespace-nowrap",
+                            COL_W[colId] ?? "",
+                            canSort ? "cursor-pointer select-none hover:text-slate-100" : "",
+                            header.column.id === "amount" || header.column.id === "is_manual"
+                              ? "text-right"
+                              : "text-left",
+                          ].join(" ")}
+                        >
+                          <div className="inline-flex items-center gap-1">
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                            {sortDir === "asc" && (
+                              <span className="text-[9px] text-slate-400">▲</span>
+                            )}
+                            {sortDir === "desc" && (
+                              <span className="text-[9px] text-slate-400">▼</span>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </thead>
+
+              <tbody>
+                {table.getRowModel().rows.map((row) => {
+                  const tx = row.original;
+                  const isSelected = selectedId === tx.id;
+
                   return (
-                    <th
-                      key={header.id}
-                      onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                    <tr
+                      key={row.id}
+                      onClick={() => onRowClick(tx)}
                       className={[
-                        "px-3 py-2 font-medium text-slate-300 whitespace-nowrap",
-                        canSort ? "cursor-pointer select-none hover:text-slate-100" : "",
-                        header.column.id === "amount" || header.column.id === "is_manual"
-                          ? "text-right"
-                          : "text-left",
+                        "border-t border-slate-800/60 transition-colors cursor-pointer",
+                        isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/60",
                       ].join(" ")}
                     >
-                      <div className="inline-flex items-center gap-1">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {sortDir === "asc" && <span className="text-[9px] text-slate-400">▲</span>}
-                        {sortDir === "desc" && <span className="text-[9px] text-slate-400">▼</span>}
-                      </div>
-                    </th>
+                      {row.getVisibleCells().map((cell) => {
+                        const colId = cell.column.id as keyof typeof COL_W;
+                        return (
+                          <td
+                            key={cell.id}
+                            className={[
+                              "px-3 align-top",
+                              rowPad,
+                              COL_W[colId] ?? "",
+                              cell.column.id === "amount" || cell.column.id === "is_manual"
+                                ? "text-right"
+                                : "text-left",
+                            ].join(" ")}
+                          >
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   );
                 })}
-              </tr>
-            ))}
-          </thead>
-
-          <tbody>
-            {pageRows.map((row) => {
-              const tx = row.original;
-              const isSelected = selectedId === tx.id;
-              const visibleCells = row.getVisibleCells();
-
-              return (
-                <tr
-                  key={row.id}
-                  onClick={() => onRowClick(tx)}
-                  className={[
-                    "border-t border-slate-800/60 transition-colors cursor-pointer",
-                    isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/60",
-                  ].join(" ")}
-                >
-                  {visibleCells.map((cell) => (
-                    <td
-                      key={cell.id}
-                      className={[
-                        "px-3 py-1.5 align-middle",
-                        cell.column.id === "amount" || cell.column.id === "is_manual"
-                          ? "text-right"
-                          : "text-left",
-                      ].join(" ")}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -842,14 +1270,13 @@ function TransactionSideDetails({
     <aside
       className={[
         "min-w-[320px] max-w-[320px]",
-        "h-full flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
+        "h-full min-h-0 flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
         "px-3 py-3 md:px-4 md:py-4",
         "text-[11px]",
         "transition-opacity duration-300 ease-in-out",
         open ? "opacity-100" : "opacity-0 pointer-events-none",
       ].join(" ")}
     >
-      {/* Nagłówek (minimalny – bez powtarzania opisu, bo jest niżej) */}
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
@@ -872,9 +1299,7 @@ function TransactionSideDetails({
         </span>
       </div>
 
-      {/* treść – przewijana wewnątrz */}
       <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
-        {/* Kategoria + źródło */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1">
             <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
@@ -920,7 +1345,6 @@ function TransactionSideDetails({
           </div>
         </div>
 
-        {/* ✅ Dyskretna “automatyzacja podobnych” */}
         {ruleSuggestion && (
           <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -962,7 +1386,6 @@ function TransactionSideDetails({
           </div>
         )}
 
-        {/* ✅ Banner po sukcesie “Włącz” */}
         {automationBanner && (
           <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -1165,7 +1588,6 @@ function formatDateDisplay(d: Date) {
   });
 }
 
-// 🧠 human-friendly normalize: lower + remove Polish diacritics + trim spaces
 function normalizeQuery(input: string): string {
   return (input ?? "")
     .toLowerCase()
