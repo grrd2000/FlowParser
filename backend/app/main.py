@@ -46,6 +46,7 @@ from app.schemas import (
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
+from app.utils.similarity import build_df, best_key_token, description_contains_token, tokenize
 
 
 UPLOAD_DIR = "uploads"
@@ -926,64 +927,67 @@ MIN_SIMILAR_FOR_SUGGESTION = 5  # od ilu podobnych transakcji warto proponować 
 
 def build_rule_suggestion(db: Session, tx: Transaction) -> dict | None:
     """
-    Na podstawie transakcji z nowo ustawioną kategorią
-    próbuje zaproponować prostą regułę typu:
-      - pattern_value: jedno sensowne słowo z opisu
-      - pattern_type: "contains"
-      - category_id: tx.category_id
-    Szuka innych transakcji tego samego użytkownika z podobnym opisem
-    i BEZ kategorii. Jeśli jest ich co najmniej MIN_SIMILAR_FOR_SUGGESTION,
-    zwraca słownik z sugestią.
+    Buduje subtelną sugestię “automatyzacji podobnych”:
+    - wybiera token-kotwicę z opisu (TF-IDF) w pełni automatycznie
+    - liczy ile transakcji bez kategorii ma ten token
+    - ignoruje telefony/ID dzięki normalizacji w tokenize()
     """
-
-    # brak kategorii → brak sensu budowania reguły
-    if tx.category_id is None or not tx.description:
+    # Sugestia ma sens tylko po nadaniu kategorii
+    if tx.category_id is None:
         return None
 
-    # ustalenie user_id przez konto
-    account = db.query(Account).filter(Account.id == tx.account_id).first()
-    if not account or not account.user_id:
+    desc = (tx.description or "").strip()
+    if not desc:
         return None
 
-    user_id = account.user_id
-
-    # znormalizowany opis + tokeny
-    desc_norm = normalize_text(tx.description)
-    tokens = [t for t in desc_norm.split() if len(t) >= 4]
-
-    if not tokens:
-        return None
-
-    # najprostsza heurystyka: wybierz najdłuższy token jako pattern
-    candidate_pattern = max(tokens, key=len)
-
-    # pobierz inne transakcje tego samego usera bez kategorii
-    other_txs = (
-        db.query(Transaction)
-        .join(Account, Transaction.account_id == Account.id)
-        .filter(
-            Account.user_id == user_id,
-            Transaction.id != tx.id,
-            Transaction.category_id.is_(None),
-        )
+    # 1) zbierz opisy do DF (na Twoje rozmiary danych jest OK)
+    all_desc = [
+        d for (d,) in db.query(Transaction.description)
+        .filter(Transaction.description.isnot(None))
         .all()
-    )
+    ]
+    df, n_docs = build_df(all_desc)
+    if n_docs <= 1:
+        return None
+
+    # 2) token-kotwica dla tej transakcji
+    key = best_key_token(desc, df, n_docs)
+    if not key:
+        return None
+
+    # 3) jeśli token jest “za popularny” (np. występuje w połowie historii),
+    # to zwykle jest mało użyteczny — nie proponujemy automatyzacji.
+    ratio = df.get(key, 0) / max(1, n_docs)
+    if ratio > 0.35:
+        return None
+
+    # 4) policz podobne wśród tych BEZ kategorii (żeby automatyzacja miała sens)
+    uncategorized = db.query(Transaction.id, Transaction.description).filter(
+        Transaction.category_id.is_(None)
+    ).all()
 
     similar_count = 0
-    for other in other_txs:
-        other_norm = normalize_text(other.description or "")
-        if candidate_pattern in other_norm:
+    for _, d in uncategorized:
+        if d and description_contains_token(d, key):
             similar_count += 1
 
-    if similar_count < MIN_SIMILAR_FOR_SUGGESTION:
+    # próg — ustawiony tak, żeby Żabka zadziałała praktycznie od razu
+    if similar_count < 10:
         return None
 
+    cat_name = None
+    cat = db.get(Category, tx.category_id)
+    if cat:
+        cat_name = cat.name
+
     return {
-        "pattern_value": candidate_pattern,
-        "pattern_type": "contains",
+        "pattern_type": "token",
+        "pattern_value": key,
         "category_id": tx.category_id,
+        "category_name": cat_name,
         "similar_count": similar_count,
     }
+
 
 
 
@@ -1050,6 +1054,7 @@ def update_transaction_category(
 
 
 
+
 @app.get("/category-rules", response_model=list[CategoryRuleOut])
 def list_category_rules(db: Session = Depends(get_db)):
     user = get_current_user(db)
@@ -1070,8 +1075,7 @@ def create_category_rule(
     payload: CategoryRuleCreate,
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(db)
-
+    user = db.query(User).filter_by(email="demo@example.com").first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1079,12 +1083,18 @@ def create_category_rule(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
 
+    # --- ważne: dla "token" trzymamy w bazie JEDEN token, już znormalizowany ---
+    pattern_value = payload.pattern_value or ""
+    if payload.pattern_type == "token":
+        toks = tokenize(pattern_value)
+        pattern_value = toks[0] if toks else ""
+
     rule = CategoryRule(
         user_id=user.id,
         category_id=cat.id,
         field=payload.field,
         pattern_type=payload.pattern_type,
-        pattern_value=payload.pattern_value,
+        pattern_value=pattern_value,
         priority=100,
         enabled=True,
     )
@@ -1092,6 +1102,7 @@ def create_category_rule(
     db.commit()
     db.refresh(rule)
     return rule
+
 
 
 @app.post("/category-rules/apply", response_model=ApplyRulesResult)
@@ -1404,10 +1415,19 @@ def apply_rules_for_user(db: Session, user_id: int) -> int:
             ok = False
             if rule.pattern_type == "contains":
                 ok = pattern_norm in text_norm
+
             elif rule.pattern_type == "startswith":
                 ok = text_norm.startswith(pattern_norm)
+
+            elif rule.pattern_type == "token":
+                # pattern_value dla token jest pojedynczym tokenem (np. "zabka")
+                toks = tokenize(rule.pattern_value or "")
+                token = toks[0] if toks else None
+                if token:
+                    ok = description_contains_token(tx.description or "", token)
+
             else:
-                # inne typy na przyszłość (regex, merchant itp.)
+                # inne typy na przyszłość
                 continue
 
             if ok:
