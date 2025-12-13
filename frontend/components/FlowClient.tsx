@@ -27,6 +27,13 @@ import {
 type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
 type TxExt = Transaction & { amountNum: number; date: Date };
 
+type AutomationBanner = {
+  txId: number;
+  categoryName?: string | null;
+  token: string;
+  count: number;
+} | null;
+
 export function FlowClient() {
   const [transactions, setTransactions] = useState<TxExt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -53,6 +60,11 @@ export function FlowClient() {
   >(null);
 
   const [enablingSuggestion, setEnablingSuggestion] = useState(false);
+
+  // ✅ dyskretny status po “Włącz” (bez toastów)
+  const [automationBanner, setAutomationBanner] = useState<AutomationBanner>(
+    null
+  );
 
   // 1) Load data
   useEffect(() => {
@@ -90,7 +102,9 @@ export function FlowClient() {
     const afterSearch =
       q.length === 0
         ? afterKind
-        : afterKind.filter((t) => normalizeQuery(t.description ?? "").includes(q));
+        : afterKind.filter((t) =>
+            normalizeQuery(t.description ?? "").includes(q)
+          );
 
     const metrics = computeMetrics(afterSearch);
 
@@ -155,6 +169,9 @@ export function FlowClient() {
         prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
       );
 
+      // jeśli user zmienia kategorię ręcznie – czyścimy banner “włączone”
+      setAutomationBanner((prev) => (prev?.txId === txId ? null : prev));
+
       // ✅ sugestia automatyzacji po ręcznej decyzji usera
       if (rule_suggestion) {
         setRuleSuggestion({ txId, ...rule_suggestion });
@@ -171,20 +188,26 @@ export function FlowClient() {
   const handleAcceptRuleSuggestion = async () => {
     if (!ruleSuggestion) return;
 
+    const snap = ruleSuggestion;
     setEnablingSuggestion(true);
     try {
-      // tworzymy regułę w tle (user widzi tylko “automatyzację”)
       await createCategoryRule({
-        category_id: ruleSuggestion.category_id,
-        pattern_value: ruleSuggestion.pattern_value,
-        pattern_type: ruleSuggestion.pattern_type,
+        category_id: snap.category_id,
+        pattern_value: snap.pattern_value,
+        pattern_type: snap.pattern_type,
         field: "description",
       });
 
-      // stosujemy reguły do istniejących danych
       await applyCategoryRules();
 
-      // refresh danych (tabela nie powinna resetować paginacji bo autoResetPageIndex=false)
+      // ✅ banner do UI (bez toastów, w kontekście panelu)
+      setAutomationBanner({
+        txId: snap.txId,
+        categoryName: snap.category_name ?? null,
+        token: snap.pattern_value,
+        count: snap.similar_count,
+      });
+
       const [txs, cats] = await Promise.all([
         fetchTransactions(),
         fetchCategories(),
@@ -348,6 +371,11 @@ export function FlowClient() {
                       }
                       onAcceptRuleSuggestion={handleAcceptRuleSuggestion}
                       onDismissRuleSuggestion={handleDismissRuleSuggestion}
+                      automationBanner={
+                        automationBanner && automationBanner.txId === selectedTx.id
+                          ? automationBanner
+                          : null
+                      }
                     />
                   )}
                 </div>
@@ -519,10 +547,25 @@ const transactionColumns: ColumnDef<TxExt>[] = [
     cell: ({ row }) => {
       const cat = (row.original.category || "").trim();
       const has = cat.length > 0;
+      const src = row.original.category_source;
+      const isAuto = src === "rule";
+
       return (
-        <span className={has ? "text-slate-400 whitespace-nowrap" : "text-slate-600 whitespace-nowrap"}>
-          {has ? cat : "—"}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={
+              has ? "text-slate-400 whitespace-nowrap" : "text-slate-600 whitespace-nowrap"
+            }
+          >
+            {has ? cat : "—"}
+          </span>
+
+          {has && isAuto && (
+            <span className="text-[9px] uppercase tracking-[0.16em] text-indigo-300/90 whitespace-nowrap">
+              AUTO
+            </span>
+          )}
+        </div>
       );
     },
   },
@@ -553,9 +596,7 @@ const transactionColumns: ColumnDef<TxExt>[] = [
       if (!raw) return <span className="text-slate-500">—</span>;
       const d = new Date(raw);
       if (Number.isNaN(d.getTime())) return <span className="text-slate-500">—</span>;
-      return (
-        <span className="whitespace-nowrap text-slate-400">{formatDateDisplay(d)}</span>
-      );
+      return <span className="whitespace-nowrap text-slate-400">{formatDateDisplay(d)}</span>;
     },
   },
   {
@@ -775,6 +816,7 @@ function TransactionSideDetails({
   enablingSuggestion,
   onAcceptRuleSuggestion,
   onDismissRuleSuggestion,
+  automationBanner,
 }: {
   open: boolean;
   transaction: TxExt;
@@ -784,6 +826,7 @@ function TransactionSideDetails({
   enablingSuggestion: boolean;
   onAcceptRuleSuggestion: () => void;
   onDismissRuleSuggestion: () => void;
+  automationBanner: AutomationBanner;
 }) {
   const operationDate = formatDateDisplay(transaction.date);
   const valueDate =
@@ -806,22 +849,33 @@ function TransactionSideDetails({
         open ? "opacity-100" : "opacity-0 pointer-events-none",
       ].join(" ")}
     >
-      <div className="mb-2">
-        <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
-          Szczegóły transakcji
+      {/* Nagłówek (minimalny – bez powtarzania opisu, bo jest niżej) */}
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+            Szczegóły transakcji
+          </div>
+          <div className="mt-1 text-[10px] text-slate-500 whitespace-nowrap">
+            ID {transaction.id}
+          </div>
         </div>
-        <div
+
+        <span
           className={[
-            "mt-1 text-sm font-semibold leading-snug line-clamp-3",
-            hasDesc ? "text-slate-50" : "text-slate-600",
+            "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
+            transaction.amountNum >= 0
+              ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
+              : "border-rose-400/60 bg-rose-500/10 text-rose-200",
           ].join(" ")}
         >
-          {hasDesc ? desc : "—"}
-        </div>
+          {formatCurrency(transaction.amountNum)}
+        </span>
       </div>
 
+      {/* treść – przewijana wewnątrz */}
       <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
-        <div className="flex items-start justify-between gap-2 mb-1">
+        {/* Kategoria + źródło */}
+        <div className="flex items-start justify-between gap-2">
           <div className="flex-1">
             <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
               Kategoria
@@ -850,18 +904,7 @@ function TransactionSideDetails({
             </select>
           </div>
 
-          <div className="flex flex-col items-end gap-1">
-            <span
-              className={[
-                "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
-                transaction.amountNum >= 0
-                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
-                  : "border-rose-400/60 bg-rose-500/10 text-rose-200",
-              ].join(" ")}
-            >
-              {formatCurrency(transaction.amountNum)}
-            </span>
-
+          <div className="flex flex-col items-end gap-1 pt-5">
             {transaction.category_source ? (
               <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500 whitespace-nowrap">
                 źródło:
@@ -877,9 +920,9 @@ function TransactionSideDetails({
           </div>
         </div>
 
-        {/* ✅ Dyskretna “automatyzacja podobnych” (bez słowa "reguła" w UX) */}
+        {/* ✅ Dyskretna “automatyzacja podobnych” */}
         {ruleSuggestion && (
-          <div className="mt-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 flex items-start justify-between gap-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[11px] text-slate-100 font-medium flex items-center gap-1.5">
                 <span className="text-[12px]">✨</span>
@@ -919,10 +962,41 @@ function TransactionSideDetails({
           </div>
         )}
 
+        {/* ✅ Banner po sukcesie “Włącz” */}
+        {automationBanner && (
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+              Automatyzacja
+            </div>
+            <div className="mt-1 text-[11px] text-slate-200">
+              Włączona dla podobnych · zastosowano do{" "}
+              <span className="text-indigo-200 font-semibold">
+                {automationBanner.count}
+              </span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-slate-500">
+              Wzorzec:{" "}
+              <span className="text-slate-300">{automationBanner.token}</span>
+              {automationBanner.categoryName ? (
+                <>
+                  {" "}
+                  →{" "}
+                  <span className="text-slate-300">
+                    {automationBanner.categoryName}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <DetailCell label="Data operacji" value={operationDate} />
           <DetailCell label="Data waluty" value={valueDate} />
-          <DetailCell label="Źródło" value={transaction.is_manual ? "Ręczna" : "Import PDF"} />
+          <DetailCell
+            label="Źródło"
+            value={transaction.is_manual ? "Ręczna" : "Import PDF"}
+          />
           <DetailCell label="Konto (ID)" value={String(transaction.account_id)} />
         </div>
 
@@ -931,7 +1005,7 @@ function TransactionSideDetails({
           <div
             className={[
               "rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px]",
-              "max-h-32 overflow-auto",
+              "max-h-44 overflow-auto",
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
@@ -941,7 +1015,7 @@ function TransactionSideDetails({
       </div>
 
       <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
-        Ten panel będzie się dalej “inteligentnie” rozbudowywał w Lab (podpowiedzi, podobne transakcje, subskrypcje).
+        Ten panel będzie się dalej “inteligentnie” rozbudowywał w Lab.
       </div>
     </aside>
   );
