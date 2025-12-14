@@ -4,6 +4,21 @@ from decimal import Decimal
 from typing import Optional
 
 
+class AuthRegisterPayload(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str | None = None
+
+class AuthLoginPayload(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    full_name: str | None = None
+    
+
 class UserPreferencesBase(BaseModel):
     currency: str
     default_range: str

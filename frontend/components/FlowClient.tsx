@@ -5,6 +5,9 @@ import * as Popover from "@radix-ui/react-popover";
 import * as Slider from "@radix-ui/react-slider";
 import React, { useEffect, useMemo, useState } from "react";
 
+import { useAuth } from "@/components/AuthProvider";
+import { SignedOutState } from "@/components/SignedOutState";
+
 import {
   Transaction,
   RuleSuggestion,
@@ -79,6 +82,18 @@ export function FlowClient() {
   const [automationBanner, setAutomationBanner] = useState<AutomationBanner>(
     null
   );
+
+  const { user, authLoading } = useAuth();
+
+  if (!authLoading && !user) {
+    return (
+      <SignedOutState
+        title="Flow"
+        desc="Zaloguj się, aby analizować transakcje, filtrować i budować swój budżet."
+      />
+    );
+  }
+
 
   // 1) Load data
   useEffect(() => {

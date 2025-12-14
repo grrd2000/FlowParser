@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { useAuth } from "@/components/AuthProvider";
+import { SignedOutState } from "@/components/SignedOutState";
+
+
 import {
   fetchLabInsights,
   enableLabRule,
@@ -15,7 +19,6 @@ import {
   deleteCategory,
   type Category,
 
-  // Smart Rules
   fetchCategoryRules,
   createCategoryRule,
   updateCategoryRule,
@@ -72,6 +75,155 @@ const SELECT_CLASS =
   "h-9 w-full rounded-full bg-slate-900/70 border border-white/10 px-3 text-[12px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/70";
 const SELECT_STYLE = { colorScheme: "dark" as const };
 
+function GlassCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={[
+        "relative overflow-hidden rounded-3xl border border-white/10",
+        "bg-slate-950/45 backdrop-blur-xl",
+        "shadow-[0_0_0_1px_rgba(0,0,0,0.20)]",
+        className,
+      ].join(" ")}
+    >
+      {children}
+    </section>
+  );
+}
+
+function CardHeader({
+  kicker,
+  title,
+  desc,
+  right,
+}: {
+  kicker: string;
+  title: string;
+  desc?: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="px-6 sm:px-7 pt-6 pb-5 border-b border-white/10">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+            {kicker}
+          </div>
+          <h2 className="mt-1 text-sm font-semibold text-slate-50">
+            {title}
+          </h2>
+          {desc && (
+            <p className="mt-1 text-[11px] text-slate-400 max-w-xl">
+              {desc}
+            </p>
+          )}
+        </div>
+        {right ? <div className="shrink-0">{right}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function PillButton({
+  children,
+  onClick,
+  disabled,
+  tone = "neutral",
+  title,
+  className = "",
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  tone?: "neutral" | "primary" | "success" | "danger";
+  title?: string;
+  className?: string;
+}) {
+  const base =
+    "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors border";
+  const styles =
+    tone === "primary"
+      ? "border-indigo-400/60 bg-indigo-500/65 text-slate-950 hover:bg-indigo-400"
+      : tone === "success"
+        ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/20"
+        : tone === "danger"
+          ? "border-rose-400/50 bg-rose-500/15 text-rose-100 hover:bg-rose-500/20"
+          : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10";
+
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        base,
+        styles,
+        disabled ? "opacity-50 cursor-not-allowed hover:bg-inherit" : "",
+        className,
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  label?: string;
+}) {
+  // ✅ naprawiony toggle: gdy checked=false, kółko wraca w LEWO
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      disabled={disabled}
+      className={[
+        "relative h-6 w-10 rounded-full border transition-colors",
+        checked
+          ? "border-emerald-400/40 bg-emerald-500/15"
+          : "border-white/10 bg-black/20",
+        disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-white/10",
+      ].join(" ")}
+      aria-label={label ?? "toggle"}
+    >
+      <span
+        className={[
+          "absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full",
+          "transition-transform duration-200",
+          checked ? "translate-x-5 bg-emerald-200" : "translate-x-1 bg-slate-400",
+        ].join(" ")}
+      />
+    </button>
+  );
+}
+
+function MiniStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-[16px] font-semibold text-slate-50">
+        {value}
+      </div>
+      {hint ? <div className="mt-0.5 text-[10px] text-slate-500">{hint}</div> : null}
+    </div>
+  );
+}
+
 export function LabClient() {
   const [data, setData] = useState<LabInsights | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,7 +265,7 @@ export function LabClient() {
   const [editRuleField, setEditRuleField] = useState<"description" | "raw_description">("description");
   const [editRulePatternType, setEditRulePatternType] = useState<"contains" | "startswith" | "equals">("contains");
 
-  // Delete category modal (403 details)
+  // Delete category modal (409 details)
   const [deleteModal, setDeleteModal] = useState<null | {
     id: number;
     name: string;
@@ -126,6 +278,18 @@ export function LabClient() {
     id: number;
     humanLine: string;
   }>(null);
+
+  const { user, authLoading } = useAuth();
+
+  if (!authLoading && !user) {
+    return (
+      <SignedOutState
+        title="Lab"
+        desc="Zaloguj się, aby tworzyć kategorie, reguły i budować inteligentne automatyzacje."
+      />
+    );
+  }
+
 
   useEffect(() => {
     setDismissed(readDismissed());
@@ -152,8 +316,8 @@ export function LabClient() {
 
   const categorized = data?.coverage_categorized ?? 0;
   const total = data?.coverage_total ?? 0;
-  const uncategorized = Math.max(0, total - categorized);
   const coveragePct = clampPct(data?.coverage_pct ?? 0);
+  const uncategorized = Math.max(0, total - categorized);
 
   const loadAll = async () => {
     setLoading(true);
@@ -293,9 +457,7 @@ export function LabClient() {
     } catch (e: any) {
       const detail = tryParseJson(e?.message);
       if (detail?.message) {
-        setCatError(
-          `${detail.message} (tx: ${detail.tx_count ?? 0}, rules: ${detail.rule_count ?? 0})`
-        );
+        setCatError(`${detail.message} (tx: ${detail.tx_count ?? 0}, rules: ${detail.rule_count ?? 0})`);
       } else {
         setCatError(e?.message ?? "Nie udało się usunąć kategorii.");
       }
@@ -445,7 +607,6 @@ export function LabClient() {
     setRulesBusyId("delete");
     setRulesError(null);
     try {
-      // backend: usuwa regułę + odłącza przypisania tej reguły (wg ustaleń)
       await deleteCategoryRule(ruleId);
       if (editingRuleId === ruleId) cancelEditRule();
       setDeleteRuleModal(null);
@@ -464,65 +625,64 @@ export function LabClient() {
         <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
           Lab
         </h1>
-        <p className="text-sm md:text-[13px] text-slate-400 max-w-xl">
-          Inteligentna warstwa Twojej aplikacji finansowej. Tutaj uczysz system,
-          a system później pomaga Tobie — reguły, automatyczne kategorie i w przyszłości
-          „AI asystent” dla Twoich wydatków.
+        <p className="text-sm md:text-[13px] text-slate-400 max-w-2xl">
+          Tu „uczysz” system: kategorie, automatyzacje i sugestie. Zero technicznego gadania —
+          po prostu ustawiasz raz, a reszta działa w tle w Flow i przy kolejnych importach.
         </p>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.25fr,1fr]">
-        {/* LEFT */}
+      <div className="grid gap-6 xl:grid-cols-[1.2fr,1fr]">
+        {/* LEFT column */}
         <div className="flex flex-col gap-6">
-          {/* Smart overview */}
-          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/50 backdrop-blur-xl">
-            <div className="absolute -top-16 -right-24 h-44 w-44 rounded-full bg-indigo-500/15 blur-3xl" />
-            <div className="absolute -bottom-16 -left-24 h-44 w-44 rounded-full bg-pink-500/10 blur-3xl" />
+          {/* Overview */}
+          <GlassCard>
+            <div className="pointer-events-none absolute -top-16 -right-24 h-44 w-44 rounded-full bg-indigo-500/15 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 -left-24 h-44 w-44 rounded-full bg-pink-500/10 blur-3xl" />
 
-            <div className="relative px-6 sm:px-7 pt-6 pb-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                    Smart overview
-                  </div>
-                  <h2 className="mt-1 text-sm font-semibold text-slate-50 flex items-center gap-2">
-                    Jak bardzo „ogarnięte” są Twoje finanse
-                    <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
-                      beta
-                    </span>
-                  </h2>
-                  <p className="mt-1 text-[11px] text-slate-400 max-w-md">
-                    To jest szybki pulpit Labu: pokrycie kategorii, automatyzacje i rzeczy do przejrzenia.
-                  </p>
+            <CardHeader
+              kicker="Smart overview"
+              title="Jak dobrze system rozumie Twoje transakcje"
+              desc="Szybkie KPI: pokrycie kategorii, automatyzacje i rzeczy do przejrzenia."
+              right={
+                <div className="hidden sm:flex items-center gap-2">
+                  <PillButton
+                    tone="neutral"
+                    onClick={refreshAll}
+                    disabled={loading}
+                    title="Odśwież"
+                  >
+                    {loading ? "…" : "Odśwież"}
+                  </PillButton>
+                  <Link
+                    href="/flow"
+                    className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 transition-colors"
+                  >
+                    Otwórz Flow →
+                  </Link>
                 </div>
+              }
+            />
 
-                <Link
-                  href="/flow"
-                  className="hidden sm:inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 transition-colors"
-                >
-                  Otwórz Flow →
-                </Link>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3 text-[11px]">
-                <MiniKpi
+            <div className="px-6 sm:px-7 py-6 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <MiniStat
                   label="Pokrycie kategorii"
                   value={data ? `${coveragePct.toFixed(2)}%` : "—"}
                   hint={data ? `${categorized}/${total}` : "—"}
                 />
-                <MiniKpi
-                  label="Automatyczne przypisania"
+                <MiniStat
+                  label="Automatyzacje"
                   value={data ? `${data.assignments_rule}` : "—"}
                   hint="reguły / AI"
                 />
-                <MiniKpi
+                <MiniStat
                   label="Do przejrzenia"
                   value={data ? `${uncategorized}` : "—"}
                   hint="bez kategorii"
                 />
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span>Postęp rozumienia</span>
                   <span className="text-slate-200">
@@ -536,68 +696,50 @@ export function LabClient() {
                   />
                 </div>
                 <div className="mt-2 text-[10px] text-slate-500">
-                  Najszybsza droga do „inteligencji”: przypisuj kategorie w Flow, a Lab będzie proponował automatyzacje.
+                  Najszybciej “uczysz” system, gdy przypisujesz kategorie w Flow dla powtarzalnych sklepów/usług.
                 </div>
               </div>
             </div>
-          </section>
+          </GlassCard>
 
-          {/* SMART RULES */}
-          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/50 backdrop-blur-xl">
-            <div className="absolute -top-10 left-10 h-24 w-24 rounded-full bg-indigo-500/12 blur-3xl" />
-            <div className="absolute -bottom-14 right-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl" />
+          {/* Rules */}
+          <GlassCard>
+            <div className="pointer-events-none absolute -top-10 left-10 h-24 w-24 rounded-full bg-indigo-500/12 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-14 right-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl" />
 
-            <div className="relative px-6 sm:px-7 pt-6 pb-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                    Smart rules
-                  </div>
-                  <h2 className="mt-1 text-sm font-semibold text-slate-50 flex items-center gap-2">
-                    Automatyczne reguły kategoryzacji
-                    <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-300">
-                      w tle
-                    </span>
-                  </h2>
-                  <p className="mt-1 text-[11px] text-slate-400 max-w-md">
-                    Reguły są proste i czytelne: „jeśli opis zawiera X → przypisz kategorię Y”.
-                    Działają automatycznie przy nowych importach.
-                  </p>
-                </div>
-
+            <CardHeader
+              kicker="Smart rules"
+              title="Automatyczne reguły kategoryzacji"
+              desc="Proste reguły typu „jeśli opis zawiera X → przypisz Y”. Działają automatycznie przy nowych importach."
+              right={
                 <div className="hidden sm:flex items-center gap-2">
-                  <button
-                    type="button"
+                  <PillButton
+                    tone="success"
                     onClick={applyRulesNow}
                     disabled={rulesBusyId === "apply"}
-                    className={[
-                      "inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium",
-                      rulesBusyId === "apply"
-                        ? "border border-white/10 bg-white/5 text-slate-500 cursor-not-allowed"
-                        : "border border-emerald-400/50 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/20 transition-colors",
-                    ].join(" ")}
-                    title="Zastosuj reguły do nieopisanych transakcji"
+                    title="Zastosuj reguły do zaległych transakcji"
                   >
                     {rulesBusyId === "apply" ? "Stosowanie…" : "Zastosuj teraz"}
-                  </button>
-
-                  <Link
+                  </PillButton>
+                  <a
                     href="#ai"
                     className="inline-flex items-center rounded-full border border-indigo-400/40 bg-indigo-500/10 px-3 py-1.5 text-[11px] text-indigo-100 hover:bg-indigo-500/15 transition-colors"
                   >
                     Sugestie →
-                  </Link>
+                  </a>
                 </div>
-              </div>
+              }
+            />
 
+            <div className="px-6 sm:px-7 py-6 space-y-4">
               {rulesError && (
-                <div className="mt-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-200">
+                <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-200">
                   {rulesError}
                 </div>
               )}
 
               {/* Create */}
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
                   Dodaj automatyzację
                 </div>
@@ -624,19 +766,14 @@ export function LabClient() {
                     className="h-9 w-full rounded-full border border-white/10 bg-slate-900/70 px-3 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-400/70"
                   />
 
-                  <button
-                    type="button"
+                  <PillButton
+                    tone="primary"
                     onClick={createRule}
                     disabled={rulesBusyId === "create"}
-                    className={[
-                      "h-9 rounded-full px-3 text-[12px] font-medium whitespace-nowrap shrink-0",
-                      rulesBusyId === "create"
-                        ? "border border-white/10 bg-white/5 text-slate-500 cursor-not-allowed"
-                        : "border border-indigo-400/60 bg-indigo-500/70 text-slate-950 hover:bg-indigo-400 transition-colors",
-                    ].join(" ")}
+                    className="h-9 px-4"
                   >
                     {rulesBusyId === "create" ? "Dodawanie…" : "Dodaj"}
-                  </button>
+                  </PillButton>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
@@ -667,27 +804,17 @@ export function LabClient() {
               </div>
 
               {/* Rules list */}
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+              <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
                 <div className="px-4 py-2 border-b border-white/10 text-[10px] uppercase tracking-[0.16em] text-slate-500 flex items-center justify-between">
                   <span>Aktywne reguły</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={applyRulesNow}
-                      disabled={rulesBusyId === "apply"}
-                      className="sm:hidden rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/15 transition-colors disabled:opacity-50"
-                    >
-                      {rulesBusyId === "apply" ? "…" : "Zastosuj"}
-                    </button>
-                    <span className="text-[10px] text-slate-600">Kolejność = priorytet</span>
-                  </div>
+                  <span className="text-[10px] text-slate-600">Kolejność = priorytet</span>
                 </div>
 
                 {rulesLoading ? (
                   <div className="px-4 py-4 text-[11px] text-slate-400">Ładowanie reguł…</div>
                 ) : sortedRules.length === 0 ? (
                   <div className="px-4 py-4 text-[11px] text-slate-400">
-                    Brak reguł. Skorzystaj z sugestii AI albo dodaj własną automatyzację powyżej.
+                    Brak reguł. Dodaj własną automatyzację albo skorzystaj z sugestii AI.
                   </div>
                 ) : (
                   <div className="divide-y divide-white/10">
@@ -702,27 +829,12 @@ export function LabClient() {
                         <div key={r.id} className="px-4 py-3 flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => toggleRule(r)}
+                              <Toggle
+                                checked={!!r.enabled}
                                 disabled={isBusy}
-                                className={[
-                                  "h-6 w-10 rounded-full border transition-colors relative",
-                                  r.enabled
-                                    ? "border-emerald-400/40 bg-emerald-500/15"
-                                    : "border-white/10 bg-black/20",
-                                  isBusy ? "opacity-60 cursor-not-allowed" : "hover:bg-white/10",
-                                ].join(" ")}
-                                title={r.enabled ? "Wyłącz regułę" : "Włącz regułę"}
-                              >
-                                <span
-                                  className={[
-                                    "absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full",
-                                    "transition-transform duration-200",
-                                    r.enabled ? "translate-x-5 bg-emerald-200" : "translate-x-1 bg-slate-400",
-                                  ].join(" ")}
-                                />
-                              </button>
+                                onChange={() => toggleRule(r)}
+                                label="włącz/wyłącz regułę"
+                              />
 
                               <span className="text-[10px] uppercase tracking-[0.16em] text-slate-600">
                                 #{idx + 1}
@@ -859,31 +971,29 @@ export function LabClient() {
                 )}
               </div>
 
-              <div className="mt-3 text-[10px] text-slate-500">
-                Reguły działają automatycznie dla nowych importów. „Zastosuj teraz” ogarnia zaległości.
+              <div className="text-[10px] text-slate-500">
+                Reguły stosują się automatycznie dla nowych importów. „Zastosuj teraz” ogarnia zaległości.
               </div>
             </div>
-          </section>
+          </GlassCard>
 
-          {/* Kategorie */}
-          <section className="rounded-3xl border border-white/10 bg-slate-950/50 backdrop-blur-xl overflow-hidden">
-            <div className="px-6 sm:px-7 pt-6 pb-5 border-b border-white/10">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Kategorie</div>
-              <h2 className="mt-1 text-sm font-semibold text-slate-50">Twoja mapa wydatków</h2>
-              <p className="mt-1 text-[11px] text-slate-400 max-w-lg">
-                Te kategorie są używane w Flow. Im lepsze kategorie, tym lepsze automatyzacje.
-              </p>
-            </div>
+          {/* Categories */}
+          <GlassCard>
+            <CardHeader
+              kicker="Categories"
+              title="Kategorie (widoczne w Flow)"
+              desc="Dodawaj i porządkuj kategorie. To one napędzają dashboard, filtrację i automatyzacje."
+            />
 
-            <div className="p-6 sm:p-7 space-y-4">
+            <div className="px-6 sm:px-7 py-6 space-y-4">
               {catError && (
                 <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-200">
                   {catError}
                 </div>
               )}
 
+              {/* Create category */}
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                {/* naprawiony layout: button nie rozciąga się */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <div className="flex flex-1 flex-wrap items-center gap-2">
                     <input
@@ -901,19 +1011,14 @@ export function LabClient() {
                     />
                   </div>
 
-                  <button
-                    type="button"
+                  <PillButton
+                    tone="primary"
                     onClick={createNewCategory}
                     disabled={catBusy === "create"}
-                    className={[
-                      "h-9 rounded-full px-3 text-[12px] font-medium whitespace-nowrap shrink-0",
-                      catBusy === "create"
-                        ? "border border-white/10 bg-white/5 text-slate-500 cursor-not-allowed"
-                        : "border border-indigo-400/60 bg-indigo-500/70 text-slate-950 hover:bg-indigo-400 transition-colors",
-                    ].join(" ")}
+                    className="h-9 px-4"
                   >
                     {catBusy === "create" ? "Dodawanie…" : "Dodaj"}
-                  </button>
+                  </PillButton>
                 </div>
 
                 <div className="mt-2 text-[10px] text-slate-500">
@@ -921,6 +1026,7 @@ export function LabClient() {
                 </div>
               </div>
 
+              {/* List */}
               <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
                 <div className="px-4 py-2 border-b border-white/10 text-[10px] uppercase tracking-[0.16em] text-slate-500 flex justify-between">
                   <span>Nazwa</span>
@@ -1018,46 +1124,46 @@ export function LabClient() {
                   )}
                 </div>
               </div>
-
-              <div className="text-[10px] text-slate-500">
-                Zmiany widzisz od razu w Flow. Sugestie automatyzacji pojawiają się, gdy przypisujesz kategorie ręcznie.
-              </div>
             </div>
-          </section>
+          </GlassCard>
         </div>
 
-        {/* RIGHT */}
-        <section id="ai" className="rounded-3xl border border-white/10 bg-slate-950/50 backdrop-blur-xl overflow-hidden">
-          <div className="px-6 sm:px-7 pt-6 pb-5 border-b border-white/10">
-            <h2 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
-              AI Assistant
-              <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-slate-300">
-                learning
-              </span>
-            </h2>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Ten moduł uczy się Twoich decyzji i podpowiada automatyzacje w tle.
-              Bez technicznego gadania — po prostu „Włącz” i działa.
-            </p>
-          </div>
+        {/* RIGHT column: AI */}
+        <GlassCard className="h-fit" >
+          <CardHeader
+            kicker="AI assistant"
+            title="Sugestie automatyzacji"
+            desc="To jest „cukierkowa” warstwa: Lab podpowiada, Ty klikasz „Włącz” i gotowe."
+            right={
+              <div className="hidden sm:flex items-center gap-2">
+                <PillButton
+                  tone="neutral"
+                  onClick={refreshAll}
+                  disabled={loading}
+                >
+                  {loading ? "…" : "Odśwież"}
+                </PillButton>
+              </div>
+            }
+          />
 
-          <div className="p-6 sm:p-7 space-y-4">
+          <div id="ai" className="px-6 sm:px-7 py-6 space-y-4">
             <div className="grid gap-3 md:grid-cols-3">
-              <MiniStat label="Pokrycie kategorii" value={data ? `${coveragePct.toFixed(2)}%` : "—"} />
+              <MiniStat label="Pokrycie" value={data ? `${coveragePct.toFixed(2)}%` : "—"} />
               <MiniStat label="Manualne decyzje" value={data ? `${data.assignments_manual}` : "—"} />
               <MiniStat label="Automatyzacje" value={data ? `${data.assignments_rule}` : "—"} />
             </div>
 
             {loading ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-[11px] text-slate-400">
-                Ładowanie modułu AI…
+                Ładowanie…
               </div>
             ) : !data || visibleSuggestions.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-[11px] text-slate-400 space-y-2">
                 <div className="text-slate-200 font-medium">Tryb uczenia</div>
                 <div>
-                  Na razie nie mam pewnych sugestii. Najszybciej „nauczysz” system,
-                  ustawiając kategorie ręcznie dla kilku powtarzalnych sklepów/usług.
+                  Na razie nie mam pewnych sugestii. Ustaw kilka kategorii ręcznie w Flow
+                  (np. Żabka, Biedronka, Uber), a sugestie zaczną się pojawiać.
                 </div>
                 <div className="pt-1">
                   <Link
@@ -1095,18 +1201,14 @@ export function LabClient() {
                       </div>
 
                       <div className="shrink-0 flex flex-col items-end gap-1">
-                        <button
+                        <PillButton
+                          tone="primary"
                           onClick={() => onEnableSuggestion(s)}
                           disabled={isBusy}
-                          className="
-                            rounded-full border border-indigo-400/60
-                            bg-indigo-500/20 px-3 py-1 text-[11px] font-medium text-indigo-100
-                            hover:bg-indigo-500/30 transition-colors
-                            disabled:opacity-50 disabled:cursor-not-allowed
-                          "
+                          className="px-4"
                         >
                           {isBusy ? "Włączanie…" : "Włącz"}
-                        </button>
+                        </PillButton>
 
                         <button
                           onClick={() => onDismissSuggestion(s)}
@@ -1122,7 +1224,7 @@ export function LabClient() {
               </div>
             )}
           </div>
-        </section>
+        </GlassCard>
       </div>
 
       {/* MODAL: Delete Category */}
@@ -1154,40 +1256,37 @@ export function LabClient() {
               </div>
 
               <div className="mt-3 text-[11px] text-slate-400">
-                Jeśli usuniesz kategorię, system przywróci te transakcje do stanu „—”.
+                Jeśli usuniesz kategorię, transakcje wrócą do „—”.
               </div>
             </div>
 
             <div className="mt-5 flex flex-col gap-2">
               {deleteModal.tx_count > 0 && (
-                <button
-                  className="rounded-full border border-indigo-400/60 bg-indigo-500/25 px-4 py-2 text-[12px] font-medium text-indigo-100 hover:bg-indigo-500/35 transition-colors"
+                <PillButton
+                  tone="primary"
                   onClick={() => confirmDeleteCategory(deleteModal.id, false)}
                   disabled={catBusy === deleteModal.id}
+                  className="py-2"
                 >
                   Usuń i odłącz transakcje
-                </button>
+                </PillButton>
               )}
 
-              {(deleteModal.tx_count > 0 || deleteModal.rule_count > 0) && (
-                <button
-                  className="rounded-full border border-rose-400/50 bg-rose-500/15 px-4 py-2 text-[12px] font-medium text-rose-100 hover:bg-rose-500/20 transition-colors"
-                  onClick={() => confirmDeleteCategory(deleteModal.id, true)}
-                  disabled={catBusy === deleteModal.id}
-                >
-                  Usuń + odłącz + usuń automatyzacje
-                </button>
-              )}
-
-              <button
-                className="rounded-full border border-white/10 bg-white/0 px-4 py-2 text-[12px] text-slate-300 hover:bg-white/10 transition-colors"
-                onClick={() => setDeleteModal(null)}
+              <PillButton
+                tone="danger"
+                onClick={() => confirmDeleteCategory(deleteModal.id, true)}
+                disabled={catBusy === deleteModal.id}
+                className="py-2"
               >
+                Usuń + odłącz + usuń automatyzacje
+              </PillButton>
+
+              <PillButton tone="neutral" onClick={() => setDeleteModal(null)} className="py-2">
                 Anuluj
-              </button>
+              </PillButton>
 
               <div className="pt-2 text-[10px] text-slate-500">
-                Tip: jeśli chcesz zachować dane, zamiast usuwać — rozważ zmianę nazwy/koloru kategorii.
+                Tip: zamiast usuwać — często lepiej zmienić nazwę/kolor.
               </div>
             </div>
           </div>
@@ -1210,53 +1309,31 @@ export function LabClient() {
             </div>
 
             <div className="mt-3 text-[11px] text-slate-400">
-              Po usunięciu reguły system cofnie przypisania kategorii, które wynikały z tej reguły
-              (transakcje wrócą do „—”).
+              Po usunięciu reguły system cofnie przypisania kategorii wynikające z tej reguły (wróci do „—”).
             </div>
 
             <div className="mt-5 flex flex-col gap-2">
-              <button
-                className="rounded-full border border-rose-400/50 bg-rose-500/15 px-4 py-2 text-[12px] font-medium text-rose-100 hover:bg-rose-500/20 transition-colors disabled:opacity-50"
+              <PillButton
+                tone="danger"
                 onClick={() => confirmRemoveRule(deleteRuleModal.id)}
                 disabled={rulesBusyId === "delete"}
+                className="py-2"
               >
                 {rulesBusyId === "delete" ? "Usuwanie…" : "Usuń regułę"}
-              </button>
+              </PillButton>
 
-              <button
-                className="rounded-full border border-white/10 bg-white/0 px-4 py-2 text-[12px] text-slate-300 hover:bg-white/10 transition-colors"
+              <PillButton
+                tone="neutral"
                 onClick={() => setDeleteRuleModal(null)}
                 disabled={rulesBusyId === "delete"}
+                className="py-2"
               >
                 Anuluj
-              </button>
-
-              <div className="pt-2 text-[10px] text-slate-500">
-                Tip: jeśli reguła była dobra, ale zbyt szeroka — edytuj ją zamiast usuwać.
-              </div>
+              </PillButton>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
-      <div className="mt-1 text-[14px] font-semibold text-slate-50">{value}</div>
-    </div>
-  );
-}
-
-function MiniKpi({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
-      <div className="mt-1 text-[16px] font-semibold text-slate-50">{value}</div>
-      <div className="mt-0.5 text-[10px] text-slate-500">{hint}</div>
     </div>
   );
 }

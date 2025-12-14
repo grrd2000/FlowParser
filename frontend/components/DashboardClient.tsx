@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { Transaction } from "@/lib/serverApi";
 
+import { useAuth } from "@/components/AuthProvider";
+import { SignedOutState } from "@/components/SignedOutState";
+
+
 const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
 });
@@ -20,6 +24,18 @@ export function DashboardClient() {
   const [range, setRange] = useState<RangeKey>("3m");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { user, authLoading } = useAuth();
+
+  if (!authLoading && !user) {
+    return (
+      <SignedOutState
+        title="Dashboard"
+        desc="Zaloguj się, aby zobaczyć podsumowania, trendy i wizualizacje wydatków."
+      />
+    );
+  }
+
 
   // 1) Fetch danych raz po załadowaniu
   useEffect(() => {

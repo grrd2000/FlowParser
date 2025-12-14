@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserMenu } from "@/components/UserMenu";
+// import { UserMenu } from "@/components/UserMenu";
+import { AuthButtons } from "@/components/AuthButtons";
+import { useAuth } from "@/components/AuthProvider";
 
 export function TopNav() {
   const pathname = usePathname();
+  const { user, authLoading } = useAuth();
 
   const isDashboard =
     pathname === "/" || pathname?.startsWith("/dashboard");
@@ -50,21 +53,23 @@ export function TopNav() {
 
         {/* PRAWO: Import + User */}
         <div className="flex items-center gap-3">
-          <Link
-            href="/import"
-            className="
-              hidden sm:inline-flex items-center justify-center
-              rounded-full border border-indigo-400/70
-              bg-indigo-500/75 px-3 py-1.5
-              text-[11px] font-medium text-slate-950
-              shadow-md shadow-indigo-500/40
-              hover:bg-indigo-400 hover:border-indigo-300
-              transition-colors
-            "
-          >
-            Import
-          </Link>
-          <UserMenu />
+          {!authLoading && user && (
+            <Link
+              href="/import"
+              className="
+                hidden sm:inline-flex items-center justify-center
+                rounded-full border border-indigo-400/70
+                bg-indigo-500/75 px-3 py-1.5
+                text-[11px] font-medium text-slate-950
+                shadow-md shadow-indigo-500/40
+                hover:bg-indigo-400 hover:border-indigo-300
+                transition-colors
+              "
+            >
+              Import
+            </Link>
+          )}
+          <AuthButtons />
         </div>
       </div>
     </header>

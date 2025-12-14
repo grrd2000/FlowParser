@@ -16,6 +16,8 @@ services:
       - db
     environment:
       - DATABASE_URL=postgresql+psycopg2://admin:admin@db:5432/flowparser_db
+      - SECRET_KEY=dev-secret-change-me
+      - ACCESS_TOKEN_EXPIRE_MINUTES=43200
     ports:
       - "8000:8000"
     volumes:

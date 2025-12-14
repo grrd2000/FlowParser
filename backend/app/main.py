@@ -11,6 +11,7 @@ import re
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy import text, select, func
 from sqlalchemy.orm import Session
+from app.db import get_db
 
 from app.db import engine, SessionLocal
 from app.models import (
@@ -56,8 +57,15 @@ UPLOAD_DIR = "uploads"
 
 
 from fastapi.middleware.cors import CORSMiddleware
+from app.auth_routes import router as auth_router
+
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))  # 30 days
 
 app = FastAPI(title="flowparser (prototype, refactored)")
+
+app.state.SECRET_KEY = SECRET_KEY
+app.state.ACCESS_TOKEN_EXPIRE_MINUTES = ACCESS_TOKEN_EXPIRE_MINUTES
 
 origins = [
     "http://localhost:3000",
@@ -72,30 +80,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 
 # -----------------------
 #  DB dependency
 # -----------------------
 
-def get_db() -> Session:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# def get_db() -> Session:
+#     db = SessionLocal()
+#     try:
+#         yield db
+#     finally:
+#         db.close()
 
 
 def get_current_user(db: Session) -> User:
-    """
-    Tymczasowo: w systemie single-user zwracamy pierwszego istniejącego usera.
-    Później to podmienimy na proper auth.
-    """
     user = db.query(User).order_by(User.id.asc()).first()
+
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="No users configured. Create a user in the database first.",
-        )
+        # Single-user bootstrap (bez żadnych demo kont/wyciągów)
+        user = User(email="local@flowparser.com", password_hash='###', full_name="Local User")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        # jeśli masz preferencje:
+        _ = get_or_create_user_prefs(db, user)
+
+        # i jeśli chcesz domyślne kategorie (polecam)
+        ensure_default_categories(db=db, user=user)
+
     return user
 
 
@@ -154,13 +168,15 @@ def on_startup():
 
     db = SessionLocal()
     try:
-        user = get_or_create_demo_user(db=db)
-        ensure_default_categories(db=db, user=user)
+        user = db.query(User).order_by(User.id.asc()).first()
+        if user:
+            ensure_default_categories(db=db, user=user)
     finally:
         db.close()
 
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
+
 
 
 # -----------------------
@@ -714,12 +730,12 @@ async def import_pdf(
             pass
         raise HTTPException(status_code=400, detail=f"Error during import: {e}")
 
-    # po imporcie – zastosuj reguły użytkownika
+    # po udanym imporcie transakcji:
     try:
-        auto_by_rules = apply_rules_for_statement(db, user.id, statement.id)
-    except Exception as e:
-        print("Apply rules after import failed:", e)
-        auto_by_rules = 0
+        apply_rules_for_user(db, account.user_id)  # albo user.id
+    except Exception:
+        # nie wywracaj importu, reguły to “post-process”
+        pass
 
     return {
         "account_id": account.id,
@@ -966,52 +982,37 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
 def delete_category(
     category_id: int,
     unassign: bool = Query(False),
-    delete_rules: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     user = get_current_user(db)
 
-    cat = (
-        db.query(Category)
-        .filter(Category.id == category_id, Category.user_id == user.id)
-        .first()
-    )
-    if not cat:
+    cat = db.get(Category, category_id)
+    if not cat or cat.user_id != user.id:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    tx_count = (
-        db.query(func.count(Transaction.id))
-        .filter(Transaction.category_id == category_id)
-        .scalar()
-    ) or 0
+    # policz użycia w transakcjach usera
+    tx_q = (
+        db.query(Transaction)
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(Account.user_id == user.id, Transaction.category_id == cat.id)
+    )
+    tx_count = tx_q.count()
 
-    rule_count = (
-        db.query(func.count(CategoryRule.id))
-        .filter(
-            CategoryRule.user_id == user.id,
-            CategoryRule.category_id == category_id,
-        )
-        .scalar()
-    ) or 0
+    rule_q = db.query(CategoryRule).filter(
+        CategoryRule.user_id == user.id,
+        CategoryRule.category_id == cat.id,
+    )
+    rule_count = rule_q.count()
 
-    # Jeśli jest używana i user nie wybrał trybu "force" → 403 z detalami
-    if (tx_count > 0 or rule_count > 0) and not (unassign and (delete_rules or rule_count == 0)):
+    if (tx_count > 0 or rule_count > 0) and not unassign:
         raise HTTPException(
-            status_code=403,
-            detail={
-                "message": "Category is in use",
-                "tx_count": tx_count,
-                "rule_count": rule_count,
-                "actions": {
-                    "unassign": True,
-                    "delete_rules": True,
-                },
-            },
+            status_code=409,
+            detail=f"Category is in use (transactions={tx_count}, rules={rule_count}). Use ?unassign=true",
         )
 
-    # 1) odłącz kategorię od transakcji
-    if unassign and tx_count > 0:
-        db.query(Transaction).filter(Transaction.category_id == category_id).update(
+    if unassign:
+        # odłącz kategorię od transakcji
+        tx_q.update(
             {
                 Transaction.category_id: None,
                 Transaction.category: None,
@@ -1021,33 +1022,12 @@ def delete_category(
             synchronize_session=False,
         )
 
-    # 2) usuń reguły prowadzące do tej kategorii (jeśli wybrano)
-    if delete_rules and rule_count > 0:
-        db.query(CategoryRule).filter(
-            CategoryRule.user_id == user.id,
-            CategoryRule.category_id == category_id,
-        ).delete(synchronize_session=False)
-
-    # Jeśli nadal są reguły (user nie wybrał delete_rules) → blokuj
-    remaining_rules = (
-        db.query(func.count(CategoryRule.id))
-        .filter(CategoryRule.user_id == user.id, CategoryRule.category_id == category_id)
-        .scalar()
-    ) or 0
-    if remaining_rules > 0:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "message": "Category is used by rules",
-                "tx_count": tx_count,
-                "rule_count": remaining_rules,
-            },
-        )
+        # usuń reguły wskazujące na tę kategorię
+        rule_q.delete(synchronize_session=False)
 
     db.delete(cat)
     db.commit()
-
-    return {"ok": True}
+    return {"deleted": True}
 
 
 
@@ -1101,69 +1081,67 @@ def update_category_rule(rule_id: int, payload: CategoryRuleUpdate, db: Session 
     return rule
 
 
+def _rule_matches_tx(rule: CategoryRule, desc: str | None) -> bool:
+    raw = desc or ""
+    norm = normalize_text(raw)
+
+    if rule.pattern_type == "token":
+        return description_contains_token(raw, rule.pattern_value or "")
+
+    pat = normalize_text(rule.pattern_value or "")
+    if not pat:
+        return False
+
+    if rule.pattern_type == "contains":
+        return pat in norm
+    if rule.pattern_type == "startswith":
+        return norm.startswith(pat)
+    if rule.pattern_type == "equals":
+        return norm == pat
+    return False
+
+
 @app.delete("/category-rules/{rule_id}")
-def delete_category_rule(rule_id: int, db: Session = Depends(get_db)):
+def delete_category_rule(
+    rule_id: int,
+    unassign: bool = Query(True),
+    db: Session = Depends(get_db),
+):
     user = get_current_user(db)
 
-    rule = (
-        db.query(CategoryRule)
-        .filter(CategoryRule.id == rule_id, CategoryRule.user_id == user.id)
-        .first()
-    )
-    if not rule:
+    rule = db.get(CategoryRule, rule_id)
+    if not rule or rule.user_id != user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
 
-    # znajdź transakcje, którym TA reguła mogła nadać kategorię
-    q = (
-        db.query(Transaction)
-        .join(Account, Transaction.account_id == Account.id)
-        .filter(
-            Account.user_id == user.id,
-            Transaction.is_manual == False,
-            Transaction.category_source == "rule",
-            Transaction.category_id == rule.category_id,
-        )
-    )
-
-    affected = 0
-    for tx in q.all():
-        text_norm = normalize_text(tx.description or "")
-
-        pattern_norm = normalize_text(rule.pattern_value or "")
-        if not pattern_norm:
-            continue
-
-        ok = False
-        if rule.pattern_type == "contains":
-            ok = pattern_norm in text_norm
-        elif rule.pattern_type == "startswith":
-            ok = text_norm.startswith(pattern_norm)
-        elif rule.pattern_type == "token":
-            toks = tokenize(rule.pattern_value or "")
-            token = toks[0] if toks else None
-            if token:
-                ok = description_contains_token(tx.description or "", token)
-
-        if ok:
-            old_cat_id = tx.category_id
-            tx.category_id = None
-            tx.category = None
-            tx.category_source = "unknown"
-            tx.category_confidence = None
-
-            db.add(
-                ClassificationEvent(
-                    transaction_id=tx.id,
-                    old_category_id=old_cat_id,
-                    new_category_id=None,
-                    source="rule_deleted",
-                )
+    if unassign:
+        # kandydaci: tylko ci, którzy mają kategorię z reguły i source == "rule"
+        rows = (
+            db.query(Transaction.id, Transaction.description)
+            .join(Account, Account.id == Transaction.account_id)
+            .filter(
+                Account.user_id == user.id,
+                Transaction.category_id == rule.category_id,
+                Transaction.category_source == "rule",
             )
-            affected += 1
+            .all()
+        )
+
+        tx_ids = [tx_id for tx_id, desc in rows if _rule_matches_tx(rule, desc)]
+
+        if tx_ids:
+            db.query(Transaction).filter(Transaction.id.in_(tx_ids)).update(
+                {
+                    Transaction.category_id: None,
+                    Transaction.category: None,
+                    Transaction.category_source: "unknown",
+                    Transaction.category_confidence: None,
+                },
+                synchronize_session=False,
+            )
 
     db.delete(rule)
     db.commit()
-    return {"ok": True, "detached": affected}
+    return {"ok": True}
 
 
 @app.post("/category-rules/reorder", response_model=list[CategoryRuleOut])
@@ -1649,21 +1627,6 @@ def toggle_category_rule(rule_id: int, db: Session = Depends(get_db)):
     return {"id": rule.id, "enabled": rule.enabled}
 
 
-@app.delete("/category-rules/{rule_id}")
-def delete_category_rule(rule_id: int, db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    rule = db.get(CategoryRule, rule_id)
-    if not rule or rule.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Rule not found")
-
-    db.delete(rule)
-    db.commit()
-    return {"ok": True}
-
-
 
 def ensure_default_categories(db: Session, user: User):
     """Tworzy parę podstawowych kategorii dla użytkownika, jeśli jeszcze nie istnieją."""
@@ -1835,14 +1798,10 @@ from sqlalchemy import or_
 def apply_rules_for_user(db: Session, user_id: int) -> int:
     rules = (
         db.query(CategoryRule)
-        .filter(
-            CategoryRule.user_id == user_id,
-            CategoryRule.enabled == True,
-        )
+        .filter(CategoryRule.user_id == user_id, CategoryRule.enabled == True)
         .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
         .all()
     )
-
     if not rules:
         return 0
 
@@ -1862,8 +1821,8 @@ def apply_rules_for_user(db: Session, user_id: int) -> int:
     assigned = 0
 
     for tx in txs:
-        # znormalizowany opis transakcji
-        text_norm = normalize_text(tx.description or "")
+        text_raw = tx.description or ""
+        text_norm = normalize_text(text_raw)
 
         old_cat_id = tx.category_id
 
@@ -1871,50 +1830,49 @@ def apply_rules_for_user(db: Session, user_id: int) -> int:
             if rule.field != "description":
                 continue
 
-            # znormalizowany wzorzec
-            pattern_norm = normalize_text(rule.pattern_value or "")
-            if not pattern_norm:
-                continue
+            # --- MATCH ---
+            matched = False
 
-            ok = False
-            if rule.pattern_type == "contains":
-                ok = pattern_norm in text_norm
-
-            elif rule.pattern_type == "startswith":
-                ok = text_norm.startswith(pattern_norm)
-
-            elif rule.pattern_type == "token":
-                # pattern_value dla token jest pojedynczym tokenem (np. "zabka")
-                toks = tokenize(rule.pattern_value or "")
-                token = toks[0] if toks else None
-                if token:
-                    ok = description_contains_token(tx.description or "", token)
-
+            if rule.pattern_type == "token":
+                # pattern_value to pojedynczy token z tokenize()
+                if description_contains_token(text_raw, rule.pattern_value or ""):
+                    matched = True
             else:
-                # inne typy na przyszłość
-                continue
-
-            if ok:
-                cat = rule.category
-                if not cat:
+                pattern_norm = normalize_text(rule.pattern_value or "")
+                if not pattern_norm:
                     continue
 
-                tx.category_id = cat.id
-                tx.category = cat.name
-                tx.category_source = "rule"
-                tx.category_confidence = None
+                if rule.pattern_type == "contains" and pattern_norm in text_norm:
+                    matched = True
+                elif rule.pattern_type == "startswith" and text_norm.startswith(pattern_norm):
+                    matched = True
+                elif rule.pattern_type == "equals" and text_norm == pattern_norm:
+                    matched = True
 
-                event = ClassificationEvent(
+            if not matched:
+                continue
+
+            # --- APPLY ---
+            cat = db.get(Category, rule.category_id)
+            if not cat:
+                continue
+
+            tx.category_id = cat.id
+            tx.category = cat.name
+            tx.category_source = "rule"
+            tx.category_confidence = None
+
+            db.add(
+                ClassificationEvent(
                     transaction_id=tx.id,
                     old_category_id=old_cat_id,
                     new_category_id=tx.category_id,
                     source="rule",
                 )
-                db.add(event)
+            )
 
-                assigned += 1
-                # pierwsza pasująca reguła wygrywa
-                break
+            assigned += 1
+            break
 
     db.commit()
     return assigned
