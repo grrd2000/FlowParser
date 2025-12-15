@@ -20,25 +20,32 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export function DashboardClient() {
+
+  const { user, authLoading } = useAuth();
+
   const [transactions, setTransactions] = useState<TxExt[]>([]);
   const [range, setRange] = useState<RangeKey>("3m");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { user, authLoading } = useAuth();
 
-  if (!authLoading && !user) {
-    return (
-      <SignedOutState
-        title="Dashboard"
-        desc="Zaloguj się, aby zobaczyć podsumowania, trendy i wizualizacje wydatków."
-      />
-    );
-  }
+
+
 
 
   // 1) Fetch danych raz po załadowaniu
   useEffect(() => {
+    // czekamy aż auth się ustali
+    if (authLoading) return;
+
+    // niezalogowany -> nie fetchujemy, tylko ustawiamy stany
+    if (!user) {
+      setTransactions([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -60,8 +67,7 @@ export function DashboardClient() {
       }
     };
     fetchData();
-  }, []);
-
+  }, [authLoading, user]);
   // 2) Wyliczenia zależne od zakresu
 const {
   filtered,
@@ -86,6 +92,17 @@ const {
   };
 }, [transactions, range]);
   const rangeText = rangeLabel(range, startDate);
+
+  // Signed out state (after all hooks to satisfy React Rules of Hooks)
+  if (!authLoading && !user) {
+    return (
+      <SignedOutState
+        title="Dashboard"
+        desc="Zaloguj się, aby zobaczyć podsumowania, trendy i wizualizacje wydatków."
+      />
+    );
+  }
+
 
   return (
     <div className="space-y-6">

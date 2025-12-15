@@ -2,18 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-// import { UserMenu } from "@/components/UserMenu";
-import { AuthButtons } from "@/components/AuthButtons";
 import { useAuth } from "@/components/AuthProvider";
+import { UserMenu } from "@/components/UserMenu";
 
 export function TopNav() {
   const pathname = usePathname();
-  const { user, authLoading } = useAuth();
+  const { user, authLoading, openAuth } = useAuth();
 
-  const isDashboard =
-    pathname === "/" || pathname?.startsWith("/dashboard");
+  const isDashboard = pathname === "/" || pathname?.startsWith("/dashboard");
   const isFlow = pathname?.startsWith("/flow");
-  const isLab = pathname?.startsWith("/lab");
 
   return (
     <header
@@ -29,12 +26,10 @@ export function TopNav() {
           <span className="text-[11px] uppercase tracking-[0.18em] text-slate-200/80">
             FlowParser
           </span>
-          <span className="text-[10px] text-slate-500">
-            Personal finance lab
-          </span>
+          <span className="text-[10px] text-slate-500">Personal finance lab</span>
         </div>
 
-        {/* ŚRODEK: segmented tabs (lekko w lewo, nie idealnie na środku ekranu) */}
+        {/* ŚRODEK: segmented tabs (główne sekcje) */}
         <div className="flex flex-1 justify-center md:justify-start">
           <div
             className="
@@ -47,12 +42,12 @@ export function TopNav() {
           >
             <SegmentTab href="/dashboard" label="Dashboard" active={isDashboard} />
             <SegmentTab href="/flow" label="Flow" active={isFlow} />
-            <SegmentTab href="/lab" label="Lab" active={isLab} />
           </div>
         </div>
 
-        {/* PRAWO: Import + User */}
+        {/* PRAWO: Import + User / Auth */}
         <div className="flex items-center gap-3">
+          {/* Import tylko dla zalogowanych */}
           {!authLoading && user && (
             <Link
               href="/import"
@@ -69,7 +64,40 @@ export function TopNav() {
               Import
             </Link>
           )}
-          <AuthButtons />
+
+          {/* Auth state */}
+          {authLoading ? (
+            <div className="h-9 w-24 rounded-full border border-white/10 bg-white/5 animate-pulse" />
+          ) : !user ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openAuth("login")}
+                className="
+                  rounded-full border border-white/10
+                  bg-white/5 px-3 py-1.5
+                  text-[11px] text-slate-200
+                  hover:bg-white/10 transition-colors
+                "
+              >
+                Login
+              </button>
+              <button
+                onClick={() => openAuth("register")}
+                className="
+                  rounded-full border border-indigo-400/70
+                  bg-indigo-500/75 px-3 py-1.5
+                  text-[11px] font-medium text-slate-950
+                  shadow-md shadow-indigo-500/40
+                  hover:bg-indigo-400 hover:border-indigo-300
+                  transition-colors
+                "
+              >
+                Register
+              </button>
+            </div>
+          ) : (
+            <UserMenu />
+          )}
         </div>
       </div>
     </header>

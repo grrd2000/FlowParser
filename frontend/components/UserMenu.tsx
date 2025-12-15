@@ -1,204 +1,136 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { UploadForm } from "@/components/UploadForm";
-
-type UserProfileLite = {
-  name: string;
-  email: string;
-};
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 export function UserMenu() {
+  const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
-  // const [showImportModal, setShowImportModal] = useState(false);
-  const [profile, setProfile] = useState<UserProfileLite | null>(null);
-  const [loadingProfile, setLoadingProfile] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const label = useMemo(() => {
+    if (!user) return "User";
+    const name = (user.full_name ?? "").trim();
+    if (name) return name;
+    const email = user.email ?? "";
+    return email.includes("@") ? email.split("@")[0] : email;
+  }, [user]);
 
-  // pobranie podstawowych danych usera (do avatara i headera)
+  const initials = useMemo(() => {
+    if (!user) return "U";
+    const name = (user.full_name ?? "").trim();
+    if (name) {
+      const parts = name.split(" ").filter(Boolean);
+      const a = parts[0]?.[0] ?? "U";
+      const b = parts[1]?.[0] ?? "";
+      return (a + b).toUpperCase();
+    }
+    const email = user.email ?? "u";
+    return (email[0] ?? "U").toUpperCase();
+  }, [user]);
+
   useEffect(() => {
-    let active = true;
-
-    const fetchProfile = async () => {
-      try {
-        setLoadingProfile(true);
-        const res = await fetch(`${API_BASE}/user/me`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!active) return;
-
-        setProfile({
-          name: data.name ?? "User",
-          email: data.email ?? "you@example.com",
-        });
-      } catch {
-        // zostawiamy null -> pokaże się fallback
-      } finally {
-        if (active) setLoadingProfile(false);
-      }
-    };
-
-    fetchProfile();
+    function onDocClick(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
     return () => {
-      active = false;
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
     };
   }, []);
 
-  // zamykanie po kliknięciu poza dropdownem
-  useEffect(() => {
-    if (!open) return;
-
-    const handleClick = (e: MouseEvent) => {
-      if (!menuRef.current) return;
-      if (!(e.target instanceof Node)) return;
-      if (!menuRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleEsc);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [open]);
-
-  const initials =
-    profile?.name && profile.name.trim().length > 0
-      ? profile.name
-          .trim()
-          .split(" ")
-          .map((p) => p[0]?.toUpperCase())
-          .slice(0, 2)
-          .join("")
-      : "U";
+  if (!user) return null;
 
   return (
-    <>
-      {/* przycisk z avatarem w app shellu */}
-      <div ref={menuRef} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-2 py-1 hover:border-indigo-400/70 hover:bg-slate-900 transition-colors"
+    <div className="relative" ref={wrapRef}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="
+          inline-flex items-center gap-2
+          rounded-full border border-white/10
+          bg-white/5 px-2.5 py-1.5
+          text-[11px] text-slate-200
+          hover:bg-white/10 transition-colors
+        "
+      >
+        <span
+          className="
+            inline-flex h-7 w-7 items-center justify-center
+            rounded-full border border-white/10
+            bg-gradient-to-br from-indigo-400/60 to-emerald-400/40
+            text-[11px] font-semibold text-slate-950
+          "
         >
-          <div className="h-7 w-7 rounded-full bg-indigo-500/40 border border-indigo-400/60 flex items-center justify-center text-[11px] font-semibold text-indigo-50">
-            {loadingProfile ? "…" : initials}
+          {initials}
+        </span>
+        <span className="hidden sm:inline-block max-w-[140px] truncate">
+          {label}
+        </span>
+        <span className="opacity-70">▾</span>
+      </button>
+
+      {/* dropdown */}
+      <div
+        className={[
+          "absolute right-0 mt-2 w-[240px] overflow-hidden rounded-2xl",
+          "border border-white/10 bg-slate-950/75 backdrop-blur-xl",
+          "shadow-2xl shadow-black/40",
+          "transition-all duration-150",
+          open ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-1 pointer-events-none",
+        ].join(" ")}
+      >
+        <div className="px-3 py-2 border-b border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+            Konto
           </div>
-        </button>
-
-        {/* dropdown */}
-        {open && (
-          <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-800 bg-slate-950/95 shadow-xl shadow-black/60 backdrop-blur-md z-40 p-3">
-            {/* header usera */}
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-800/60">
-              <div className="h-9 w-9 rounded-full bg-indigo-500/40 border border-indigo-400/70 flex items-center justify-center text-xs font-semibold text-indigo-50">
-                {initials}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-medium text-slate-100">
-                  {profile?.name ?? "User"}
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  {profile?.email ?? "you@example.com"}
-                </span>
-                <span className="text-[10px] text-slate-600 mt-0.5">
-                  Local environment
-                </span>
-              </div>
-            </div>
-
-            {/* sekcja: profile / accounts / statements */}
-            <div className="py-2 text-sm">
-              <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
-                My space
-              </div>
-              <nav className="flex flex-col gap-1">
-                <Link
-                  href="/profile"
-                  className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-800/80 text-xs text-slate-200"
-                  onClick={() => setOpen(false)}
-                >
-                  <span>Profile</span>
-                  <span className="text-[10px] text-slate-500">
-                    ustawienia
-                  </span>
-                </Link>
-                <Link
-                  href="/profile/accounts"
-                  className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-800/80 text-xs text-slate-200"
-                  onClick={() => setOpen(false)}
-                >
-                  <span>Accounts</span>
-                  <span className="text-[10px] text-slate-500">
-                    konta i banki
-                  </span>
-                </Link>
-                <Link
-                  href="/profile/statements"
-                  className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-800/80 text-xs text-slate-200"
-                  onClick={() => setOpen(false)}
-                >
-                  <span>Statements</span>
-                  <span className="text-[10px] text-slate-500">
-                    wyciągi
-                  </span>
-                </Link>
-                {/* <Link
-                  href="/lab"
-                  className="
-                    flex items-center justify-between gap-3
-                    rounded-xl px-3 py-2
-                    text-[12px] text-slate-200
-                    hover:bg-white/5 hover:text-white
-                    transition-colors
-                  "
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/15 border border-indigo-400/30">
-                      ✨
-                    </span>
-                    AI Assistant
-                  </span>
-                  <span className="text-[10px] text-slate-500">Lab</span>
-                </Link> */}
-              </nav>
-            </div>
-
-            {/* sekcja: data & imports */}
-            <div className="py-2 border-t border-slate-800/60 text-sm">
-              <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
-                Data &amp; imports
-              </div>
-                <Link
-                  href="/import"
-                  className="w-full rounded-lg bg-indigo-500/15 border border-indigo-400/60 px-2 py-1.5 text-xs text-indigo-100 hover:bg-indigo-500/25 flex items-center justify-between"
-                  onClick={() => setOpen(false)}
-                >
-                  <span>Import statements</span>
-                  {/* <span className="text-[10px] text-indigo-200">PKO BP</span> */}
-                </Link>
-
-            </div>
-
-            {/* sekcja: preferences na przyszłość */}
-            <div className="pt-2 border-t border-slate-800/60 text-[11px] text-slate-500">
-              <span>Theme: dark · Preferences in Profile</span>
-            </div>
+          <div className="mt-0.5 text-[12px] font-medium text-slate-100 truncate">
+            {user.email}
           </div>
-        )}
+        </div>
+
+        <nav className="py-1">
+          <MenuLink href="/statements" label="Statements" />
+          <MenuLink href="/lab" label="Lab" />
+          <MenuLink href="/profile" label="Profile" />
+        </nav>
+
+        <div className="border-t border-white/10 p-2">
+          <button
+            onClick={() => logout()}
+            className="
+              w-full rounded-xl border border-white/10
+              bg-white/5 px-3 py-2
+              text-left text-[12px] text-slate-200
+              hover:bg-white/10 transition-colors
+            "
+          >
+            Logout
+          </button>
+        </div>
       </div>
+    </div>
+  );
+}
 
-    </>
+function MenuLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="
+        flex items-center justify-between
+        px-3 py-2 text-[12px] text-slate-200
+        hover:bg-white/5 transition-colors
+      "
+    >
+      <span>{label}</span>
+      <span className="text-slate-500">→</span>
+    </Link>
   );
 }

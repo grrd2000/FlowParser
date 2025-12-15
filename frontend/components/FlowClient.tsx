@@ -42,17 +42,19 @@ type AutomationBanner = {
 } | null;
 
 export function FlowClient() {
+  const { user, authLoading } = useAuth();
+
   const [transactions, setTransactions] = useState<TxExt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // presety dat i filtr typu
+  // ✅ presety dat i filtr typu
   const [range, setRange] = useState<RangeKey>("3m");
   const [kind, setKind] = useState<"all" | "income" | "expense">("all");
 
-  // panel filtrów
+  // ✅ nowy panel filtrów
   const [search, setSearch] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [includeUncategorized, setIncludeUncategorized] = useState(false);
@@ -64,39 +66,43 @@ export function FlowClient() {
   const [amountMax, setAmountMax] = useState<number | null>(null);
   const [density, setDensity] = useState<Density>("compact");
 
-  // zaznaczenie (ID + open)
+  // ✅ trzymamy ID, a nie cały obiekt (żeby panel zawsze brał świeże dane ze stanu)
   const [selectedTxId, setSelectedTxId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // sugestia automatyzacji
+  // ✅ sugestia automatyzacji (wiązana do konkretnej transakcji)
   const [ruleSuggestion, setRuleSuggestion] = useState<
     (RuleSuggestion & { txId: number }) | null
   >(null);
 
+  // ✅ “Nie teraz” – chowamy sugestię tylko dla aktualnie klikniętej transakcji
   const [dismissedSuggestionForTx, setDismissedSuggestionForTx] = useState<
     number | null
   >(null);
 
   const [enablingSuggestion, setEnablingSuggestion] = useState(false);
 
+  // ✅ dyskretny status po “Włącz” (bez toastów)
   const [automationBanner, setAutomationBanner] = useState<AutomationBanner>(
     null
   );
 
-  const { user, authLoading } = useAuth();
-
-  if (!authLoading && !user) {
-    return (
-      <SignedOutState
-        title="Flow"
-        desc="Zaloguj się, aby analizować transakcje, filtrować i budować swój budżet."
-      />
-    );
-  }
-
-
   // 1) Load data
   useEffect(() => {
+    // czekamy aż auth się ustali
+    if (authLoading) return;
+
+    // niezalogowany -> nie fetchujemy, tylko pokazujemy ładny empty state
+    if (!user) {
+      setTransactions([]);
+      setCategories([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    let ignore = false;
+
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -105,19 +111,26 @@ export function FlowClient() {
           fetchTransactions(),
           fetchCategories(),
         ]);
+
+        if (ignore) return;
+
         setTransactions(normalizeTransactions(txs));
         setCategories(cats);
       } catch (e: any) {
+        if (ignore) return;
         console.error(e);
         setError(e?.message ?? "Nie udało się pobrać danych.");
       } finally {
+        if (ignore) return;
         setLoading(false);
       }
     };
-    load();
-  }, []);
 
-  // domain suwaka kwoty (z całego zbioru)
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, [authLoading, user]);// ✅ domain suwaka kwoty (z całego zbioru; filtr działa dalej po range/kind itd.)
   const amountDomain = useMemo(() => {
     const vals = transactions
       .map((t) => Math.abs(t.amountNum ?? 0))
@@ -125,6 +138,7 @@ export function FlowClient() {
 
     if (vals.length === 0) return { min: 0, max: 0 };
 
+    // odrobina stabilności UI: clamp do “ładnych” liczb
     const min = Math.floor(Math.min(...vals));
     const max = Math.ceil(Math.max(...vals));
     return { min, max };
@@ -132,35 +146,42 @@ export function FlowClient() {
 
   // 2) Filter + metrics
   const { filtered, startDate, metrics } = useMemo(() => {
-    // range
+    // najpierw range
     const { filtered: afterRange, startDate } = filterByRange(transactions, range);
 
-    // kind
+    // potem kind
     const afterKind = afterRange.filter((t) => {
       if (kind === "income") return t.amountNum >= 0;
       if (kind === "expense") return t.amountNum < 0;
       return true;
     });
 
-    // search
+    // search (normalizowany)
     const q = normalizeQuery(search);
     const afterSearch =
       q.length === 0
         ? afterKind
-        : afterKind.filter((t) => normalizeQuery(t.description ?? "").includes(q));
+        : afterKind.filter((t) =>
+            normalizeQuery(t.description ?? "").includes(q)
+          );
 
-    // categories
+    // kategorie (multi + brak kategorii)
     const afterCategories = afterSearch.filter((t) => {
       const hasCat = t.category_id != null;
 
+      // brak filtrowania kategorii
       if (selectedCategoryIds.length === 0 && !includeUncategorized) return true;
+
+      // dopasowanie do wybranych
       if (hasCat && selectedCategoryIds.includes(t.category_id!)) return true;
+
+      // “brak kategorii”
       if (!hasCat && includeUncategorized) return true;
 
       return false;
     });
 
-    // source
+    // źródło
     const afterSource = afterCategories.filter((t) => {
       if (sourceFilter === "all") return true;
       if (sourceFilter === "manual") return t.is_manual === true;
@@ -168,7 +189,7 @@ export function FlowClient() {
       return true;
     });
 
-    // amount range
+    // kwota (range)
     const aMin = amountMin;
     const aMax = amountMax;
     const afterAmount =
@@ -196,13 +217,13 @@ export function FlowClient() {
     amountAbs,
   ]);
 
-  // zaznaczona transakcja zawsze z aktualnego stanu
+  // ✅ zaznaczona transakcja zawsze z aktualnego stanu
   const selectedTx = useMemo(() => {
     if (!selectedTxId) return null;
     return transactions.find((t) => t.id === selectedTxId) ?? null;
   }, [transactions, selectedTxId]);
 
-  // jeśli przez filtry zaznaczony rekord wypadnie z widoku – zamykamy panel
+  // ✅ jeśli przez filtry zaznaczony rekord wypadnie z widoku – zamykamy panel
   useEffect(() => {
     if (!selectedTxId) return;
     const stillVisible = filtered.some((t) => t.id === selectedTxId);
@@ -212,7 +233,7 @@ export function FlowClient() {
         setSelectedTxId(null);
         setRuleSuggestion(null);
         setDismissedSuggestionForTx(null);
-      }, 260);
+      }, 300);
     }
   }, [filtered, selectedTxId]);
 
@@ -231,7 +252,7 @@ export function FlowClient() {
         setSelectedTxId(null);
         setRuleSuggestion(null);
         setDismissedSuggestionForTx(null);
-      }, 260);
+      }, 300);
       return;
     }
 
@@ -317,14 +338,7 @@ export function FlowClient() {
     if (sourceFilter !== "all") n++;
     if (amountMin != null || amountMax != null) n++;
     return n;
-  }, [
-    search,
-    selectedCategoryIds,
-    includeUncategorized,
-    sourceFilter,
-    amountMin,
-    amountMax,
-  ]);
+  }, [search, selectedCategoryIds, includeUncategorized, sourceFilter, amountMin, amountMax]);
 
   const resetSmartFilters = () => {
     setSearch("");
@@ -334,7 +348,19 @@ export function FlowClient() {
     setAmountAbs(true);
     setAmountMin(null);
     setAmountMax(null);
+    // density zostawiamy – to “preferencja widoku”
   };
+
+  // Signed out state (po hookach)
+  if (!authLoading && !user) {
+    return (
+      <SignedOutState
+        title="Flow"
+        desc="Zaloguj się, aby analizować transakcje, filtrować dane i przypisywać kategorie."
+      />
+    );
+  }
+
 
   return (
     <div className="space-y-6">
@@ -356,6 +382,7 @@ export function FlowClient() {
         </div>
       )}
 
+      {/* GŁÓWNY LAYOUT */}
       <section className="space-y-4">
         {/* KPI */}
         <section className="grid gap-4 md:grid-cols-3">
@@ -376,7 +403,7 @@ export function FlowClient() {
           />
         </section>
 
-        {/* FILTERS */}
+        {/* JEDEN SPÓJNY CARD Z FILTRAMI */}
         <FlowFiltersBar
           range={range}
           setRange={setRange}
@@ -404,7 +431,7 @@ export function FlowClient() {
           onReset={resetSmartFilters}
         />
 
-        {/* TABLE + DETAILS */}
+        {/* TABELA + SZCZEGÓŁY */}
         <section className="glass-card glass-card-hover-soft p-4 md:p-5 overflow-hidden">
           <div className="flex items-center justify-between mb-3 gap-3">
             <div className="min-w-0">
@@ -486,6 +513,7 @@ function FlowFiltersBar({
   setRange,
   kind,
   setKind,
+
   search,
   setSearch,
   categories,
@@ -558,6 +586,7 @@ function FlowFiltersBar({
 
   return (
     <div className="glass-card glass-card-hover-soft px-4 py-4 space-y-4">
+      {/* GÓRA: typ + presety (zastępuje stary “pierwszy card”) */}
       <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
@@ -601,7 +630,9 @@ function FlowFiltersBar({
         </div>
       </div>
 
+      {/* DÓŁ: wszystkie “fancy” filtry (jak masz teraz) */}
       <div className="flex flex-wrap items-end gap-3">
+        {/* Search */}
         <div className="flex-1 min-w-[220px]">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
             Szukaj w opisie
@@ -614,6 +645,7 @@ function FlowFiltersBar({
           />
         </div>
 
+        {/* Kategorie */}
         <div className="min-w-[200px]">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
             Kategorie
@@ -704,6 +736,7 @@ function FlowFiltersBar({
           </Popover.Root>
         </div>
 
+        {/* Kwota */}
         <div className="min-w-[270px]">
           <div className="flex items-center justify-between">
             <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
@@ -745,6 +778,7 @@ function FlowFiltersBar({
           </div>
         </div>
 
+        {/* Źródło */}
         <div className="min-w-[160px]">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
             Źródło
@@ -760,6 +794,7 @@ function FlowFiltersBar({
           </select>
         </div>
 
+        {/* Gęstość */}
         <div className="min-w-[180px]">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
             Widok
@@ -783,6 +818,7 @@ function FlowFiltersBar({
           </div>
         </div>
 
+        {/* Reset + licznik */}
         <div className="ml-auto flex items-center gap-3">
           <button
             type="button"
@@ -800,7 +836,79 @@ function FlowFiltersBar({
   );
 }
 
-/* ---------- UI BITS ---------- */
+
+/* ---------- LEWY PANEL ---------- */
+
+function FlowSidebar({
+  range,
+  onRangeChange,
+  kind,
+  onKindChange,
+}: {
+  range: RangeKey;
+  onRangeChange: (r: RangeKey) => void;
+  kind: "all" | "income" | "expense";
+  onKindChange: (k: "all" | "income" | "expense") => void;
+}) {
+  return (
+    <aside className="glass-card p-4 space-y-4 h-fit">
+      <div className="space-y-1">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          Filtry
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Typ + zakres czasu. Pozostałe filtry masz w panelu nad tabelą.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-[11px] font-medium text-slate-300">Typ przepływu</div>
+        <div className="flex flex-wrap gap-1">
+          <ChipButton active={kind === "all"} onClick={() => onKindChange("all")}>
+            Wszystkie
+          </ChipButton>
+          <ChipButton
+            active={kind === "income"}
+            onClick={() => onKindChange("income")}
+          >
+            Wpływy
+          </ChipButton>
+          <ChipButton
+            active={kind === "expense"}
+            onClick={() => onKindChange("expense")}
+          >
+            Wydatki
+          </ChipButton>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-[11px] font-medium text-slate-300">Presety zakresów</div>
+        <div className="grid grid-cols-3 gap-1 text-[11px]">
+          {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onRangeChange(key)}
+              className={[
+                "rounded-full px-2 py-1 border transition-all",
+                range === key
+                  ? "bg-white/80 text-slate-900 border-white"
+                  : "bg-white/0 text-slate-300 border-white/10 hover:bg-white/10",
+              ].join(" ")}
+            >
+              {rangeLabelShort(key)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-white/10 pt-3 text-[11px] text-slate-500">
+        Tip: hover na “Opis” pokazuje pełny tekst bez rozwalania wierszy.
+      </div>
+    </aside>
+  );
+}
 
 function ChipButton({
   active,
@@ -827,6 +935,8 @@ function ChipButton({
   );
 }
 
+/* ---------- KPI ---------- */
+
 function KpiCard({
   label,
   value,
@@ -851,16 +961,6 @@ function KpiCard({
 
 /* ---------- TABLE ---------- */
 
-const COL_W = {
-  date: "w-[110px]",
-  description: "w-auto",
-  category: "w-[160px]",
-  amount: "w-[130px]",
-  value_date: "w-[120px]",
-  is_manual: "w-[80px]",
-  account_id: "w-[90px]",
-};
-
 const transactionColumns: ColumnDef<TxExt>[] = [
   {
     id: "date",
@@ -882,24 +982,18 @@ const transactionColumns: ColumnDef<TxExt>[] = [
       const has = desc.length > 0;
 
       const density = (table.options.meta as any)?.density as Density | undefined;
-      const compact = density !== "comfortable";
 
-      // stała wysokość wiersza: w comfort zawsze “rezerwujemy” 2 linie
-      const fixedH = compact ? "min-h-[1.25rem]" : "min-h-[2.5rem]";
-      const renderMode = compact ? "truncate" : "line-clamp-2";
+      const baseTextClass = has ? "text-slate-100" : "text-slate-600";
+      const compact = density !== "comfortable";
 
       return (
         <Tooltip.Root>
           <Tooltip.Trigger asChild>
             <div
               className={[
-                "block max-w-[520px] overflow-hidden",
-                renderMode,
-                fixedH,
-                has ? "text-slate-100" : "text-slate-600",
-                // długie tokeny (numery) nie mają spacji → niech się łamią w środku,
-                // ale dalej trzymamy line-clamp
-                "break-all",
+                "block max-w-[420px]",
+                compact ? "truncate" : "line-clamp-2",
+                baseTextClass,
               ].join(" ")}
               title={has ? desc : "—"}
             >
@@ -912,7 +1006,7 @@ const transactionColumns: ColumnDef<TxExt>[] = [
               side="top"
               align="start"
               className="
-                z-50 max-w-[720px]
+                z-50 max-w-[680px]
                 rounded-2xl border border-white/10 bg-slate-950/80
                 backdrop-blur-xl px-4 py-3
                 text-[12px] text-slate-200
@@ -922,7 +1016,7 @@ const transactionColumns: ColumnDef<TxExt>[] = [
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-1">
                 Pełny opis
               </div>
-              <div className="leading-snug whitespace-pre-wrap break-words">
+              <div className="leading-snug whitespace-pre-wrap">
                 {has ? desc : "—"}
               </div>
               <Tooltip.Arrow className="fill-white/10" />
@@ -944,9 +1038,16 @@ const transactionColumns: ColumnDef<TxExt>[] = [
 
       return (
         <div className="flex items-center gap-2 min-w-0">
-          <span className={has ? "text-slate-400 truncate" : "text-slate-600"}>
+          <span
+            className={
+              has
+                ? "text-slate-400 whitespace-nowrap"
+                : "text-slate-600 whitespace-nowrap"
+            }
+          >
             {has ? cat : "—"}
           </span>
+
           {has && isAuto && (
             <span className="text-[9px] uppercase tracking-[0.16em] text-indigo-300/90 whitespace-nowrap">
               AUTO
@@ -980,9 +1081,10 @@ const transactionColumns: ColumnDef<TxExt>[] = [
     header: () => "Data waluty",
     cell: ({ row }) => {
       const raw = row.original.value_date as any;
-      if (!raw) return <span className="text-slate-600">—</span>;
+      if (!raw) return <span className="text-slate-500">—</span>;
       const d = new Date(raw);
-      if (Number.isNaN(d.getTime())) return <span className="text-slate-600">—</span>;
+      if (Number.isNaN(d.getTime()))
+        return <span className="text-slate-500">—</span>;
       return (
         <span className="whitespace-nowrap text-slate-400">
           {formatDateDisplay(d)}
@@ -1034,8 +1136,6 @@ function TransactionsTable({
     account_id: false,
   });
 
-  const pageSize = density === "compact" ? 18 : 12;
-
   const table = useReactTable({
     data: transactions,
     columns: transactionColumns,
@@ -1049,75 +1149,78 @@ function TransactionsTable({
     autoResetSorting: false,
     autoResetFilters: false,
     meta: { density },
-    initialState: {
-      pagination: { pageIndex: 0, pageSize },
-    },
   });
 
-  // 1) zmiana density → zmień pageSize, ale nie teleportuj użytkownika
   useEffect(() => {
-    const current = table.getState().pagination.pageIndex;
-    table.setPageSize(pageSize);
-    table.setPageIndex(current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageSize]);
+    // zachowaj aktualną stronę – nie teleportuj usera
+    const pageIndex = table.getState().pagination.pageIndex;
 
-  // 2) ✅ clamp pageIndex gdy liczba stron spadnie po filtrach
-  useEffect(() => {
-    const pageCount = table.getPageCount();
-    const idx = table.getState().pagination.pageIndex;
-    if (pageCount <= 0) {
-      if (idx !== 0) table.setPageIndex(0);
-      return;
-    }
-    const last = Math.max(0, pageCount - 1);
-    if (idx > last) table.setPageIndex(last);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactions.length, sorting, columnVisibility, pageSize]);
+    // comfort: mniej, compact: więcej
+    table.setPageSize(density === "compact" ? 18 : 12);
+
+    // zostaw ten sam indeks strony (tanstack to ogarnia)
+    table.setPageIndex(pageIndex);
+  }, [density, table]);
+
+  if (loading) {
+    return (
+      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
+        Ładowanie transakcji...
+      </div>
+    );
+  }
+
+  if (transactions.length === 0) {
+    return (
+      <div className="h-40 flex items-center justify-center text-[11px] text-slate-500">
+        Brak transakcji dla aktualnych filtrów.
+      </div>
+    );
+  }
+
+  const allColumns = table
+    .getAllLeafColumns()
+    .filter((col) => col.id !== "_selector");
+  const pageRows = table.getRowModel().rows;
 
   const rowPad = density === "comfortable" ? "py-2.5" : "py-1.5";
 
-  // ✅ stała wysokość całego komponentu tabeli (żeby nie “skakała”)
   return (
-    <div className="h-full flex flex-col gap-3 min-h-0">
-      {/* toolbar (kolumny + paginacja) */}
+    <div className="space-y-3">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-[11px]">
         <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
           <span className="text-slate-400 mr-1 whitespace-nowrap">
             Widoczne kolumny:
           </span>
-          {table
-            .getAllLeafColumns()
-            .filter((col) => col.id !== "_selector")
-            .map((column) => (
-              <button
-                key={column.id}
-                type="button"
-                onClick={column.getToggleVisibilityHandler()}
-                className={[
-                  "px-2 py-0.5 rounded-full border transition-all",
-                  column.getIsVisible()
-                    ? "bg-white/80 text-slate-900 border-white shadow-sm"
-                    : "bg-slate-900/60 text-slate-300 border-slate-600 hover:bg-slate-800",
-                ].join(" ")}
-              >
-                {column.id === "date"
-                  ? "Data"
-                  : column.id === "description"
-                  ? "Opis"
-                  : column.id === "category"
-                  ? "Kategoria"
-                  : column.id === "amount"
-                  ? "Kwota"
-                  : column.id === "value_date"
-                  ? "Data waluty"
-                  : column.id === "is_manual"
-                  ? "Źródło"
-                  : column.id === "account_id"
-                  ? "ID konta"
-                  : column.id}
-              </button>
-            ))}
+          {allColumns.map((column) => (
+            <button
+              key={column.id}
+              type="button"
+              onClick={column.getToggleVisibilityHandler()}
+              className={[
+                "px-2 py-0.5 rounded-full border transition-all",
+                column.getIsVisible()
+                  ? "bg-white/80 text-slate-900 border-white shadow-sm"
+                  : "bg-slate-900/60 text-slate-300 border-slate-600 hover:bg-slate-800",
+              ].join(" ")}
+            >
+              {column.id === "date"
+                ? "Data"
+                : column.id === "description"
+                ? "Opis"
+                : column.id === "category"
+                ? "Kategoria"
+                : column.id === "amount"
+                ? "Kwota"
+                : column.id === "value_date"
+                ? "Data waluty"
+                : column.id === "is_manual"
+                ? "Źródło"
+                : column.id === "account_id"
+                ? "ID konta"
+                : column.id}
+            </button>
+          ))}
         </div>
 
         <div className="flex items-center gap-2 text-slate-400">
@@ -1148,101 +1251,75 @@ function TransactionsTable({
         </div>
       </div>
 
-      {/* table area – flex-1, stały rozmiar */}
-      <div className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40">
-        {loading ? (
-          <div className="h-full flex items-center justify-center text-[11px] text-slate-500">
-            Ładowanie transakcji...
-          </div>
-        ) : transactions.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-[11px] text-slate-500">
-            Brak transakcji dla aktualnych filtrów.
-          </div>
-        ) : (
-          <div className="h-full overflow-auto">
-            <table className="w-full table-fixed text-[11px] text-left">
-              <thead className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/80 backdrop-blur">
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
-                      if (header.isPlaceholder) return null;
-                      const canSort = header.column.getCanSort();
-                      const sortDir = header.column.getIsSorted();
-                      const colId = header.column.id as keyof typeof COL_W;
+      <div className="h-full overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40">
+        <div className="h-full overflow-auto">
+          <table className="min-w-full table-fixed text-[11px] text-left">
+            <thead className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/80 backdrop-blur">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    if (header.isPlaceholder) return null;
+                    const canSort = header.column.getCanSort();
+                    const sortDir = header.column.getIsSorted();
+                    return (
+                      <th
+                        key={header.id}
+                        onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                        className={[
+                          "px-3 py-2 font-medium text-slate-300 whitespace-nowrap",
+                          canSort ? "cursor-pointer select-none hover:text-slate-100" : "",
+                          header.column.id === "amount" || header.column.id === "is_manual"
+                            ? "text-right"
+                            : "text-left",
+                        ].join(" ")}
+                      >
+                        <div className="inline-flex items-center gap-1">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {sortDir === "asc" && <span className="text-[9px] text-slate-400">▲</span>}
+                          {sortDir === "desc" && <span className="text-[9px] text-slate-400">▼</span>}
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              ))}
+            </thead>
 
-                      return (
-                        <th
-                          key={header.id}
-                          onClick={
-                            canSort ? header.column.getToggleSortingHandler() : undefined
-                          }
-                          className={[
-                            "px-3 py-2 font-medium text-slate-300 whitespace-nowrap",
-                            COL_W[colId] ?? "",
-                            canSort ? "cursor-pointer select-none hover:text-slate-100" : "",
-                            header.column.id === "amount" || header.column.id === "is_manual"
-                              ? "text-right"
-                              : "text-left",
-                          ].join(" ")}
-                        >
-                          <div className="inline-flex items-center gap-1">
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                            {sortDir === "asc" && (
-                              <span className="text-[9px] text-slate-400">▲</span>
-                            )}
-                            {sortDir === "desc" && (
-                              <span className="text-[9px] text-slate-400">▼</span>
-                            )}
-                          </div>
-                        </th>
-                      );
-                    })}
+            <tbody>
+              {pageRows.map((row) => {
+                const tx = row.original;
+                const isSelected = selectedId === tx.id;
+                const visibleCells = row.getVisibleCells();
+
+                return (
+                  <tr
+                    key={row.id}
+                    onClick={() => onRowClick(tx)}
+                    className={[
+                      "border-t border-slate-800/60 transition-colors cursor-pointer",
+                      isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/60",
+                    ].join(" ")}
+                  >
+                    {visibleCells.map((cell) => (
+                      <td
+                        key={cell.id}
+                        className={[
+                          "px-3 align-middle",
+                          rowPad,
+                          cell.column.id === "amount" || cell.column.id === "is_manual"
+                            ? "text-right"
+                            : "text-left",
+                        ].join(" ")}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
-                ))}
-              </thead>
-
-              <tbody>
-                {table.getRowModel().rows.map((row) => {
-                  const tx = row.original;
-                  const isSelected = selectedId === tx.id;
-
-                  return (
-                    <tr
-                      key={row.id}
-                      onClick={() => onRowClick(tx)}
-                      className={[
-                        "border-t border-slate-800/60 transition-colors cursor-pointer",
-                        isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/60",
-                      ].join(" ")}
-                    >
-                      {row.getVisibleCells().map((cell) => {
-                        const colId = cell.column.id as keyof typeof COL_W;
-                        return (
-                          <td
-                            key={cell.id}
-                            className={[
-                              "px-3 align-top",
-                              rowPad,
-                              COL_W[colId] ?? "",
-                              cell.column.id === "amount" || cell.column.id === "is_manual"
-                                ? "text-right"
-                                : "text-left",
-                            ].join(" ")}
-                          >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -1292,6 +1369,7 @@ function TransactionSideDetails({
         open ? "opacity-100" : "opacity-0 pointer-events-none",
       ].join(" ")}
     >
+      {/* Nagłówek */}
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
@@ -1314,7 +1392,9 @@ function TransactionSideDetails({
         </span>
       </div>
 
+      {/* treść – przewijana wewnątrz */}
       <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+        {/* Kategoria + źródło */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1">
             <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
@@ -1360,6 +1440,7 @@ function TransactionSideDetails({
           </div>
         </div>
 
+        {/* ✅ Dyskretna “automatyzacja podobnych” */}
         {ruleSuggestion && (
           <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -1401,6 +1482,7 @@ function TransactionSideDetails({
           </div>
         )}
 
+        {/* ✅ Banner po sukcesie “Włącz” */}
         {automationBanner && (
           <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -1603,6 +1685,7 @@ function formatDateDisplay(d: Date) {
   });
 }
 
+// 🧠 human-friendly normalize: lower + remove Polish diacritics + trim spaces
 function normalizeQuery(input: string): string {
   return (input ?? "")
     .toLowerCase()
