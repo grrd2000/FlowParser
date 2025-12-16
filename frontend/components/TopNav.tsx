@@ -11,6 +11,7 @@ export function TopNav() {
 
   const isDashboard = pathname === "/" || pathname?.startsWith("/dashboard");
   const isFlow = pathname?.startsWith("/flow");
+  const isLab = pathname?.startsWith("/lab");
 
   return (
     <header
@@ -22,12 +23,12 @@ export function TopNav() {
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 md:px-6">
         {/* LEWO: logo / nazwa */}
-        <div className="flex flex-col">
+        <Link href="/dashboard" className="flex flex-col hover:opacity-90 transition-opacity">
           <span className="text-[11px] uppercase tracking-[0.18em] text-slate-200/80">
             FlowParser
           </span>
           <span className="text-[10px] text-slate-500">Personal finance lab</span>
-        </div>
+        </Link>
 
         {/* ŚRODEK: segmented tabs (główne sekcje) */}
         <div className="flex flex-1 justify-center md:justify-start">
@@ -42,6 +43,7 @@ export function TopNav() {
           >
             <SegmentTab href="/dashboard" label="Dashboard" active={isDashboard} />
             <SegmentTab href="/flow" label="Flow" active={isFlow} />
+            <SegmentTab href="/lab" label="Lab" active={isLab} />
           </div>
         </div>
 
@@ -117,7 +119,7 @@ function SegmentTab({
     <Link
       href={href}
       className={[
-        "px-5 py-1.5 text-[13px] rounded-full font-medium transition-all border",
+        "px-4 md:px-5 py-1.5 text-[13px] rounded-full font-medium transition-all border",
         active
           ? "bg-white/80 text-slate-900 border-white shadow-md shadow-white/40"
           : "bg-white/0 text-slate-100/80 border-transparent hover:bg-white/15 hover:text-white",

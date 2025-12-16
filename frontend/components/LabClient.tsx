@@ -212,11 +212,13 @@ export function LabClient() {
     if (!user) {
       // niezalogowany -> czyścimy dane i nie fetchujemy
       setData(null);
-      setSuggestions([]);
-      setCategories([]);
-      setStats(null);
+      // setSuggestions([]);
+      // setCategories([]);
+      // setStats(null);
       setRules([]);
-      setError(null);
+      setCats([]);
+      setCatStats({});
+      // setError(null);
       setCatError(null);
       setRulesError(null);
       setLoading(false);

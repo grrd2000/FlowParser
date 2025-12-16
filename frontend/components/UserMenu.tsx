@@ -46,6 +46,7 @@ export function UserMenu() {
     };
   }, []);
 
+  // menu ma sens tylko dla zalogowanego
   if (!user) return null;
 
   return (
@@ -76,34 +77,49 @@ export function UserMenu() {
         <span className="opacity-70">▾</span>
       </button>
 
-      {/* dropdown */}
       <div
         className={[
-          "absolute right-0 mt-2 w-[240px] overflow-hidden rounded-2xl",
+          "absolute right-0 mt-2 w-[260px] overflow-hidden rounded-2xl",
           "border border-white/10 bg-slate-950/75 backdrop-blur-xl",
           "shadow-2xl shadow-black/40",
           "transition-all duration-150",
-          open ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-1 pointer-events-none",
+          open
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 -translate-y-1 pointer-events-none",
         ].join(" ")}
       >
         <div className="px-3 py-2 border-b border-white/10">
           <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
-            Konto
+            Zalogowany jako
           </div>
           <div className="mt-0.5 text-[12px] font-medium text-slate-100 truncate">
             {user.email}
           </div>
         </div>
 
+        {/* To jest to co chciałeś: Profile + podstrony */}
         <nav className="py-1">
-          <MenuLink href="/statements" label="Statements" />
-          <MenuLink href="/lab" label="Lab" />
-          <MenuLink href="/profile" label="Profile" />
+          <MenuLink href="/profile" label="Profile" onClick={() => setOpen(false)} />
+          <MenuLink
+            href="/profile/accounts"
+            label="Accounts"
+            sub="Twoje konta i statystyki"
+            onClick={() => setOpen(false)}
+          />
+          <MenuLink
+            href="/profile/statements"
+            label="Statements"
+            sub="Wgrane wyciągi i importy"
+            onClick={() => setOpen(false)}
+          />
         </nav>
 
         <div className="border-t border-white/10 p-2">
           <button
-            onClick={() => logout()}
+            onClick={() => {
+              setOpen(false);
+              logout();
+            }}
             className="
               w-full rounded-xl border border-white/10
               bg-white/5 px-3 py-2
@@ -119,18 +135,31 @@ export function UserMenu() {
   );
 }
 
-function MenuLink({ href, label }: { href: string; label: string }) {
+function MenuLink({
+  href,
+  label,
+  sub,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  sub?: string;
+  onClick?: () => void;
+}) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className="
-        flex items-center justify-between
-        px-3 py-2 text-[12px] text-slate-200
+        block px-3 py-2
         hover:bg-white/5 transition-colors
       "
     >
-      <span>{label}</span>
-      <span className="text-slate-500">→</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] text-slate-200">{label}</span>
+        <span className="text-slate-500">→</span>
+      </div>
+      {sub && <div className="mt-0.5 text-[10px] text-slate-500">{sub}</div>}
     </Link>
   );
 }
