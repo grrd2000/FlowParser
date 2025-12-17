@@ -52,7 +52,10 @@ from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
 from app.utils.similarity import build_df, best_key_token, description_contains_token, tokenize
 
-from app.auth import get_current_user as auth_get_current_user
+from app.auth import (
+    get_current_user as auth_get_current_user,
+    hash_password,
+)
 
 
 UPLOAD_DIR = "uploads"
@@ -63,6 +66,11 @@ from app.auth_routes import router as auth_router
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))  # 30 days
+
+DEV_AUTO_USER = os.getenv("DEV_AUTO_USER", "true").lower() == "true"
+DEV_USER_EMAIL = os.getenv("DEV_USER_EMAIL", "demo@example.com")
+DEV_USER_PASSWORD = os.getenv("DEV_USER_PASSWORD", "demo123")
+DEV_USER_FULL_NAME = os.getenv("DEV_USER_FULL_NAME", "Demo User")
 
 app = FastAPI(title="flowparser (prototype, refactored)")
 
@@ -137,15 +145,43 @@ def ensure_default_categories(db: Session, user: User):
     db.commit()
 
 
+def ensure_dev_user(db: Session) -> User | None:
+    if not DEV_AUTO_USER:
+        return None
+
+    email = DEV_USER_EMAIL.strip().lower()
+    password = DEV_USER_PASSWORD
+    full_name = DEV_USER_FULL_NAME.strip() or None
+
+    if not email or not password:
+        return None
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        return user
+
+    user = User(
+        email=email,
+        full_name=full_name,
+        password_hash=hash_password(password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
     try:
-        user = db.query(User).order_by(User.id.asc()).first()
-        if user:
-            ensure_default_categories(db=db, user=user)
+        dev_user = ensure_dev_user(db=db)
+        user_for_defaults = dev_user or db.query(User).order_by(User.id.asc()).first()
+        if user_for_defaults:
+            ensure_default_categories(db=db, user=user_for_defaults)
     finally:
         db.close()
 
@@ -168,16 +204,6 @@ def db_health():
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     return {"db": "ok"}
-
-
-def get_or_create_demo_user(db: Session) -> User:
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        user = User(email="demo@example.com", full_name="Demo User")
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    return user
 
 
 def wipe_statement_data(db: Session, statement_id: int) -> None:
@@ -732,9 +758,9 @@ async def import_pdf(
 
 
 @app.get("/accounts", response_model=list[AccountSummary])
-def list_accounts(db: Session = Depends(get_db)):
-    # demo – ten sam user co w /user/me
-    user = get_or_create_demo_user(db)
+def list_accounts(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     # join z transakcjami + count
     rows = (
@@ -1032,10 +1058,12 @@ def category_stats(
 
 
 @app.put("/category-rules/{rule_id}", response_model=CategoryRuleOut)
-def update_category_rule(rule_id: int, payload: CategoryRuleUpdate, db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def update_category_rule(
+    rule_id: int,
+    payload: CategoryRuleUpdate,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
 
     rule = db.get(CategoryRule, rule_id)
     if not rule or rule.user_id != user.id:
@@ -1126,10 +1154,11 @@ def delete_category_rule(
 
 
 @app.post("/category-rules/reorder", response_model=list[CategoryRuleOut])
-def reorder_category_rules(payload: CategoryRuleReorder, db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def reorder_category_rules(
+    payload: CategoryRuleReorder,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
 
     rules = (
         db.query(CategoryRule)
