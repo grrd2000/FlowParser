@@ -51,6 +51,7 @@ from app.schemas import (
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
 from app.utils.similarity import build_df, best_key_token, description_contains_token, tokenize
+from app.auth import get_current_user, hash_password
 
 
 UPLOAD_DIR = "uploads"
@@ -94,21 +95,27 @@ app.include_router(auth_router)
 #         db.close()
 
 
-def get_current_user(db: Session) -> User:
-    user = db.query(User).order_by(User.id.asc()).first()
+BOOTSTRAP_EMAIL = os.getenv("BOOTSTRAP_EMAIL", "local@flowparser.com")
+BOOTSTRAP_PASSWORD = os.getenv("BOOTSTRAP_PASSWORD", "localdev")
+BOOTSTRAP_FULL_NAME = os.getenv("BOOTSTRAP_FULL_NAME", "Local User")
 
-    if not user:
-        # Single-user bootstrap (bez żadnych demo kont/wyciągów)
-        user = User(email="local@flowparser.com", password_hash='###', full_name="Local User")
-        db.add(user)
-        db.commit()
-        db.refresh(user)
 
-        # jeśli masz preferencje:
-        _ = get_or_create_user_prefs(db, user)
+def bootstrap_local_user(db: Session) -> Optional[User]:
+    existing_users = db.query(func.count(User.id)).scalar()
+    if existing_users:
+        return None
 
-        # i jeśli chcesz domyślne kategorie (polecam)
-        ensure_default_categories(db=db, user=user)
+    user = User(
+        email=BOOTSTRAP_EMAIL,
+        password_hash=hash_password(BOOTSTRAP_PASSWORD),
+        full_name=BOOTSTRAP_FULL_NAME,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    get_or_create_user_prefs(db, user)
+    ensure_default_categories(db=db, user=user)
 
     return user
 
@@ -168,6 +175,8 @@ def on_startup():
 
     db = SessionLocal()
     try:
+        bootstrap_local_user(db)
+
         user = db.query(User).order_by(User.id.asc()).first()
         if user:
             ensure_default_categories(db=db, user=user)
@@ -234,14 +243,15 @@ def wipe_statement_data(db: Session, statement_id: int) -> None:
 
 
 @app.get("/user/me", response_model=UserProfileResponse)
-def get_my_profile(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    prefs = get_or_create_user_prefs(db, user)
+def get_my_profile(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    prefs = get_or_create_user_prefs(db, current_user)
 
     return UserProfileResponse(
-        id=user.id,
-        name=user.full_name, 
-        email=user.email,
+        id=current_user.id,
+        name=current_user.full_name,
+        email=current_user.email,
         currency=prefs.currency,
         default_range=prefs.default_range,
         default_granularity=prefs.default_granularity,
@@ -249,28 +259,31 @@ def get_my_profile(db: Session = Depends(get_db)):
     )
 
 @app.patch("/user/me", response_model=UserProfileResponse)
-def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    prefs = get_or_create_user_prefs(db, user)
+def update_my_profile(
+    payload: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    prefs = get_or_create_user_prefs(db, current_user)
 
-    user.full_name = payload.name  # dopasuj do swojego modelu
-    user.email = payload.email
+    current_user.full_name = payload.name  # dopasuj do swojego modelu
+    current_user.email = payload.email
 
     prefs.currency = payload.currency
     prefs.default_range = payload.default_range
     prefs.default_granularity = payload.default_granularity
     prefs.theme = payload.theme
 
-    db.add(user)
+    db.add(current_user)
     db.add(prefs)
     db.commit()
-    db.refresh(user)
+    db.refresh(current_user)
     db.refresh(prefs)
 
     return UserProfileResponse(
-        id=user.id,
-        name=user.full_name,
-        email=user.email,
+        id=current_user.id,
+        name=current_user.full_name,
+        email=current_user.email,
         currency=prefs.currency,
         default_range=prefs.default_range,
         default_granularity=prefs.default_granularity,
@@ -283,8 +296,9 @@ def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db))
 # -----------------------
 
 @app.get("/accounts", response_model=list[AccountSummary])
-def list_accounts(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def list_accounts(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
     rows = (
         db.query(
@@ -298,7 +312,7 @@ def list_accounts(db: Session = Depends(get_db)):
             func.count(Transaction.id).label("tx_count"),
         )
         .outerjoin(Transaction, Transaction.account_id == Account.id)
-        .filter(Account.user_id == user.id)
+        .filter(Account.user_id == current_user.id)
         .group_by(
             Account.id,
             Account.name,
@@ -349,10 +363,14 @@ class TransactionIn(BaseModel):
 # -----------------------
 
 @app.post("/transactions/manual")
-def create_manual_transaction(payload: TransactionIn, db: Session = Depends(get_db)):
+def create_manual_transaction(
+    payload: TransactionIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Dodaje ręczną transakcję (niezależną od wyciągu)."""
     account = db.get(Account, payload.account_id)
-    if not account:
+    if not account or account.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Account not found")
 
     tx = Transaction(
@@ -390,6 +408,7 @@ def list_transactions(
     to: Optional[date] = Query(None, alias="to"),
     category: Optional[str] = None,
     sort: str = Query("date_desc", pattern="^(date_asc|date_desc)$"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -400,7 +419,11 @@ def list_transactions(
     - ?category=...
     - ?sort=date_asc/date_desc
     """
-    stmt = select(Transaction)
+    stmt = (
+        select(Transaction)
+        .join(Account, Account.id == Transaction.account_id)
+        .where(Account.user_id == current_user.id)
+    )
 
     if account_id is not None:
         stmt = stmt.where(Transaction.account_id == account_id)
@@ -465,6 +488,7 @@ from sqlalchemy.orm import Session
 @app.post("/statements/import-pdf")
 async def import_pdf(
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -475,8 +499,6 @@ async def import_pdf(
     - NAJPIERW sprawdza, czy taki wyciąg nie był już importowany
     - jeśli nie, tworzy Account (jeśli trzeba), Statement, ImportRun, RawTransactions, Transactions
     """
-
-    user = get_current_user(db)
 
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -549,7 +571,7 @@ async def import_pdf(
         account = (
             db.query(Account)
             .filter(
-                Account.user_id == user.id,
+                Account.user_id == current_user.id,
                 Account.number == account_number,
                 Account.currency == account_currency,
                 Account.institution == institution,
@@ -559,7 +581,7 @@ async def import_pdf(
 
         if not account:
             account = Account(
-                user_id=user.id,
+                user_id=current_user.id,
                 number=account_number,
                 name=account_name,
                 owner=account_owner,
@@ -732,7 +754,7 @@ async def import_pdf(
 
     # po udanym imporcie transakcji:
     try:
-        apply_rules_for_user(db, account.user_id)  # albo user.id
+        apply_rules_for_user(db, account.user_id)
     except Exception:
         # nie wywracaj importu, reguły to “post-process”
         pass
@@ -753,9 +775,9 @@ async def import_pdf(
 
 
 @app.get("/accounts", response_model=list[AccountSummary])
-def list_accounts(db: Session = Depends(get_db)):
-    # demo – ten sam user co w /user/me
-    user = get_or_create_demo_user(db)
+def list_accounts(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
     # join z transakcjami + count
     rows = (
@@ -766,7 +788,7 @@ def list_accounts(db: Session = Depends(get_db)):
         .outerjoin(
             Transaction, Transaction.account_id == Account.id
         )
-        .filter(Account.user_id == user.id)
+        .filter(Account.user_id == current_user.id)
         .group_by(Account.id)
         .all()
     )
@@ -790,8 +812,9 @@ def list_accounts(db: Session = Depends(get_db)):
 
 
 @app.get("/statements", response_model=list[StatementSummary])
-def list_statements(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def list_statements(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
     # subquery: ile runów i który jest ostatni
     runs_sub = (
@@ -814,7 +837,7 @@ def list_statements(db: Session = Depends(get_db)):
         .join(Account, Account.id == Statement.account_id)
         .outerjoin(runs_sub, runs_sub.c.sid == Statement.id)
         .outerjoin(ImportRun, ImportRun.id == runs_sub.c.last_run_id)
-        .filter(Account.user_id == user.id)
+        .filter(Account.user_id == current_user.id)
         .order_by(Statement.issue_date.desc().nullslast(), Statement.id.desc())
         .all()
     )
@@ -908,14 +931,13 @@ def list_raw_transactions(
     ]
 
 @app.get("/categories", response_model=list[CategoryOut])
-def list_categories(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def list_categories(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
     cats = (
         db.query(Category)
-        .filter(Category.user_id == user.id)
+        .filter(Category.user_id == current_user.id)
         .order_by(Category.name.asc())
         .all()
     )
@@ -923,13 +945,14 @@ def list_categories(db: Session = Depends(get_db)):
 
 
 @app.post("/categories", response_model=CategoryOut)
-def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def create_category(
+    payload: CategoryCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
 
     cat = Category(
-        user_id=user.id,
+        user_id=current_user.id,
         name=payload.name,
         color=payload.color,
         is_system=False,
@@ -939,17 +962,16 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
     db.refresh(cat)
     return cat
 
-
-from sqlalchemy import func
-
 @app.put("/categories/{category_id}", response_model=CategoryOut)
-def update_category(category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def update_category(
+    category_id: int,
+    payload: CategoryUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
 
     cat = db.get(Category, category_id)
-    if not cat or cat.user_id != user.id:
+    if not cat or cat.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Category not found")
 
     # opcjonalnie: unikalna nazwa per user
@@ -957,7 +979,7 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
         dup = (
             db.query(Category)
             .filter(
-                Category.user_id == user.id,
+                Category.user_id == current_user.id,
                 func.lower(Category.name) == payload.name.lower(),
                 Category.id != cat.id,
             )
@@ -982,24 +1004,23 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
 def delete_category(
     category_id: int,
     unassign: bool = Query(False),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(db)
-
     cat = db.get(Category, category_id)
-    if not cat or cat.user_id != user.id:
+    if not cat or cat.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Category not found")
 
     # policz użycia w transakcjach usera
     tx_q = (
         db.query(Transaction)
         .join(Account, Account.id == Transaction.account_id)
-        .filter(Account.user_id == user.id, Transaction.category_id == cat.id)
+        .filter(Account.user_id == current_user.id, Transaction.category_id == cat.id)
     )
     tx_count = tx_q.count()
 
     rule_q = db.query(CategoryRule).filter(
-        CategoryRule.user_id == user.id,
+        CategoryRule.user_id == current_user.id,
         CategoryRule.category_id == cat.id,
     )
     rule_count = rule_q.count()
@@ -1033,13 +1054,14 @@ def delete_category(
 
 
 @app.get("/categories/stats")
-def category_stats(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def category_stats(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
     rows = (
         db.query(Transaction.category_id, func.count(Transaction.id))
         .join(Account, Account.id == Transaction.account_id)
-        .filter(Account.user_id == user.id)
+        .filter(Account.user_id == current_user.id)
         .filter(Transaction.category_id.isnot(None))
         .group_by(Transaction.category_id)
         .all()
@@ -1050,18 +1072,20 @@ def category_stats(db: Session = Depends(get_db)):
 
 
 @app.put("/category-rules/{rule_id}", response_model=CategoryRuleOut)
-def update_category_rule(rule_id: int, payload: CategoryRuleUpdate, db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def update_category_rule(
+    rule_id: int,
+    payload: CategoryRuleUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
 
     rule = db.get(CategoryRule, rule_id)
-    if not rule or rule.user_id != user.id:
+    if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
 
     if payload.category_id is not None:
         cat = db.get(Category, payload.category_id)
-        if not cat or cat.user_id != user.id:
+        if not cat or cat.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Category not found")
         rule.category_id = cat.id
 
@@ -1105,12 +1129,11 @@ def _rule_matches_tx(rule: CategoryRule, desc: str | None) -> bool:
 def delete_category_rule(
     rule_id: int,
     unassign: bool = Query(True),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(db)
-
     rule = db.get(CategoryRule, rule_id)
-    if not rule or rule.user_id != user.id:
+    if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
 
     if unassign:
@@ -1119,7 +1142,7 @@ def delete_category_rule(
             db.query(Transaction.id, Transaction.description)
             .join(Account, Account.id == Transaction.account_id)
             .filter(
-                Account.user_id == user.id,
+                Account.user_id == current_user.id,
                 Transaction.category_id == rule.category_id,
                 Transaction.category_source == "rule",
             )
@@ -1145,14 +1168,15 @@ def delete_category_rule(
 
 
 @app.post("/category-rules/reorder", response_model=list[CategoryRuleOut])
-def reorder_category_rules(payload: CategoryRuleReorder, db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def reorder_category_rules(
+    payload: CategoryRuleReorder,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
 
     rules = (
         db.query(CategoryRule)
-        .filter(CategoryRule.user_id == user.id)
+        .filter(CategoryRule.user_id == current_user.id)
         .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
         .all()
     )
@@ -1312,14 +1336,13 @@ def update_transaction_category(
 
 
 @app.get("/category-rules", response_model=list[CategoryRuleOut])
-def list_category_rules(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def list_category_rules(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
     rules = (
         db.query(CategoryRule)
-        .filter(CategoryRule.user_id == user.id)
+        .filter(CategoryRule.user_id == current_user.id)
         .order_by(CategoryRule.priority.asc(), CategoryRule.id.asc())
         .all()
     )
@@ -1329,14 +1352,12 @@ def list_category_rules(db: Session = Depends(get_db)):
 @app.post("/category-rules", response_model=CategoryRuleOut)
 def create_category_rule(
     payload: CategoryRuleCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
 
     cat = db.get(Category, payload.category_id)
-    if not cat:
+    if not cat or cat.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Category not found")
 
     # --- ważne: dla "token" trzymamy w bazie JEDEN token, już znormalizowany ---
@@ -1346,7 +1367,7 @@ def create_category_rule(
         pattern_value = toks[0] if toks else ""
 
     rule = CategoryRule(
-        user_id=user.id,
+        user_id=current_user.id,
         category_id=cat.id,
         field=payload.field,
         pattern_type=payload.pattern_type,
@@ -1362,19 +1383,19 @@ def create_category_rule(
 
 
 @app.post("/category-rules/apply", response_model=ApplyRulesResult)
-def apply_category_rules(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def apply_category_rules(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
-    assigned = apply_rules_for_user(db, user.id)
+    assigned = apply_rules_for_user(db, current_user.id)
     return ApplyRulesResult(assigned=assigned)
 
 
 @app.get("/lab/insights", response_model=LabInsightsOut)
-def lab_insights(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    user_id = user.id
+def lab_insights(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    user_id = current_user.id
 
     # coverage
     total = (
@@ -1506,12 +1527,15 @@ def lab_insights(db: Session = Depends(get_db)):
 
 
 @app.post("/lab/enable-rule", response_model=EnableRuleResult)
-def enable_rule(payload: EnableRulePayload, db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    user_id = user.id
+def enable_rule(
+    payload: EnableRulePayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user.id
 
     cat = db.get(Category, payload.category_id)
-    if not cat:
+    if not cat or cat.user_id != user_id:
         raise HTTPException(status_code=404, detail="Category not found")
 
     pattern_value = normalize_text(payload.pattern_value)
@@ -1550,15 +1574,39 @@ def enable_rule(payload: EnableRulePayload, db: Session = Depends(get_db)):
     return EnableRuleResult(created=created, applied=int(applied or 0))
 
 @app.get("/lab/overview")
-def lab_overview(db: Session = Depends(get_db)):
+def lab_overview(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
     """
     Zwraca 'AI-ready' metryki dla zakładki Lab (bez technicznych detali).
     """
-    total = db.query(Transaction).count()
-    categorized = db.query(Transaction).filter(Transaction.category_id.isnot(None)).count()
+    total = (
+        db.query(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == current_user.id)
+        .count()
+    )
+    categorized = (
+        db.query(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == current_user.id, Transaction.category_id.isnot(None))
+        .count()
+    )
 
-    manual = db.query(ClassificationEvent).filter(ClassificationEvent.source == "manual").count()
-    rule = db.query(ClassificationEvent).filter(ClassificationEvent.source == "rule").count()
+    manual = (
+        db.query(ClassificationEvent)
+        .join(Transaction, Transaction.id == ClassificationEvent.transaction_id)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == current_user.id, ClassificationEvent.source == "manual")
+        .count()
+    )
+    rule = (
+        db.query(ClassificationEvent)
+        .join(Transaction, Transaction.id == ClassificationEvent.transaction_id)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(Account.user_id == current_user.id, ClassificationEvent.source == "rule")
+        .count()
+    )
 
     pct = round((categorized / total * 100.0), 2) if total else 0.0
 
@@ -1571,15 +1619,14 @@ def lab_overview(db: Session = Depends(get_db)):
     }
 
 @app.get("/category-rules")
-def list_category_rules(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def list_category_rules(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
 
     rules = (
         db.query(CategoryRule, Category.name)
         .join(Category, Category.id == CategoryRule.category_id)
-        .filter(CategoryRule.user_id == user.id)
+        .filter(CategoryRule.user_id == current_user.id)
         .order_by(CategoryRule.enabled.desc(), CategoryRule.priority.desc(), CategoryRule.id.desc())
         .all()
     )
@@ -1611,13 +1658,14 @@ def list_category_rules(db: Session = Depends(get_db)):
 
 
 @app.put("/category-rules/{rule_id}/toggle")
-def toggle_category_rule(rule_id: int, db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def toggle_category_rule(
+    rule_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
 
     rule = db.get(CategoryRule, rule_id)
-    if not rule or rule.user_id != user.id:
+    if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
 
     rule.enabled = not rule.enabled
