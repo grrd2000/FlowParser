@@ -52,6 +52,8 @@ from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
 from app.utils.similarity import build_df, best_key_token, description_contains_token, tokenize
 
+from app.auth import get_current_user as auth_get_current_user
+
 
 UPLOAD_DIR = "uploads"
 
@@ -85,33 +87,6 @@ app.include_router(auth_router)
 # -----------------------
 #  DB dependency
 # -----------------------
-
-# def get_db() -> Session:
-#     db = SessionLocal()
-#     try:
-#         yield db
-#     finally:
-#         db.close()
-
-
-def get_current_user(db: Session) -> User:
-    user = db.query(User).order_by(User.id.asc()).first()
-
-    if not user:
-        # Single-user bootstrap (bez żadnych demo kont/wyciągów)
-        user = User(email="local@flowparser.com", password_hash='###', full_name="Local User")
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-        # jeśli masz preferencje:
-        _ = get_or_create_user_prefs(db, user)
-
-        # i jeśli chcesz domyślne kategorie (polecam)
-        ensure_default_categories(db=db, user=user)
-
-    return user
-
 
 def get_or_create_user_prefs(db: Session, user: User) -> UserPreference:
     prefs = (
@@ -234,8 +209,9 @@ def wipe_statement_data(db: Session, statement_id: int) -> None:
 
 
 @app.get("/user/me", response_model=UserProfileResponse)
-def get_my_profile(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def get_my_profile(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
     prefs = get_or_create_user_prefs(db, user)
 
     return UserProfileResponse(
@@ -249,8 +225,11 @@ def get_my_profile(db: Session = Depends(get_db)):
     )
 
 @app.patch("/user/me", response_model=UserProfileResponse)
-def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def update_my_profile(
+    payload: UserProfileUpdate,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
     prefs = get_or_create_user_prefs(db, user)
 
     user.full_name = payload.name  # dopasuj do swojego modelu
@@ -283,8 +262,9 @@ def update_my_profile(payload: UserProfileUpdate, db: Session = Depends(get_db))
 # -----------------------
 
 @app.get("/accounts", response_model=list[AccountSummary])
-def list_accounts(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def list_accounts(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     rows = (
         db.query(
@@ -465,6 +445,7 @@ from sqlalchemy.orm import Session
 @app.post("/statements/import-pdf")
 async def import_pdf(
     file: UploadFile = File(...),
+    user: User = Depends(auth_get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -475,8 +456,6 @@ async def import_pdf(
     - NAJPIERW sprawdza, czy taki wyciąg nie był już importowany
     - jeśli nie, tworzy Account (jeśli trzeba), Statement, ImportRun, RawTransactions, Transactions
     """
-
-    user = get_current_user(db)
 
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -790,8 +769,9 @@ def list_accounts(db: Session = Depends(get_db)):
 
 
 @app.get("/statements", response_model=list[StatementSummary])
-def list_statements(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def list_statements(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     # subquery: ile runów i który jest ostatni
     runs_sub = (
@@ -908,10 +888,9 @@ def list_raw_transactions(
     ]
 
 @app.get("/categories", response_model=list[CategoryOut])
-def list_categories(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def list_categories(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     cats = (
         db.query(Category)
@@ -923,10 +902,11 @@ def list_categories(db: Session = Depends(get_db)):
 
 
 @app.post("/categories", response_model=CategoryOut)
-def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def create_category(
+    payload: CategoryCreate,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
 
     cat = Category(
         user_id=user.id,
@@ -943,10 +923,12 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
 from sqlalchemy import func
 
 @app.put("/categories/{category_id}", response_model=CategoryOut)
-def update_category(category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def update_category(
+    category_id: int,
+    payload: CategoryUpdate,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
 
     cat = db.get(Category, category_id)
     if not cat or cat.user_id != user.id:
@@ -982,10 +964,9 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
 def delete_category(
     category_id: int,
     unassign: bool = Query(False),
+    user: User = Depends(auth_get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(db)
-
     cat = db.get(Category, category_id)
     if not cat or cat.user_id != user.id:
         raise HTTPException(status_code=404, detail="Category not found")
@@ -1033,8 +1014,9 @@ def delete_category(
 
 
 @app.get("/categories/stats")
-def category_stats(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def category_stats(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     rows = (
         db.query(Transaction.category_id, func.count(Transaction.id))
@@ -1105,10 +1087,9 @@ def _rule_matches_tx(rule: CategoryRule, desc: str | None) -> bool:
 def delete_category_rule(
     rule_id: int,
     unassign: bool = Query(True),
+    user: User = Depends(auth_get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(db)
-
     rule = db.get(CategoryRule, rule_id)
     if not rule or rule.user_id != user.id:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -1312,10 +1293,9 @@ def update_transaction_category(
 
 
 @app.get("/category-rules", response_model=list[CategoryRuleOut])
-def list_category_rules(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def list_category_rules(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     rules = (
         db.query(CategoryRule)
@@ -1329,11 +1309,9 @@ def list_category_rules(db: Session = Depends(get_db)):
 @app.post("/category-rules", response_model=CategoryRuleOut)
 def create_category_rule(
     payload: CategoryRuleCreate,
+    user: User = Depends(auth_get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter_by(email="demo@example.com").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
 
     cat = db.get(Category, payload.category_id)
     if not cat:
@@ -1362,18 +1340,18 @@ def create_category_rule(
 
 
 @app.post("/category-rules/apply", response_model=ApplyRulesResult)
-def apply_category_rules(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def apply_category_rules(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     assigned = apply_rules_for_user(db, user.id)
     return ApplyRulesResult(assigned=assigned)
 
 
 @app.get("/lab/insights", response_model=LabInsightsOut)
-def lab_insights(db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def lab_insights(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
     user_id = user.id
 
     # coverage
@@ -1506,8 +1484,11 @@ def lab_insights(db: Session = Depends(get_db)):
 
 
 @app.post("/lab/enable-rule", response_model=EnableRuleResult)
-def enable_rule(payload: EnableRulePayload, db: Session = Depends(get_db)):
-    user = get_current_user(db)
+def enable_rule(
+    payload: EnableRulePayload,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
     user_id = user.id
 
     cat = db.get(Category, payload.category_id)
@@ -1550,15 +1531,41 @@ def enable_rule(payload: EnableRulePayload, db: Session = Depends(get_db)):
     return EnableRuleResult(created=created, applied=int(applied or 0))
 
 @app.get("/lab/overview")
-def lab_overview(db: Session = Depends(get_db)):
+def lab_overview(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
     """
     Zwraca 'AI-ready' metryki dla zakładki Lab (bez technicznych detali).
     """
-    total = db.query(Transaction).count()
-    categorized = db.query(Transaction).filter(Transaction.category_id.isnot(None)).count()
+    total = (
+        db.query(Transaction)
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(Account.user_id == user.id)
+        .count()
+    )
+    categorized = (
+        db.query(Transaction)
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(Account.user_id == user.id, Transaction.category_id.isnot(None))
+        .count()
+    )
 
-    manual = db.query(ClassificationEvent).filter(ClassificationEvent.source == "manual").count()
-    rule = db.query(ClassificationEvent).filter(ClassificationEvent.source == "rule").count()
+    manual = (
+        db.query(ClassificationEvent)
+        .filter(ClassificationEvent.source == "manual")
+        .join(Transaction, Transaction.id == ClassificationEvent.transaction_id)
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(Account.user_id == user.id)
+        .count()
+    )
+    rule = (
+        db.query(ClassificationEvent)
+        .filter(ClassificationEvent.source == "rule")
+        .join(Transaction, Transaction.id == ClassificationEvent.transaction_id)
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(Account.user_id == user.id)
+        .count()
+    )
 
     pct = round((categorized / total * 100.0), 2) if total else 0.0
 
@@ -1571,10 +1578,9 @@ def lab_overview(db: Session = Depends(get_db)):
     }
 
 @app.get("/category-rules")
-def list_category_rules(db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def list_category_rules(
+    user: User = Depends(auth_get_current_user), db: Session = Depends(get_db)
+):
 
     rules = (
         db.query(CategoryRule, Category.name)
@@ -1611,10 +1617,11 @@ def list_category_rules(db: Session = Depends(get_db)):
 
 
 @app.put("/category-rules/{rule_id}/toggle")
-def toggle_category_rule(rule_id: int, db: Session = Depends(get_db)):
-    user = get_current_user(db)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+def toggle_category_rule(
+    rule_id: int,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
 
     rule = db.get(CategoryRule, rule_id)
     if not rule or rule.user_id != user.id:
