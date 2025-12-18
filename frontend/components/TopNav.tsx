@@ -9,7 +9,7 @@ export function TopNav() {
   const pathname = usePathname();
   const { user, authLoading, openAuth } = useAuth();
 
-  const isDashboard = pathname === "/" || pathname?.startsWith("/dashboard");
+  const isDashboard = pathname?.startsWith("/dashboard");
   const isFlow = pathname?.startsWith("/flow");
   const isLab = pathname?.startsWith("/lab");
 
@@ -23,7 +23,7 @@ export function TopNav() {
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 md:px-6">
         {/* LEWO: logo / nazwa */}
-        <Link href="/dashboard" className="flex flex-col hover:opacity-90 transition-opacity">
+        <Link href="/" className="flex flex-col hover:opacity-90 transition-opacity">
           <span className="text-[11px] uppercase tracking-[0.18em] text-slate-200/80">
             FlowParser
           </span>
