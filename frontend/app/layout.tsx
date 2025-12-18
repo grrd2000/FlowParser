@@ -2,6 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import { TopNav } from "@/components/TopNav";
 import { AuthProvider } from "@/components/AuthProvider";
+import { AppShell } from "@/components/AppShell";
 
 export const metadata = {
   title: "FlowParser",
@@ -13,12 +14,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body className="antialiased">
         <AuthProvider>
-        <TopNav />
-        <main className="pt-20 pb-10 px-4 md:px-6">
-          <div className="mx-auto w-full max-w-6xl">
-            {children}
-          </div>
-        </main>
+          <TopNav />
+          <AppShell>{children}</AppShell>
         </AuthProvider>
       </body>
     </html>
