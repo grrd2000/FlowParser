@@ -9,26 +9,39 @@ type Granularity = "day" | "week" | "month" | "quarter";
 type Currency = "PLN" | "EUR" | "USD";
 
 type ProfileClientProps = {
-  initialProfile: UserProfile;
+  initialProfile: UserProfile | null;
 };
 
 export function ProfileClient({ initialProfile }: ProfileClientProps) {
+  const hasProfile = Boolean(initialProfile);
+  const safeProfile =
+    initialProfile ??
+    ({
+      id: 0,
+      name: "",
+      email: "",
+      currency: "PLN",
+      default_range: "3m",
+      default_granularity: "month",
+      theme: "dark",
+    } satisfies UserProfile);
+
   // dane użytkownika
-  const [name, setName] = useState(initialProfile.name);
-  const [email, setEmail] = useState(initialProfile.email);
+  const [name, setName] = useState(safeProfile.name);
+  const [email, setEmail] = useState(safeProfile.email);
 
   // walutę trzymamy tylko na potrzeby payloadu – UI już jej nie edytuje
   const [currency] = useState<Currency>(
-    (initialProfile.currency as Currency) ?? "PLN"
+    (safeProfile.currency as Currency) ?? "PLN"
   );
 
   // preferencje
   const [defaultRange, setDefaultRange] = useState<RangeKey>(
-    (initialProfile.default_range as RangeKey) ?? "3m"
+    (safeProfile.default_range as RangeKey) ?? "3m"
   );
   const [defaultGranularity, setDefaultGranularity] =
     useState<Granularity>(
-      (initialProfile.default_granularity as Granularity) ?? "month"
+      (safeProfile.default_granularity as Granularity) ?? "month"
     );
 
   const [saving, setSaving] = useState(false);
@@ -45,6 +58,11 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
       : "U";
 
   const handleSave = async () => {
+    if (!hasProfile) {
+      console.warn("Brak aktywnej sesji – nie można zapisać profilu.");
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -88,6 +106,12 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
           Dane użytkownika i preferencje aplikacji.
         </p>
       </header>
+
+      {!hasProfile && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Brak danych profilu. Zaloguj się, aby zobaczyć i edytować swoje ustawienia.
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)]">
         {/* lewa kolumna: user info + accounts */}
