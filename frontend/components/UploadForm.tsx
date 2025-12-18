@@ -340,6 +340,7 @@ async function uploadWithProgress(
     formData.append("file", file);
 
     xhr.open("POST", url);
+    xhr.withCredentials = true;
 
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable) return;
