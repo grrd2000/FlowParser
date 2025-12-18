@@ -749,9 +749,9 @@ export function LabClient() {
                               >
                                 <span
                                   className={[
-                                    "absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full",
+                                    "absolute top-1/2 left-1 -translate-y-1/2 h-4 w-4 rounded-full",
                                     "transition-transform duration-200",
-                                    r.enabled ? "translate-x-5 bg-emerald-200" : "translate-x-1 bg-slate-400",
+                                    r.enabled ? "translate-x-5 bg-emerald-200" : "translate-x-0 bg-slate-400",
                                   ].join(" ")}
                                 />
                               </button>
