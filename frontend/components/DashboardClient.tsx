@@ -12,19 +12,23 @@ const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
 });
 
-type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
+export type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
+
+type DashboardClientProps = {
+  initialRange?: RangeKey;
+};
 
 type TxExt = Transaction & { amountNum: number; date: Date };
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-export function DashboardClient() {
+export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
   const { user, authLoading } = useAuth();
 
   const [transactions, setTransactions] = useState<TxExt[]>([]);
-  const [range, setRange] = useState<RangeKey>("3m");
+  const [range, setRange] = useState<RangeKey>(initialRange);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
