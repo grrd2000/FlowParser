@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { fetchTransactions, type Transaction } from "@/lib/serverApi";
+import {
+  fetchCategories,
+  fetchTransactions,
+  type Category,
+  type Transaction,
+} from "@/lib/serverApi";
 
 import { useAuth } from "@/components/AuthProvider";
 import { SignedOutState } from "@/components/SignedOutState";
@@ -19,12 +24,19 @@ type DashboardClientProps = {
 };
 
 type TxExt = Transaction & { amountNum: number; date: Date };
+type CategoryBucket = {
+  name: string;
+  value: number;
+  categoryId: number | null;
+  color?: string | null;
+};
 
 export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
   const { user, authLoading } = useAuth();
 
   const [transactions, setTransactions] = useState<TxExt[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [range, setRange] = useState<RangeKey>(initialRange);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +54,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     // niezalogowany -> nie fetchujemy, tylko ustawiamy stany
     if (!user) {
       setTransactions([]);
+      setCategories([]);
       setError(null);
       setLoading(false);
       return;
@@ -51,9 +64,14 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       try {
         setLoading(true);
         setError(null);
-        const raw = await fetchTransactions();
-        const parsed = normalizeTransactions(raw);
+        const [rawTx, rawCategories] = await Promise.all([
+          fetchTransactions(),
+          fetchCategories(),
+        ]);
+
+        const parsed = normalizeTransactions(rawTx);
         setTransactions(parsed);
+        setCategories(rawCategories);
       } catch (e: any) {
         console.error(e);
         setError(e?.message ?? "Błąd podczas ładowania danych.");
@@ -64,28 +82,33 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     fetchData();
   }, [authLoading, user]);
   // 2) Wyliczenia zależne od zakresu
-const {
-  filtered,
-  startDate,
-  metrics,
-  netFlowSeries,
-  categorySeries,
-  heatmapSeries,
-} = useMemo(() => {
-  const { filtered, startDate } = filterByRange(transactions, range);
-  const metrics = computeMetrics(filtered);
-  const netFlowSeries = buildNetFlowSeries(filtered, range);
-  const categorySeries = groupByCategory(filtered);
-  const heatmapSeries = buildHeatmap(filtered);
-  return {
+  const {
     filtered,
     startDate,
     metrics,
     netFlowSeries,
     categorySeries,
     heatmapSeries,
-  };
-}, [transactions, range]);
+  } = useMemo(() => {
+    const { filtered, startDate } = filterByRange(transactions, range);
+    const metrics = computeMetrics(filtered);
+    const netFlowSeries = buildNetFlowSeries(filtered, range);
+    const categorySeries = groupByCategory(filtered);
+    const heatmapSeries = buildHeatmap(filtered);
+    return {
+      filtered,
+      startDate,
+      metrics,
+      netFlowSeries,
+      categorySeries,
+      heatmapSeries,
+    };
+  }, [transactions, range]);
+
+  const coloredCategories = useMemo(
+    () => applyCategoryColors(categorySeries, categories),
+    [categorySeries, categories]
+  );
   const rangeText = rangeLabel(range, startDate);
 
   // Signed out state (after all hooks to satisfy React Rules of Hooks)
@@ -193,7 +216,7 @@ const {
           <p className="text-[11px] text-slate-400 mb-3">
             Udział kategorii w całkowitych wydatkach.
           </p>
-          <CategoryDonutChart categories={categorySeries} loading={loading} />
+          <CategoryDonutChart categories={coloredCategories} loading={loading} />
         </div>
       </section>
 
@@ -414,11 +437,22 @@ function NetFlowChart({
 
 
 
+const DONUT_FALLBACK_COLORS = [
+  "#fbbf24",
+  "#22c55e",
+  "#06b6d4",
+  "#a855f7",
+  "#f97316",
+  "#ef4444",
+  "#6366f1",
+  "#14b8a6",
+];
+
 function CategoryDonutChart({
   categories,
   loading,
 }: {
-  categories: { name: string; value: number }[];
+  categories: CategoryBucket[];
   loading: boolean;
 }) {
   if (loading) {
@@ -436,12 +470,17 @@ function CategoryDonutChart({
     );
   }
 
+  const colors = categories.map(
+    (c, idx) => c.color || DONUT_FALLBACK_COLORS[idx % DONUT_FALLBACK_COLORS.length]
+  );
+
   const options: ApexCharts.ApexOptions = {
     chart: { type: "donut" },
     legend: {
       show: false,
     },
     labels: categories.map((c) => c.name),
+    colors,
     dataLabels: { enabled: false },
     stroke: { show: false },
     plotOptions: {
@@ -469,12 +508,19 @@ function CategoryDonutChart({
         />
       </div>
       <div className="space-y-1 max-h-32 overflow-y-auto pr-1 text-[11px]">
-        {categories.map((c) => (
+        {categories.map((c, idx) => (
           <div
             key={c.name}
             className="flex items-center justify-between text-slate-200"
           >
-            <span>{c.name}</span>
+            <span className="flex items-center gap-2">
+              <span
+                className="h-3 w-3 rounded-sm"
+                style={{ backgroundColor: colors[idx] }}
+                aria-hidden
+              />
+              <span>{c.name}</span>
+            </span>
             <span className="text-slate-400">
               {formatCurrency(c.value)}
             </span>
@@ -754,22 +800,66 @@ function groupByDay(data: TxExt[]) {
 }
 
 
-function groupByCategory(data: TxExt[]) {
+function groupByCategory(data: TxExt[]): CategoryBucket[] {
   const UNCATEGORIZED_LABEL = "Brak kategorii";
 
-  const map = new Map<string, number>();
+  const map = new Map<string, CategoryBucket>();
   for (const t of data) {
     if (t.amountNum >= 0) continue; // tylko wydatki
-    const key = t.category?.trim() || UNCATEGORIZED_LABEL;
-    map.set(key, (map.get(key) ?? 0) + Math.abs(t.amountNum));
+    const categoryId = t.category_id ?? null;
+    const name = t.category?.trim() || UNCATEGORIZED_LABEL;
+    const key = categoryId != null ? `id-${categoryId}` : `name-${name}`;
+
+    const current = map.get(key) ?? {
+      name,
+      value: 0,
+      categoryId,
+    };
+
+    map.set(key, {
+      ...current,
+      name,
+      categoryId,
+      value: current.value + Math.abs(t.amountNum),
+    });
   }
-  return Array.from(map.entries())
-    .map(([name, value]) => ({ name, value }))
+  return Array.from(map.values())
     .sort((a, b) => {
       if (a.name === UNCATEGORIZED_LABEL) return 1;
       if (b.name === UNCATEGORIZED_LABEL) return -1;
       return b.value - a.value;
-    });
+    })
+    .map((bucket) => ({ ...bucket }));
+}
+
+function applyCategoryColors(
+  buckets: CategoryBucket[],
+  categories: Category[]
+): CategoryBucket[] {
+  if (categories.length === 0) return buckets;
+
+  const colorById = new Map<number, string>();
+  const colorByName = new Map<string, string>();
+
+  for (const cat of categories) {
+    if (!cat.color) continue;
+    if (cat.id != null) {
+      colorById.set(cat.id, cat.color);
+    }
+    if (cat.name) {
+      colorByName.set(cat.name.trim(), cat.color);
+    }
+  }
+
+  return buckets.map((bucket) => {
+    const colorFromId =
+      bucket.categoryId != null ? colorById.get(bucket.categoryId) : undefined;
+    const colorFromName = colorByName.get(bucket.name);
+    return {
+      ...bucket,
+      color: colorFromId ?? colorFromName ?? bucket.color ?? null,
+    };
+  });
 }
 
 function buildHeatmap(data: TxExt[]) {
