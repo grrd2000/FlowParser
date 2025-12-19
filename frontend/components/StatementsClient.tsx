@@ -9,14 +9,15 @@ type Props = {
 };
 
 type StatusFilter = "all" | "success" | "partial" | "failed";
-type ViewMode = "grid" | "carousel";
 
 export function StatementsClient({ statements }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [monthFilter, setMonthFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [slide, setSlide] = useState(0);
+
+  const selectBase =
+    "appearance-none rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1 text-[12px] text-slate-100 shadow-inner shadow-black/30 transition focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/50";
 
   const { filtered, total, byStatus, years, months } = useMemo(() => {
     const normStatus = (s: string | null) => {
@@ -158,38 +159,6 @@ export function StatementsClient({ statements }: Props) {
               })}
             </div>
           </div>
-          <div className="relative inline-flex self-start overflow-hidden rounded-full border border-slate-800/80 bg-slate-900/80 p-1 text-[11px] shadow-lg shadow-black/20">
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-500/10 via-transparent to-indigo-400/10" />
-            <div className="relative flex items-center gap-1">
-              {([
-                ["grid", "Siatka"],
-                ["carousel", "Karuzela"],
-              ] as [ViewMode, string][]).map(([value, label]) => {
-                const active = viewMode === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => {
-                      setViewMode(value);
-                      setSlide(0);
-                    }}
-                    className={[
-                      "relative px-3 py-1 rounded-full transition duration-200",
-                      active
-                        ? "bg-slate-200/90 text-slate-900 shadow-[0_12px_30px_-18px_rgba(226,232,240,0.8)]"
-                        : "text-slate-400 hover:text-slate-100",
-                    ].join(" ")}
-                  >
-                    {active && (
-                      <span className="absolute inset-0 -z-10 rounded-full bg-slate-100/40 blur" />
-                    )}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
       </section>
 
@@ -202,7 +171,7 @@ export function StatementsClient({ statements }: Props) {
       ) : (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1">
+            <div className="relative inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 pr-8 shadow-inner shadow-black/30">
               <span className="text-slate-400">Rok</span>
               <select
                 value={yearFilter}
@@ -210,7 +179,8 @@ export function StatementsClient({ statements }: Props) {
                   setYearFilter(e.target.value);
                   setSlide(0);
                 }}
-                className="bg-transparent text-slate-100 focus:outline-none"
+                className={selectBase}
+                style={{ colorScheme: "dark" }}
               >
                 <option value="all">Wszystkie</option>
                 {years.map((y) => (
@@ -219,9 +189,10 @@ export function StatementsClient({ statements }: Props) {
                   </option>
                 ))}
               </select>
+              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">▼</span>
             </div>
 
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1">
+            <div className="relative inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 pr-8 shadow-inner shadow-black/30">
               <span className="text-slate-400">Miesiąc</span>
               <select
                 value={monthFilter}
@@ -229,7 +200,8 @@ export function StatementsClient({ statements }: Props) {
                   setMonthFilter(e.target.value);
                   setSlide(0);
                 }}
-                className="bg-transparent text-slate-100 focus:outline-none"
+                className={selectBase}
+                style={{ colorScheme: "dark" }}
               >
                 <option value="all">Wszystkie</option>
                 {months.map((m) => (
@@ -238,82 +210,84 @@ export function StatementsClient({ statements }: Props) {
                   </option>
                 ))}
               </select>
+              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">▼</span>
             </div>
           </div>
 
-          {viewMode === "grid" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {filtered.map((s, idx) => (
-                <StatementCard key={s.id} statement={s} index={idx} />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/70 shadow-inner shadow-black/30">
-                <motion.div
-                  className="flex"
-                  animate={{ x: `-${activeSlide * 100}%` }}
-                  transition={{ duration: 0.35, ease: "easeInOut" }}
-                >
-                  {slides.map((chunk, chunkIdx) => (
-                    <div
-                      key={chunkIdx}
-                      className="min-w-full grid gap-4 p-4 md:grid-cols-2"
-                    >
-                      {chunk.map((s, idx) => (
-                        <StatementCard
-                          key={s.id}
-                          statement={s}
-                          index={chunkIdx * 4 + idx}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </motion.div>
-
-                {slides.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSlide((s) => (s === 0 ? slides.length - 1 : s - 1))
-                      }
-                      className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-slate-700 bg-slate-900/80 p-2 text-slate-100 shadow-lg shadow-black/30 backdrop-blur hover:border-indigo-400/70 hover:text-indigo-200"
-                    >
-                      ←
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSlide((s) => (s === slides.length - 1 ? 0 : s + 1))
-                      }
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-slate-700 bg-slate-900/80 p-2 text-slate-100 shadow-lg shadow-black/30 backdrop-blur hover:border-indigo-400/70 hover:text-indigo-200"
-                    >
-                      →
-                    </button>
-                  </>
-                )}
-              </div>
+          <div className="space-y-4">
+            <div className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl shadow-black/30">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.08),transparent_40%),radial-gradient(circle_at_80%_40%,rgba(16,185,129,0.08),transparent_45%)]" />
+              <motion.div
+                className="relative flex"
+                animate={{ x: `-${activeSlide * 100}%` }}
+                transition={{ duration: 0.35, ease: "easeInOut" }}
+              >
+                {slides.map((chunk, chunkIdx) => (
+                  <div
+                    key={chunkIdx}
+                    className="min-w-full grid gap-4 p-6 md:grid-cols-2"
+                  >
+                    {chunk.map((s, idx) => (
+                      <StatementCard
+                        key={s.id}
+                        statement={s}
+                        index={chunkIdx * 4 + idx}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </motion.div>
 
               {slides.length > 1 && (
-                <div className="flex justify-center gap-2">
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSlide((s) => (s === 0 ? slides.length - 1 : s - 1))
+                    }
+                    className="group absolute left-4 top-1/2 -translate-y-1/2 rounded-full border border-slate-700/80 bg-slate-900/90 p-2 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition hover:-translate-y-1/2 hover:-translate-x-0.5 hover:border-indigo-400/80 hover:text-indigo-100"
+                  >
+                    <span className="inline-block transition group-hover:-translate-x-0.5">←</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSlide((s) => (s === slides.length - 1 ? 0 : s + 1))
+                    }
+                    className="group absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-slate-700/80 bg-slate-900/90 p-2 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition hover:-translate-y-1/2 hover:translate-x-0.5 hover:border-indigo-400/80 hover:text-indigo-100"
+                  >
+                    <span className="inline-block transition group-hover:translate-x-0.5">→</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {slides.length > 1 && (
+              <div className="flex items-center justify-center gap-3 text-[11px] text-slate-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-800/70 bg-slate-900/70 px-3 py-1 shadow-inner shadow-black/30">
+                  <span className="text-slate-500">Slajd</span>
+                  <span className="font-semibold text-slate-100">
+                    {activeSlide + 1}/{slides.length}
+                  </span>
+                </div>
+                <div className="flex gap-2">
                   {slides.map((_, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => setSlide(idx)}
                       className={[
-                        "h-2.5 w-2.5 rounded-full border border-slate-600 transition",
+                        "h-2.5 w-2.5 rounded-full border transition",
                         activeSlide === idx
-                          ? "bg-indigo-400 border-indigo-400 shadow-md shadow-indigo-500/40"
-                          : "bg-slate-800 hover:border-slate-400",
+                          ? "border-indigo-400 bg-indigo-400 shadow-md shadow-indigo-500/40"
+                          : "border-slate-600 bg-slate-800 hover:border-slate-400",
                       ].join(" ")}
                     />
                   ))}
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </section>
       )}
     </div>
