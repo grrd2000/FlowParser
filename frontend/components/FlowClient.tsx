@@ -4,6 +4,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import * as Popover from "@radix-ui/react-popover";
 import * as Slider from "@radix-ui/react-slider";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
