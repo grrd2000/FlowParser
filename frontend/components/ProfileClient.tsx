@@ -84,12 +84,18 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/60 p-6 shadow-lg shadow-black/40">
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-900/40 via-transparent to-emerald-800/30 blur-3xl" />
+      <section className="group relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/60 p-6 shadow-lg shadow-black/40 transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-500/40 hover:shadow-indigo-900/30">
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-900/40 via-transparent to-emerald-800/30 blur-3xl pointer-events-none" />
+        <div className="absolute inset-0 opacity-60 pointer-events-none">
+          <div className="absolute -left-10 top-0 h-48 w-48 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(99,102,241,0.5),transparent_60%)] blur-3xl animate-[glow-wave_14s_ease-in-out_infinite]" />
+          <div className="absolute -right-8 bottom-0 h-44 w-44 rounded-full bg-[radial-gradient(circle_at_70%_70%,rgba(16,185,129,0.5),transparent_60%)] blur-3xl animate-[glow-wave_14s_ease-in-out_infinite]" />
+        </div>
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <div className="relative h-14 w-14 overflow-hidden rounded-2xl border border-indigo-500/50 bg-gradient-to-br from-indigo-500/30 via-slate-900 to-emerald-500/30 shadow-[0_10px_40px_-20px_rgba(99,102,241,1)]">
               <div className="absolute inset-px rounded-xl bg-slate-950/70" />
+              <div className="absolute inset-0 rounded-2xl border border-indigo-400/40 opacity-60 blur-xl" />
+              <div className="absolute inset-0 rounded-2xl border border-indigo-500/20 animate-[pulse-ring_5s_ease-in-out_infinite]" />
               <div className="relative flex h-full w-full items-center justify-center text-lg font-semibold text-indigo-100">
                 {avatarInitials}
               </div>
@@ -109,7 +115,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
           </div>
 
           <div className="grid w-full max-w-xl grid-cols-2 gap-3 text-xs text-slate-300 sm:text-sm">
-            <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3 shadow-inner shadow-black/20">
+            <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3 shadow-inner shadow-black/20 transition duration-200 hover:-translate-y-0.5 hover:border-indigo-400/50 hover:shadow-indigo-900/20">
               <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-slate-900/30" />
               <div className="relative flex items-center justify-between gap-2">
                 <div className="space-y-0.5">
@@ -121,7 +127,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                 </span>
               </div>
             </div>
-            <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3 shadow-inner shadow-black/20">
+            <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3 shadow-inner shadow-black/20 transition duration-200 hover:-translate-y-0.5 hover:border-emerald-400/50 hover:shadow-emerald-900/15">
               <div className="absolute inset-0 bg-gradient-to-br from-slate-800/40 via-transparent to-emerald-500/20" />
               <div className="relative flex flex-col gap-1">
                 <p className="text-[11px] uppercase tracking-[0.08em] text-indigo-200/80">Status profilu</p>
@@ -150,7 +156,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.65fr)]">
         <div className="space-y-4">
-          <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/50 p-5 shadow-md shadow-black/30">
+          <section className="group relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/50 p-5 shadow-md shadow-black/30 transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-400/50 hover:shadow-indigo-900/20">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-emerald-500/10" />
             <div className="relative flex items-start justify-between gap-3">
               <div className="space-y-1">
@@ -173,7 +179,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:bg-slate-900/70"
+                  className="w-full rounded-xl border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:bg-slate-900/70 focus:shadow-[0_10px_30px_-18px_rgba(99,102,241,0.7)] hover:border-indigo-400/40 hover:bg-slate-900/70"
                   placeholder="Twoje imię"
                 />
               </div>
@@ -183,7 +189,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:bg-slate-900/70"
+                  className="w-full rounded-xl border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:bg-slate-900/70 focus:shadow-[0_10px_30px_-18px_rgba(99,102,241,0.7)] hover:border-indigo-400/40 hover:bg-slate-900/70"
                   placeholder="you@example.com"
                 />
               </div>
@@ -295,7 +301,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                           "px-3 py-1 rounded-full transition-all duration-150",
                           active
                             ? "bg-indigo-500 text-slate-50 shadow-[0_10px_30px_-18px_rgba(99,102,241,1)]"
-                            : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/60",
+                            : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 hover:-translate-y-0.5",
                         ].join(" ")}
                       >
                         {label}
@@ -322,18 +328,18 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                     const active = defaultGranularity === value;
                     return (
                       <button
-                        key={value}
-                        type="button"
-                        onClick={() => setDefaultGranularity(value)}
-                        className={[
-                          "px-3 py-1 rounded-full transition-all duration-150",
-                          active
-                            ? "bg-indigo-500 text-slate-50 shadow-[0_10px_30px_-18px_rgba(99,102,241,1)]"
-                            : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/60",
-                        ].join(" ")}
-                      >
-                        {label}
-                      </button>
+                      key={value}
+                      type="button"
+                      onClick={() => setDefaultGranularity(value)}
+                      className={[
+                        "px-3 py-1 rounded-full transition-all duration-150",
+                        active
+                          ? "bg-indigo-500 text-slate-50 shadow-[0_10px_30px_-18px_rgba(99,102,241,1)]"
+                          : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 hover:-translate-y-0.5",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
                     );
                   })}
                 </div>
@@ -347,7 +353,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs">
                   <button
                     type="button"
-                    className="group relative flex items-center justify-between gap-3 rounded-xl border border-indigo-400/60 bg-indigo-500/20 px-4 py-3 text-indigo-100 shadow-inner shadow-indigo-900/40"
+                    className="group relative flex items-center justify-between gap-3 rounded-xl border border-indigo-400/60 bg-indigo-500/20 px-4 py-3 text-indigo-100 shadow-inner shadow-indigo-900/40 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-indigo-800/40"
                   >
                     <div className="space-y-0.5 text-left">
                       <p className="text-[11px] uppercase tracking-[0.08em] text-indigo-200">Dark</p>
@@ -359,7 +365,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                   </button>
                   <button
                     type="button"
-                    className="relative flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-slate-500"
+                    className="relative flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-slate-500 transition-transform duration-200 hover:-translate-y-0.5 hover:border-slate-700"
                     disabled
                   >
                     <div className="space-y-0.5 text-left">
@@ -382,7 +388,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
                   "inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition",
                   saving
                     ? "cursor-not-allowed bg-slate-800 text-slate-400"
-                    : "bg-emerald-500 text-slate-950 shadow-[0_10px_30px_-15px_rgba(16,185,129,0.8)] transition hover:-translate-y-0.5 hover:bg-emerald-400",
+                    : "bg-emerald-500 text-slate-950 shadow-[0_10px_30px_-15px_rgba(16,185,129,0.8)] transition hover:-translate-y-0.5 hover:bg-emerald-400 hover:shadow-[0_18px_35px_-18px_rgba(16,185,129,0.9)]",
                 ].join(" ")}
               >
                 {saving ? "Zapisywanie..." : "Zapisz zmiany"}
