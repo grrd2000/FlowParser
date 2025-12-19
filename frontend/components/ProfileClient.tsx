@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { UserProfile } from "@/lib/serverApi";
+import { updateUserProfile, type UserProfile } from "@/lib/serverApi";
 
 type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
 type Granularity = "day" | "week" | "month" | "quarter";
@@ -75,23 +75,7 @@ export function ProfileClient({ initialProfile }: ProfileClientProps) {
         theme: "dark",
       };
 
-      const apiBase =
-        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
-      const res = await fetch(`${apiBase}/user/me`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        console.error("Failed to update profile", await res.text());
-        return;
-      }
-
-      await res.json();
+      await updateUserProfile(payload);
       setSavedAt(new Date());
     } finally {
       setSaving(false);

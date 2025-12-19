@@ -218,6 +218,20 @@ export async function fetchUserProfile(): Promise<UserProfile | null> {
   });
 }
 
+export async function updateUserProfile(payload: {
+  name: string;
+  email: string;
+  currency: string;
+  default_range: string;
+  default_granularity: string;
+  theme: string;
+}): Promise<UserProfile> {
+  return requestJson<UserProfile>("/user/me", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchAccounts(): Promise<AccountSummary[]> {
   return requestJson<AccountSummary[]>("/accounts", {}, {
     allowUnauthorized: true,
