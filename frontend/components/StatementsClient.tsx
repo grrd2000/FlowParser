@@ -9,17 +9,29 @@ type Props = {
 };
 
 type StatusFilter = "all" | "success" | "partial" | "failed";
+type ViewMode = "grid" | "carousel";
 
 export function StatementsClient({ statements }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [yearFilter, setYearFilter] = useState<string>("all");
+  const [monthFilter, setMonthFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [slide, setSlide] = useState(0);
 
-  const { filtered, total, byStatus } = useMemo(() => {
+  const { filtered, total, byStatus, years, months } = useMemo(() => {
     const normStatus = (s: string | null) => {
       const v = s?.toLowerCase() ?? "";
       if (v.includes("partial")) return "partial";
       if (v.includes("success")) return "success";
       if (v.includes("fail")) return "failed";
       return "other";
+    };
+
+    const extractDate = (s: StatementSummary) => {
+      const candidate = s.period_start ?? s.issue_date ?? s.period_end;
+      if (!candidate) return null;
+      const d = new Date(candidate);
+      return Number.isNaN(d.getTime()) ? null : d;
     };
 
     const byStatus: Record<string, number> = {
@@ -29,10 +41,19 @@ export function StatementsClient({ statements }: Props) {
       other: 0,
     };
 
+    const years = new Set<string>();
+    const months = new Set<number>();
+
     for (const st of statements) {
       const k = normStatus(st.import_status);
       if (byStatus[k] !== undefined) byStatus[k] += 1;
       else byStatus["other"] += 1;
+
+      const date = extractDate(st);
+      if (date) {
+        years.add(date.getFullYear().toString());
+        months.add(date.getMonth());
+      }
     }
 
     let filtered = statements;
@@ -42,12 +63,28 @@ export function StatementsClient({ statements }: Props) {
       );
     }
 
+    filtered = filtered.filter((s) => {
+      const date = extractDate(s);
+      if (yearFilter !== "all") {
+        if (!date || date.getFullYear().toString() !== yearFilter) return false;
+      }
+      if (monthFilter !== "all") {
+        if (!date || date.getMonth().toString() !== monthFilter) return false;
+      }
+      return true;
+    });
+
     return {
       filtered,
       total: statements.length,
       byStatus,
+      years: Array.from(years).sort((a, b) => Number(b) - Number(a)),
+      months: Array.from(months).sort((a, b) => b - a),
     };
-  }, [statements, statusFilter]);
+  }, [monthFilter, statements, statusFilter, yearFilter]);
+
+  const slides = useMemo(() => chunkArray(filtered, 4), [filtered]);
+  const activeSlide = Math.min(slide, Math.max(slides.length - 1, 0));
 
   return (
     <div className="space-y-8">
@@ -121,6 +158,38 @@ export function StatementsClient({ statements }: Props) {
               })}
             </div>
           </div>
+          <div className="relative inline-flex self-start overflow-hidden rounded-full border border-slate-800/80 bg-slate-900/80 p-1 text-[11px] shadow-lg shadow-black/20">
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-500/10 via-transparent to-indigo-400/10" />
+            <div className="relative flex items-center gap-1">
+              {([
+                ["grid", "Siatka"],
+                ["carousel", "Karuzela"],
+              ] as [ViewMode, string][]).map(([value, label]) => {
+                const active = viewMode === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setViewMode(value);
+                      setSlide(0);
+                    }}
+                    className={[
+                      "relative px-3 py-1 rounded-full transition duration-200",
+                      active
+                        ? "bg-slate-200/90 text-slate-900 shadow-[0_12px_30px_-18px_rgba(226,232,240,0.8)]"
+                        : "text-slate-400 hover:text-slate-100",
+                    ].join(" ")}
+                  >
+                    {active && (
+                      <span className="absolute inset-0 -z-10 rounded-full bg-slate-100/40 blur" />
+                    )}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -131,10 +200,120 @@ export function StatementsClient({ statements }: Props) {
           <span className="text-slate-200"> Flow</span> lub przełącz filtr.
         </div>
       ) : (
-        <section className="grid gap-4 lg:grid-cols-2">
-          {filtered.map((s, idx) => (
-            <StatementCard key={s.id} statement={s} index={idx} />
-          ))}
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1">
+              <span className="text-slate-400">Rok</span>
+              <select
+                value={yearFilter}
+                onChange={(e) => {
+                  setYearFilter(e.target.value);
+                  setSlide(0);
+                }}
+                className="bg-transparent text-slate-100 focus:outline-none"
+              >
+                <option value="all">Wszystkie</option>
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1">
+              <span className="text-slate-400">Miesiąc</span>
+              <select
+                value={monthFilter}
+                onChange={(e) => {
+                  setMonthFilter(e.target.value);
+                  setSlide(0);
+                }}
+                className="bg-transparent text-slate-100 focus:outline-none"
+              >
+                <option value="all">Wszystkie</option>
+                {months.map((m) => (
+                  <option key={m} value={m.toString()}>
+                    {monthLabel(Number(m))}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {viewMode === "grid" ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {filtered.map((s, idx) => (
+                <StatementCard key={s.id} statement={s} index={idx} />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/70 shadow-inner shadow-black/30">
+                <motion.div
+                  className="flex"
+                  animate={{ x: `-${activeSlide * 100}%` }}
+                  transition={{ duration: 0.35, ease: "easeInOut" }}
+                >
+                  {slides.map((chunk, chunkIdx) => (
+                    <div
+                      key={chunkIdx}
+                      className="min-w-full grid gap-4 p-4 md:grid-cols-2"
+                    >
+                      {chunk.map((s, idx) => (
+                        <StatementCard
+                          key={s.id}
+                          statement={s}
+                          index={chunkIdx * 4 + idx}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </motion.div>
+
+                {slides.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSlide((s) => (s === 0 ? slides.length - 1 : s - 1))
+                      }
+                      className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-slate-700 bg-slate-900/80 p-2 text-slate-100 shadow-lg shadow-black/30 backdrop-blur hover:border-indigo-400/70 hover:text-indigo-200"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSlide((s) => (s === slides.length - 1 ? 0 : s + 1))
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-slate-700 bg-slate-900/80 p-2 text-slate-100 shadow-lg shadow-black/30 backdrop-blur hover:border-indigo-400/70 hover:text-indigo-200"
+                    >
+                      →
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {slides.length > 1 && (
+                <div className="flex justify-center gap-2">
+                  {slides.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setSlide(idx)}
+                      className={[
+                        "h-2.5 w-2.5 rounded-full border border-slate-600 transition",
+                        activeSlide === idx
+                          ? "bg-indigo-400 border-indigo-400 shadow-md shadow-indigo-500/40"
+                          : "bg-slate-800 hover:border-slate-400",
+                      ].join(" ")}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>
@@ -334,6 +513,24 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function monthLabel(idx: number) {
+  const names = [
+    "styczeń",
+    "luty",
+    "marzec",
+    "kwiecień",
+    "maj",
+    "czerwiec",
+    "lipiec",
+    "sierpień",
+    "wrzesień",
+    "październik",
+    "listopad",
+    "grudzień",
+  ];
+  return names[idx] ?? `Miesiąc ${idx + 1}`;
+}
+
 function normalizeStatus(s: string | null): "success" | "partial" | "failed" | "other" {
   if (!s) return "other";
   const v = s.toLowerCase();
@@ -385,4 +582,12 @@ function maskAccountNumber(num: string | null): string {
   const hidden = "•".repeat(Math.max(0, compact.length - 8));
   const masked = `${visibleStart}${hidden}${visibleEnd}`;
   return masked.match(/.{1,4}/g)?.join(" ") ?? masked;
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
 }
