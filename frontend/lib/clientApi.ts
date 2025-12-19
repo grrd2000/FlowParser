@@ -27,6 +27,7 @@ export async function fetchTransactionsClient(opts: {
 
   const res = await fetch(url.toString(), {
     method: "GET",
+    credentials: "include", // uwzględnij ciasteczka JWT
   });
 
   if (!res.ok) {
