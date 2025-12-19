@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { motion } from "framer-motion";
 import {
   fetchCategories,
   fetchTransactions,
@@ -134,38 +135,82 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
 
   return (
-    <div className="space-y-8">
+    <div className="relative space-y-10">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="bg-orbit bg-orbit--left" />
+        <div className="bg-orbit bg-orbit--right" />
+        <motion.div
+          aria-hidden
+          className="absolute inset-x-12 top-6 h-24 rounded-full bg-gradient-to-r from-white/5 via-white/0 to-white/5"
+          animate={{ opacity: [0.4, 0.9, 0.4] }}
+          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+
       {/* HERO */}
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/80 via-slate-900/60 to-slate-800/60 p-6 md:p-8 shadow-2xl shadow-black/30">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="hero-accent hero-accent--primary" />
-          <div className="hero-accent hero-accent--secondary" />
-        </div>
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200 shadow-lg shadow-indigo-500/10">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden />
-              <span>Podsumowanie finansowe w czasie rzeczywistym</span>
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/85 via-slate-900/70 to-slate-950/60 p-6 md:p-8 shadow-2xl shadow-black/40"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_20%,rgba(16,185,129,0.14),transparent_45%),radial-gradient(circle_at_80%_12%,rgba(129,140,248,0.16),transparent_42%),radial-gradient(circle_at_75%_75%,rgba(236,72,153,0.18),transparent_50%)]" />
+        <motion.div
+          aria-hidden
+          className="absolute -inset-x-10 top-10 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent"
+          animate={{ opacity: [0.2, 1, 0.2] }}
+          transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+
+        <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-200 shadow-lg shadow-indigo-500/15">
+              Puls Flow
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-90" />
+                <span className="absolute inset-0 animate-[pulse-ring_5s_ease-in-out_infinite] rounded-full bg-emerald-400/50" />
+              </span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <h1 className="text-3xl md:text-4xl font-semibold text-white tracking-tight">
-                Dashboard
+                Dashboard inspirowany Flow
               </h1>
               <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-                Minimalistyczny widok skupiony na ruchu gotówki. Zakres danych: {" "}
-                <span className="text-white font-medium">{rangeText}</span>. Odkryj rytm wydatków, źródła wpływów i najbardziej aktywne dni.
+                Ten widok korzysta z gradientów i animacji ze strony Flow, aby uwidocznić rytm finansów. Zakres danych: {" "}
+                <span className="text-white font-medium">{rangeText}</span>. Wybierz scenariusz, a wykresy, kategorie i heatmapy od razu się dostosują.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
               <RangeChips active={range} onChange={setRange} />
               <div className="text-[11px] text-slate-400">
-                Zmiana zakresu odświeża wszystkie wykresy i liczby.
+                Przełącz zakres, by zsynchronizować wszystkie sekcje.
               </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/flow"
+                className="group inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-[12px] font-semibold text-slate-900 shadow-lg shadow-white/25 transition-transform hover:-translate-y-0.5"
+              >
+                Pełen widok Flow
+                <span className="h-6 w-6 rounded-full bg-slate-900 text-white grid place-items-center text-[10px] transition-transform group-hover:translate-x-0.5">
+                  ↗
+                </span>
+              </Link>
+              <Link
+                href="/import"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[12px] font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-emerald-300/60 hover:bg-emerald-500/15"
+              >
+                Importuj dane
+              </Link>
+              <Link href="/statements" className="button-ghost">
+                Zestawienia
+              </Link>
             </div>
           </div>
 
-          <div className="relative grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="relative grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
             <InsightPill
               label="Średnie dzienne wydatki"
               value={formatCurrency(dailyAverage)}
@@ -190,19 +235,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
             />
           </div>
         </div>
-
-        <div className="relative mt-6 flex flex-wrap gap-3">
-          <Link href="/flow" className="button-ghost">
-            Zarządzaj transakcjami
-          </Link>
-          <Link href="/import" className="button-ghost">
-            Dodaj nowy plik CSV
-          </Link>
-          <Link href="/statements" className="button-ghost">
-            Zobacz zestawienia
-          </Link>
-        </div>
-      </section>
+      </motion.section>
 
       {error && (
         <div className="rounded-2xl border border-rose-500/60 bg-rose-500/10 px-4 py-3 text-[12px] text-rose-100">
@@ -329,9 +362,12 @@ function KpiCard({
       : "text-rose-300 bg-rose-500/10";
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/30 transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" aria-hidden />
-      <div className="flex items-start justify-between gap-2">
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 via-white/0 to-white/5 p-5 shadow-lg shadow-black/30 transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/25">
+      <div className="absolute inset-0 opacity-70" aria-hidden>
+        <div className="absolute inset-px rounded-3xl bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.16),transparent_45%),radial-gradient(circle_at_80%_30%,rgba(129,140,248,0.14),transparent_45%)]" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
+      </div>
+      <div className="relative flex items-start justify-between gap-2">
         <div className="text-[11px] uppercase tracking-[0.1em] text-slate-400">
           {label}
         </div>
@@ -343,13 +379,13 @@ function KpiCard({
         </span>
       </div>
       <div
-        className={`mt-3 text-2xl font-semibold leading-none ${
+        className={`relative mt-3 text-2xl font-semibold leading-none ${
           loading ? "text-slate-600 animate-pulse" : "text-white"
         }`}
       >
         {loading ? "—" : value}
       </div>
-      <div className="mt-3 text-[12px] text-slate-400">{subtitle}</div>
+      <div className="relative mt-3 text-[12px] text-slate-400">{subtitle}</div>
     </div>
   );
 }
@@ -378,11 +414,13 @@ function RangeChips({
           onClick={() => onChange(opt.key)}
           className={`group relative overflow-hidden rounded-full border px-3 py-2 text-[11px] font-semibold transition-all duration-200 ${
             active === opt.key
-              ? "border-white/70 bg-white/90 text-slate-900 shadow-lg shadow-indigo-500/30"
+              ? "border-transparent bg-gradient-to-r from-emerald-400 via-indigo-400 to-pink-400 text-slate-900 shadow-lg shadow-indigo-500/30"
               : "border-white/10 bg-white/5 text-slate-100 hover:border-white/30 hover:bg-white/15"
           }`}
         >
-          <span className="block leading-tight">{opt.label}</span>
+          <span className="block leading-tight">
+            {opt.label}
+          </span>
           <span
             className={`block text-[10px] font-normal transition-opacity ${
               active === opt.key ? "text-slate-700" : "text-slate-300/80"
@@ -413,18 +451,22 @@ function InsightPill({
   color?: string;
 }) {
   const content = (
-    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-white/30 hover:shadow-indigo-500/20">
-      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/5 to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" aria-hidden />
-      <div className="text-[11px] uppercase tracking-[0.08em] text-slate-400">{label}</div>
-      <div className="mt-1 flex items-center gap-2 text-base font-semibold text-white">
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ backgroundColor: color ?? "#60a5fa" }}
-          aria-hidden
-        />
-        <span>{value}</span>
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 via-white/0 to-white/5 px-4 py-3 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-indigo-200/60 hover:shadow-indigo-500/25">
+      <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" aria-hidden>
+        <div className="absolute inset-px rounded-2xl bg-gradient-to-r from-emerald-400/25 via-indigo-400/20 to-pink-400/20 blur" />
       </div>
-      <div className="mt-1 text-[11px] text-slate-400">{hint}</div>
+      <div className="relative space-y-1">
+        <div className="text-[11px] uppercase tracking-[0.08em] text-slate-400">{label}</div>
+        <div className="flex items-center gap-2 text-base font-semibold text-white">
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: color ?? "#60a5fa" }}
+            aria-hidden
+          />
+          <span>{value}</span>
+        </div>
+        <div className="text-[11px] text-slate-400">{hint}</div>
+      </div>
     </div>
   );
 
