@@ -60,6 +60,7 @@ export type StatementSummary = {
   error_rows: number | null;
   finished_at: string | null;
 
+  import_runs_count: number;
   is_reimported: boolean | null;
 
   account_name: string | null;
@@ -127,10 +128,15 @@ export type CategoryRuleUI = {
 };
 
 // Używamy innych adresów bazowych w zależności od środowiska (SSR vs browser)
-const API_BASE_URL =
-  typeof window === "undefined"
-    ? (process.env.INTERNAL_API_BASE_URL ?? "http://api:8000")
-    : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000");
+const API_BASE_URL = (() => {
+  const fallback = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+  if (typeof window === "undefined") {
+    return process.env.INTERNAL_API_BASE_URL ?? fallback;
+  }
+
+  return fallback;
+})();
 
 function buildUrl(path: string) {
   return path.startsWith("http")

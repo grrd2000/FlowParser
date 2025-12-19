@@ -755,15 +755,21 @@ function groupByDay(data: TxExt[]) {
 
 
 function groupByCategory(data: TxExt[]) {
+  const UNCATEGORIZED_LABEL = "Brak kategorii";
+
   const map = new Map<string, number>();
   for (const t of data) {
     if (t.amountNum >= 0) continue; // tylko wydatki
-    const key = t.category || "Inne";
+    const key = t.category?.trim() || UNCATEGORIZED_LABEL;
     map.set(key, (map.get(key) ?? 0) + Math.abs(t.amountNum));
   }
   return Array.from(map.entries())
     .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => {
+      if (a.name === UNCATEGORIZED_LABEL) return 1;
+      if (b.name === UNCATEGORIZED_LABEL) return -1;
+      return b.value - a.value;
+    });
 }
 
 function buildHeatmap(data: TxExt[]) {
