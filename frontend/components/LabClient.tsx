@@ -503,28 +503,31 @@ export function LabClient() {
     );
   }
 
-
   return (
     <div className="relative flex h-full flex-col gap-6">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.12),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.12),transparent_32%),linear-gradient(120deg,rgba(15,23,42,0.95),rgba(15,23,42,0.88))]" />
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-r from-slate-950 via-slate-900/80 to-slate-950 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
-        <div className="absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_top_left,rgba(129,140,248,0.28),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.18),transparent_38%)]" />
-        <div className="absolute -top-10 -left-10 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl animate-[float_18s_ease-in-out_infinite]" />
-        <div className="absolute -bottom-12 -right-8 h-32 w-32 rounded-full bg-emerald-500/20 blur-3xl animate-[float_22s_ease-in-out_infinite_reverse]" />
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 backdrop-blur-xl shadow-[0_15px_80px_rgba(0,0,0,0.45)]">
+        <div className="absolute inset-px rounded-[22px] bg-[linear-gradient(135deg,rgba(255,255,255,0.06),transparent)]" />
+        <div className="absolute inset-0 opacity-60 bg-[radial-gradient(circle_at_15%_20%,rgba(129,140,248,0.35),transparent_40%),radial-gradient(circle_at_90%_30%,rgba(16,185,129,0.25),transparent_45%)]" />
+        <div className="absolute -top-14 left-10 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl animate-[pulse_16s_ease-in-out_infinite]" />
+        <div className="absolute -bottom-16 right-16 h-32 w-32 rounded-full bg-emerald-500/25 blur-3xl animate-[pulse_18s_ease-in-out_infinite_reverse]" />
 
-        <div className="relative px-6 sm:px-8 py-7 flex flex-col gap-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-[11px] text-indigo-100">
+        <div className="relative px-6 sm:px-9 py-8 flex flex-col gap-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-[11px] text-indigo-100 backdrop-blur">
                 <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
                 Inteligentne centrum automatyzacji
               </div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
-                Lab
-              </h1>
-              <p className="text-sm md:text-[13px] text-slate-300 max-w-2xl">
-                Inteligentna warstwa Twojej aplikacji finansowej. Uczysz system swoimi decyzjami,
-                a on odwdzięcza się automatycznymi kategoriami i propozycjami działań.
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl md:text-[32px] font-semibold text-slate-50 tracking-tight">
+                  Lab
+                </h1>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">nowoczesny podgląd</span>
+              </div>
+              <p className="text-sm md:text-[13px] text-slate-300 leading-relaxed">
+                Nowy widok Labu to minimalistyczna przestrzeń, która łączy dane, automatyzacje i sugestie w jednym miejscu. Wszystko jest interaktywne, a kluczowe akcje masz pod ręką.
               </p>
             </div>
 
@@ -532,14 +535,22 @@ export function LabClient() {
               <button
                 type="button"
                 onClick={refreshAll}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-100 hover:bg-white/10 hover:border-white/20"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-100 hover:-translate-y-0.5 hover:bg-white/10 hover:border-white/20 transition-all"
               >
                 <span className="h-2 w-2 rounded-full bg-emerald-300" />
                 Odśwież dane
               </button>
+              <button
+                type="button"
+                onClick={applyRulesNow}
+                disabled={rulesBusyId === "apply"}
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-[11px] text-emerald-100 hover:-translate-y-0.5 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
+              >
+                {rulesBusyId === "apply" ? "Zastosuj…" : "Zastosuj reguły"}
+              </button>
               <Link
                 href="/flow"
-                className="inline-flex items-center rounded-full border border-indigo-400/50 bg-indigo-500/20 px-3 py-1.5 text-[11px] text-indigo-100 hover:bg-indigo-500/30"
+                className="inline-flex items-center gap-2 rounded-full border border-indigo-400/50 bg-indigo-500/25 px-3 py-1.5 text-[11px] text-indigo-100 hover:-translate-y-0.5 hover:bg-indigo-500/35 transition-all"
               >
                 Otwórz Flow →
               </Link>
@@ -563,6 +574,21 @@ export function LabClient() {
               hint="bez kategorii"
             />
           </div>
+
+          <div className="flex flex-wrap gap-3 text-[11px] text-slate-300">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 hover:border-indigo-300/60 hover:text-indigo-50 transition-all">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-pulse" />
+              Interaktywne panele
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 hover:border-emerald-300/60 hover:text-emerald-50 transition-all">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              Animacje przy akcjach
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 hover:border-sky-300/60 hover:text-sky-50 transition-all">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-300" />
+              Minimalistyczny layout
+            </span>
+          </div>
         </div>
       </div>
 
@@ -570,16 +596,14 @@ export function LabClient() {
         {/* LEFT */}
         <div className="flex flex-col gap-6">
           {/* Smart overview */}
-          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] hover:border-white/20 transition-colors shadow-[0_0_0_1px_rgba(255,255,255,0.04)] hover:border-white/20 transition-colors">
-            <div className="absolute -top-16 -right-24 h-44 w-44 rounded-full bg-indigo-500/15 blur-3xl" />
-            <div className="absolute -bottom-16 -left-24 h-44 w-44 rounded-full bg-pink-500/10 blur-3xl" />
+          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] transition-all hover:-translate-y-1 hover:border-indigo-300/50">
+            <div className="absolute -top-16 -right-24 h-44 w-44 rounded-full bg-indigo-500/10 blur-3xl" />
+            <div className="absolute -bottom-16 -left-24 h-44 w-44 rounded-full bg-emerald-500/10 blur-3xl" />
 
             <div className="relative px-6 sm:px-7 pt-6 pb-6">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                    Smart overview
-                  </div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Smart overview</div>
                   <h2 className="mt-1 text-sm font-semibold text-slate-50 flex items-center gap-2">
                     Jak bardzo „ogarnięte” są Twoje finanse
                     <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
@@ -961,7 +985,7 @@ export function LabClient() {
           </section>
 
           {/* Kategorie */}
-          <section className="rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] hover:border-white/20 transition-colors shadow-[0_0_0_1px_rgba(255,255,255,0.04)] hover:border-white/20 transition-colors overflow-hidden">
+          <section className="rounded-3xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] transition-all hover:-translate-y-1 hover:border-indigo-300/50 overflow-hidden">
             <div className="px-6 sm:px-7 pt-6 pb-5 border-b border-white/10">
               <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Kategorie</div>
               <h2 className="mt-1 text-sm font-semibold text-slate-50">Twoja mapa wydatków</h2>
@@ -1122,7 +1146,10 @@ export function LabClient() {
         </div>
 
         {/* RIGHT */}
-        <section id="ai" className="rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] hover:border-white/20 transition-colors shadow-[0_0_0_1px_rgba(255,255,255,0.04)] hover:border-white/20 transition-colors overflow-hidden">
+        <section
+          id="ai"
+          className="rounded-3xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] transition-all hover:-translate-y-1 hover:border-indigo-300/50 overflow-hidden"
+        >
           <div className="px-6 sm:px-7 pt-6 pb-5 border-b border-white/10">
             <h2 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
               AI Assistant
