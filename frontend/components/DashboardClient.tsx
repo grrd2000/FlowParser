@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -110,6 +111,16 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     [categorySeries, categories]
   );
   const rangeText = rangeLabel(range, startDate);
+  const dailyAverage = useMemo(() => {
+    if (!filtered.length) return 0;
+    const { expenses } = computeMetrics(filtered);
+    const daySet = new Set(
+      filtered.map((t) => t.date.toISOString().slice(0, 10))
+    );
+    const days = Math.max(1, daySet.size);
+    return Math.abs(expenses) / days;
+  }, [filtered]);
+  const topCategory = coloredCategories[0];
 
   // Signed out state (after all hooks to satisfy React Rules of Hooks)
   if (!authLoading && !user) {
@@ -123,17 +134,74 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
 
   return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <section className="space-y-2">
-        <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
-          Dashboard
-        </h1>
-        <p className="text-sm text-slate-400 max-w-xl">
-          Szklany podgląd Twoich przepływów – kluczowe liczby, trendy w czasie
-          i rozkład wydatków. Dane z{" "}
-          <span className="text-slate-200 font-medium">{rangeText}</span>.
-        </p>
+    <div className="space-y-8">
+      {/* HERO */}
+      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/80 via-slate-900/60 to-slate-800/60 p-6 md:p-8 shadow-2xl shadow-black/30">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="hero-accent hero-accent--primary" />
+          <div className="hero-accent hero-accent--secondary" />
+        </div>
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200 shadow-lg shadow-indigo-500/10">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden />
+              <span>Podsumowanie finansowe w czasie rzeczywistym</span>
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-3xl md:text-4xl font-semibold text-white tracking-tight">
+                Dashboard
+              </h1>
+              <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
+                Minimalistyczny widok skupiony na ruchu gotówki. Zakres danych: {" "}
+                <span className="text-white font-medium">{rangeText}</span>. Odkryj rytm wydatków, źródła wpływów i najbardziej aktywne dni.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <RangeChips active={range} onChange={setRange} />
+              <div className="text-[11px] text-slate-400">
+                Zmiana zakresu odświeża wszystkie wykresy i liczby.
+              </div>
+            </div>
+          </div>
+
+          <div className="relative grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+            <InsightPill
+              label="Średnie dzienne wydatki"
+              value={formatCurrency(dailyAverage)}
+              hint="Rozbite tylko na wydatki w wybranym zakresie"
+            />
+            <InsightPill
+              label="Dominująca kategoria"
+              value={topCategory ? topCategory.name : "Brak danych"}
+              hint="Największy udział w wydatkach"
+              color={topCategory?.color || "#a855f7"}
+            />
+            <InsightPill
+              label="Liczba transakcji"
+              value={filtered.length.toString()}
+              hint="Zliczone po wszystkich wpływach i wydatkach"
+            />
+            <InsightPill
+              label="Śledź szczegóły"
+              value="Przejdź do Flow"
+              href="/flow"
+              hint="Pełna lista transakcji z filtrami"
+            />
+          </div>
+        </div>
+
+        <div className="relative mt-6 flex flex-wrap gap-3">
+          <Link href="/flow" className="button-ghost">
+            Zarządzaj transakcjami
+          </Link>
+          <Link href="/import" className="button-ghost">
+            Dodaj nowy plik CSV
+          </Link>
+          <Link href="/statements" className="button-ghost">
+            Zobacz zestawienia
+          </Link>
+        </div>
       </section>
 
       {error && (
@@ -167,55 +235,33 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
         />
       </section>
 
-      {/* RANGE TABS */}
-      <section className="flex items-center justify-between gap-3">
-        <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 backdrop-blur-xl px-1 py-1 shadow-inner shadow-black/30">
-          {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setRange(key)}
-              className={[
-                "px-3 py-1 text-[11px] rounded-full font-medium transition-all border",
-                range === key
-                  ? "bg-white/80 text-slate-900 border-white shadow-md shadow-white/40"
-                  : "bg-white/0 text-slate-100/80 border-transparent hover:bg-white/15 hover:text-white",
-              ].join(" ")}
-            >
-              {rangeLabelShort(key)}
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-slate-500">
-          Zakres dotyczy wszystkich wykresów i liczb na tej stronie.
-        </p>
-      </section>
-
       {/* ŚRODEK: FLOW + DONUT */}
       <section className="grid gap-4 lg:grid-cols-3">
         {/* FLOW W CZASIE */}
         <div className="lg:col-span-2 glass-card glass-card-hover-soft p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-slate-50">
-                Przepływy w czasie
-              </h2>
+              <h2 className="text-sm font-semibold text-slate-50">Przepływy w czasie</h2>
               <p className="text-[11px] text-slate-400">
                 Dzienny wynik netto – wpływy minus wydatki.
               </p>
             </div>
+            <span className="badge-soft">Dynamiczny wykres</span>
           </div>
           <NetFlowChart series={netFlowSeries} loading={loading} />
         </div>
 
         {/* PODZIAŁ KATEGORII */}
         <div className="glass-card glass-card-hover-soft p-4 md:p-5 flex flex-col">
-          <h2 className="text-sm font-semibold text-slate-50 mb-2">
-            Rozkład wydatków
-          </h2>
-          <p className="text-[11px] text-slate-400 mb-3">
-            Udział kategorii w całkowitych wydatkach.
-          </p>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-50 mb-1">Rozkład wydatków</h2>
+              <p className="text-[11px] text-slate-400">
+                Udział kategorii w całkowitych wydatkach.
+              </p>
+            </div>
+            <span className="badge-soft">Top 8</span>
+          </div>
           <CategoryDonutChart categories={coloredCategories} loading={loading} />
         </div>
       </section>
@@ -224,28 +270,34 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       <section className="grid gap-4 lg:grid-cols-3">
         {/* HEATMAP */}
         <div className="glass-card glass-card-hover-soft p-4 md:p-5 lg:col-span-2">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-slate-50">
-                Heatmapa aktywności
-              </h2>
+              <h2 className="text-sm font-semibold text-slate-50">Heatmapa aktywności</h2>
               <p className="text-[11px] text-slate-400">
                 Intensywność przepływów według dnia tygodnia i pory dnia.
               </p>
             </div>
+            <span className="badge-soft">12 tygodni</span>
           </div>
           <HeatmapGrid data={heatmapSeries} loading={loading} />
         </div>
 
         {/* OSTATNIE TRANSAKCJE */}
         <div className="glass-card glass-card-hover-soft p-4 md:p-5">
-          <h2 className="text-sm font-semibold text-slate-50 mb-2">
-            Ostatnie transakcje
-          </h2>
-          <p className="text-[11px] text-slate-400 mb-3">
-            Kilka ostatnich zapisów – pełna lista w zakładce{" "}
-            <span className="text-slate-100">Flow</span>.
-          </p>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-50 mb-1">Ostatnie transakcje</h2>
+              <p className="text-[11px] text-slate-400">
+                Kilka ostatnich zapisów – pełna lista w zakładce <span className="text-slate-100">Flow</span>.
+              </p>
+            </div>
+            <Link
+              href="/flow"
+              className="text-[11px] text-indigo-200 hover:text-white underline-offset-4 hover:underline"
+            >
+              Zobacz wszystko
+            </Link>
+          </div>
           <RecentTransactionsList
             transactions={filtered.slice(-6).reverse()}
             loading={loading}
@@ -272,25 +324,119 @@ function KpiCard({
   loading: boolean;
 }) {
   const toneClass =
-    tone === "positive" ? "text-emerald-300" : "text-rose-300";
+    tone === "positive"
+      ? "text-emerald-300 bg-emerald-500/10"
+      : "text-rose-300 bg-rose-500/10";
 
   return (
-    <div className="glass-card glass-card-hover-strong p-4 flex flex-col justify-between">
-      <div>
-        <div className="text-[11px] uppercase tracking-wide text-slate-400">
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/30 transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" aria-hidden />
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[11px] uppercase tracking-[0.1em] text-slate-400">
           {label}
         </div>
-        <div
-          className={`mt-2 text-xl font-semibold ${
-            loading ? "text-slate-600 animate-pulse" : toneClass
-          }`}
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[10px] font-medium ${toneClass}`}
         >
-          {loading ? "—" : value}
-        </div>
+          {tone === "positive" ? "↗" : "↘"}
+          {tone === "positive" ? "Pozytywnie" : "Ostrożnie"}
+        </span>
       </div>
-      <div className="mt-3 text-[11px] text-slate-500">{subtitle}</div>
+      <div
+        className={`mt-3 text-2xl font-semibold leading-none ${
+          loading ? "text-slate-600 animate-pulse" : "text-white"
+        }`}
+      >
+        {loading ? "—" : value}
+      </div>
+      <div className="mt-3 text-[12px] text-slate-400">{subtitle}</div>
     </div>
   );
+}
+
+function RangeChips({
+  active,
+  onChange,
+}: {
+  active: RangeKey;
+  onChange: (value: RangeKey) => void;
+}) {
+  const options: { key: RangeKey; label: string; desc: string }[] = [
+    { key: "1m", label: rangeLabelShort("1m"), desc: "Ostatnie 30 dni" },
+    { key: "3m", label: rangeLabelShort("3m"), desc: "Kwartał" },
+    { key: "6m", label: rangeLabelShort("6m"), desc: "Pół roku" },
+    { key: "ytd", label: rangeLabelShort("ytd"), desc: "Rok bieżący" },
+    { key: "all", label: rangeLabelShort("all"), desc: "Cała historia" },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {options.map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          className={`group relative overflow-hidden rounded-full border px-3 py-2 text-[11px] font-semibold transition-all duration-200 ${
+            active === opt.key
+              ? "border-white/70 bg-white/90 text-slate-900 shadow-lg shadow-indigo-500/30"
+              : "border-white/10 bg-white/5 text-slate-100 hover:border-white/30 hover:bg-white/15"
+          }`}
+        >
+          <span className="block leading-tight">{opt.label}</span>
+          <span
+            className={`block text-[10px] font-normal transition-opacity ${
+              active === opt.key ? "text-slate-700" : "text-slate-300/80"
+            }`}
+          >
+            {opt.desc}
+          </span>
+          <span className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100" aria-hidden>
+            <span className="absolute inset-x-0 -top-6 h-16 bg-gradient-to-b from-white/30 via-white/10 to-transparent" />
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function InsightPill({
+  label,
+  value,
+  hint,
+  href,
+  color,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  href?: string;
+  color?: string;
+}) {
+  const content = (
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-white/30 hover:shadow-indigo-500/20">
+      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/5 to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" aria-hidden />
+      <div className="text-[11px] uppercase tracking-[0.08em] text-slate-400">{label}</div>
+      <div className="mt-1 flex items-center gap-2 text-base font-semibold text-white">
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ backgroundColor: color ?? "#60a5fa" }}
+          aria-hidden
+        />
+        <span>{value}</span>
+      </div>
+      <div className="mt-1 text-[11px] text-slate-400">{hint}</div>
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 rounded-2xl">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
 
 function NetFlowChart({

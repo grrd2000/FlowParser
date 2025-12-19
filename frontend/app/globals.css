@@ -171,6 +171,34 @@
     @apply hover:-translate-y-0.5 hover:shadow-xl hover:shadow-indigo-500/15
            hover:border-indigo-200/40;
   }
+
+  .button-ghost {
+    @apply inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[12px] font-semibold text-slate-100 shadow-md shadow-black/20 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/40 hover:bg-white/15 hover:shadow-lg hover:shadow-indigo-500/20;
+  }
+
+  .badge-soft {
+    @apply inline-flex items-center rounded-full border border-white/10 bg-white/10 px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-100;
+  }
+
+  .hero-accent {
+    @apply absolute rounded-full blur-3xl opacity-40;
+  }
+
+  .hero-accent--primary {
+    @apply bg-indigo-500/60;
+    inset: -120px auto auto -80px;
+    width: 18rem;
+    height: 18rem;
+    animation: float 24s ease-in-out infinite;
+  }
+
+  .hero-accent--secondary {
+    @apply bg-emerald-400/50;
+    inset: auto -100px -120px auto;
+    width: 20rem;
+    height: 20rem;
+    animation: float_reverse 28s ease-in-out infinite;
+  }
 }
 
 
