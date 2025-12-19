@@ -85,6 +85,8 @@ export function LabClient() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [lastApplied, setLastApplied] = useState<{ key: string; applied: number } | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [suggestionSort, setSuggestionSort] = useState<"potential" | "manual">("potential");
+  const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
 
   // Categories
   const [cats, setCats] = useState<Category[]>([]);
@@ -154,6 +156,19 @@ export function LabClient() {
     if (!data) return [];
     return data.suggestions.filter((s) => !dismissed.has(s.suggestion_key));
   }, [data, dismissed]);
+
+  const sortedSuggestions = useMemo(() => {
+    const arr = [...visibleSuggestions];
+    if (suggestionSort === "potential") {
+      return arr.sort(
+        (a, b) => (b.potential_matches ?? 0) - (a.potential_matches ?? 0)
+      );
+    }
+
+    return arr.sort(
+      (a, b) => (b.manual_occurrences ?? 0) - (a.manual_occurrences ?? 0)
+    );
+  }, [suggestionSort, visibleSuggestions]);
 
   const categorized = data?.coverage_categorized ?? 0;
   const total = data?.coverage_total ?? 0;
@@ -491,16 +506,64 @@ export function LabClient() {
 
   return (
     <div className="relative flex h-full flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
-          Lab
-        </h1>
-        <p className="text-sm md:text-[13px] text-slate-400 max-w-xl">
-          Inteligentna warstwa Twojej aplikacji finansowej. Tutaj uczysz system,
-          a system później pomaga Tobie — reguły, automatyczne kategorie i w przyszłości
-          „AI asystent” dla Twoich wydatków.
-        </p>
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-r from-slate-950 via-slate-900/80 to-slate-950 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
+        <div className="absolute inset-0 opacity-50 bg-[radial-gradient(circle_at_top_left,rgba(129,140,248,0.28),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.18),transparent_38%)]" />
+        <div className="absolute -top-10 -left-10 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl animate-[float_18s_ease-in-out_infinite]" />
+        <div className="absolute -bottom-12 -right-8 h-32 w-32 rounded-full bg-emerald-500/20 blur-3xl animate-[float_22s_ease-in-out_infinite_reverse]" />
+
+        <div className="relative px-6 sm:px-8 py-7 flex flex-col gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-[11px] text-indigo-100">
+                <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+                Inteligentne centrum automatyzacji
+              </div>
+              <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
+                Lab
+              </h1>
+              <p className="text-sm md:text-[13px] text-slate-300 max-w-2xl">
+                Inteligentna warstwa Twojej aplikacji finansowej. Uczysz system swoimi decyzjami,
+                a on odwdzięcza się automatycznymi kategoriami i propozycjami działań.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={refreshAll}
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-100 hover:bg-white/10 hover:border-white/20"
+              >
+                <span className="h-2 w-2 rounded-full bg-emerald-300" />
+                Odśwież dane
+              </button>
+              <Link
+                href="/flow"
+                className="inline-flex items-center rounded-full border border-indigo-400/50 bg-indigo-500/20 px-3 py-1.5 text-[11px] text-indigo-100 hover:bg-indigo-500/30"
+              >
+                Otwórz Flow →
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 text-[11px]">
+            <MiniKpi
+              label="Pokrycie kategorii"
+              value={data ? `${coveragePct.toFixed(2)}%` : "—"}
+              hint={data ? `${categorized}/${total}` : "—"}
+            />
+            <MiniKpi
+              label="Automatyczne przypisania"
+              value={data ? `${data.assignments_rule}` : "—"}
+              hint="reguły / AI"
+            />
+            <MiniKpi
+              label="Do przejrzenia"
+              value={data ? `${uncategorized}` : "—"}
+              hint="bez kategorii"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.25fr,1fr]">
@@ -1080,6 +1143,49 @@ export function LabClient() {
               <MiniStat label="Automatyzacje" value={data ? `${data.assignments_rule}` : "—"} />
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] text-slate-300">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                <span className="h-2 w-2 rounded-full bg-emerald-300 animate-[pulse-ring_5s_ease-in-out_infinite]" />
+                Sugestie AI: priorytetyzuj według
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-full border border-white/10 bg-slate-900/60 p-1 text-[11px] text-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setSuggestionSort("potential")}
+                    className={[
+                      "px-3 py-1 rounded-full",
+                      suggestionSort === "potential"
+                        ? "bg-indigo-500/80 text-slate-950 shadow"
+                        : "hover:bg-white/5",
+                    ].join(" ")}
+                  >
+                    Do automatyzacji
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuggestionSort("manual")}
+                    className={[
+                      "px-3 py-1 rounded-full",
+                      suggestionSort === "manual"
+                        ? "bg-indigo-500/80 text-slate-950 shadow"
+                        : "hover:bg-white/5",
+                    ].join(" ")}
+                  >
+                    Ręcznych decyzji
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSuggestionsCollapsed((prev) => !prev)}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-white/10"
+                >
+                  {suggestionsCollapsed ? "Pokaż listę" : "Tryb skupienia"}
+                </button>
+              </div>
+            </div>
+
             {loading ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-[11px] text-slate-400">
                 Ładowanie modułu AI…
@@ -1100,9 +1206,25 @@ export function LabClient() {
                   </Link>
                 </div>
               </div>
+            ) : suggestionsCollapsed ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-[11px] text-slate-300 flex items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-slate-100 font-medium">Tryb skupienia</div>
+                  <div className="text-slate-400">
+                    Lista sugestii została zwinięta. Otwórz ją, gdy chcesz przejrzeć rekomendacje.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSuggestionsCollapsed(false)}
+                  className="rounded-full border border-indigo-400/60 bg-indigo-500/20 px-3 py-1 text-[11px] text-indigo-100 hover:bg-indigo-500/30"
+                >
+                  Otwórz
+                </button>
+              </div>
             ) : (
               <div className="space-y-2">
-                {visibleSuggestions.map((s) => {
+                {sortedSuggestions.map((s) => {
                   const isBusy = busyKey === s.suggestion_key;
                   const appliedMsg =
                     lastApplied && lastApplied.key === s.suggestion_key
@@ -1112,17 +1234,33 @@ export function LabClient() {
                   return (
                     <div
                       key={s.suggestion_key}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 hover:border-white/20 transition-colors flex items-start justify-between gap-3"
+                      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 hover:border-white/20 transition-colors flex items-start justify-between gap-3"
                     >
+                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-r from-indigo-500/10 to-emerald-500/10" />
                       <div className="min-w-0">
-                        <div className="text-[11px] text-slate-200">
-                          Wzorzec{" "}
-                          <span className="font-semibold text-indigo-200">{s.pattern_value}</span>{" "}
-                          → <span className="text-slate-100">{s.category_name}</span>
+                        <div className="relative text-[11px] text-slate-200">
+                          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-300 mr-2">
+                            {suggestionSort === "manual" ? "Manualne" : "Największy potencjał"}
+                          </span>
+                          Wzorzec <span className="font-semibold text-indigo-200">{s.pattern_value}</span> →{" "}
+                          <span className="text-slate-100">{s.category_name}</span>
                         </div>
-                        <div className="mt-1 text-[10px] text-slate-500">
-                          Ręcznie: {s.manual_occurrences} · Do automatyzacji: {s.potential_matches}
-                          {appliedMsg ? <span className="ml-2 text-emerald-200/90">{appliedMsg}</span> : null}
+                        <div className="relative mt-2 flex flex-col gap-1 text-[10px] text-slate-400">
+                          <div className="flex items-center justify-between">
+                            <span>Ręcznie: {s.manual_occurrences}</span>
+                            <span>Do automatyzacji: {s.potential_matches}</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400"
+                              style={{
+                                width: `${clampPct(
+                                  ((s.potential_matches ?? 0) / Math.max(1, (s.potential_matches ?? 0) + (s.manual_occurrences ?? 0))) * 100
+                                ).toFixed(0)}%`,
+                              }}
+                            />
+                          </div>
+                          {appliedMsg ? <span className="text-emerald-200/90">{appliedMsg}</span> : null}
                         </div>
                       </div>
 
@@ -1276,19 +1414,22 @@ export function LabClient() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 hover:border-white/20 transition-colors">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
-      <div className="mt-1 text-[14px] font-semibold text-slate-50">{value}</div>
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 hover:border-indigo-300/40 transition-all">
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-br from-indigo-500/10 via-slate-900/0 to-emerald-500/10" />
+      <div className="relative text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
+      <div className="relative mt-1 text-[14px] font-semibold text-slate-50">{value}</div>
     </div>
   );
 }
 
 function MiniKpi({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 hover:border-white/20 transition-colors">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
-      <div className="mt-1 text-[16px] font-semibold text-slate-50">{value}</div>
-      <div className="mt-0.5 text-[10px] text-slate-500">{hint}</div>
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300/60 hover:shadow-xl hover:shadow-indigo-500/20">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(129,140,248,0.16),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(52,211,153,0.16),transparent_45%)]" />
+      <div className="absolute -bottom-6 -right-6 h-16 w-16 rounded-full border border-indigo-300/30" />
+      <div className="relative text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
+      <div className="relative mt-1 text-[16px] font-semibold text-slate-50">{value}</div>
+      <div className="relative mt-0.5 text-[10px] text-slate-500">{hint}</div>
     </div>
   );
 }
