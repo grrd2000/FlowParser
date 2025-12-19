@@ -50,6 +50,12 @@
   .animate-\[float_22s_ease-in-out_infinite_reverse\] {
     animation: float_reverse 22s ease-in-out infinite;
   }
+  .animate-\[glow-wave_14s_ease-in-out_infinite\] {
+    animation: glow-wave 14s ease-in-out infinite;
+  }
+  .animate-\[pulse-ring_5s_ease-in-out_infinite\] {
+    animation: pulse-ring 5s ease-in-out infinite;
+  }
 }
 
 @keyframes orbit {
@@ -104,6 +110,36 @@
   right: -10rem;
   background: radial-gradient(circle at 70% 70%, rgba(236, 72, 153, 0.5), transparent 60%);
   animation: orbit-reverse 30s ease-in-out infinite;
+}
+
+@keyframes glow-wave {
+  0% {
+    background-position: 0% 50%;
+    filter: blur(32px);
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: blur(40px);
+  }
+  100% {
+    background-position: 0% 50%;
+    filter: blur(32px);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.6;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
 }
 
 @layer base {
