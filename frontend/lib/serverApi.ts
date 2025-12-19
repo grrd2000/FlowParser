@@ -148,19 +148,41 @@ async function getServerCookieHeader(): Promise<string | undefined> {
   if (typeof window !== "undefined") return undefined;
 
   try {
-    const { cookies } = await import("next/headers");
-    const cookieStore = cookies();
-    const serialized = cookieStore
-      .getAll()
-      .map(({ name, value }) => `${name}=${value}`)
-      .join("; ");
+    const { cookies, headers } = await import("next/headers");
 
-    return serialized || undefined;
+    // Prefer the raw Cookie header if available (works across Next.js versions/runtime).
+    const headerResult = headers();
+    const headerStore =
+      typeof (headerResult as any)?.then === "function"
+        ? await headerResult
+        : headerResult;
+    const headerCookies = typeof (headerStore as any)?.get === "function"
+      ? (headerStore as any).get("cookie")
+      : undefined;
+    if (headerCookies) return headerCookies;
+
+    // Fallback to RequestCookies API when available.
+    const cookieResult = cookies();
+    const cookieStore =
+      typeof (cookieResult as any)?.then === "function"
+        ? await cookieResult
+        : cookieResult;
+    if (typeof (cookieStore as any)?.getAll === "function") {
+      const serialized = (cookieStore as any)
+        .getAll()
+        .map(({ name, value }: { name: string; value: string }) => `${name}=${value}`)
+        .join("; ");
+
+      return serialized || undefined;
+    }
+
+    return undefined;
   } catch (err) {
     console.warn("Nie udało się odczytać ciasteczek w środowisku serwera", err);
     return undefined;
   }
 }
+
 
 async function parseJsonSafe(res: Response) {
   // dla 204/empty body
