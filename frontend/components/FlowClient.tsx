@@ -3,6 +3,7 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import * as Popover from "@radix-ui/react-popover";
 import * as Slider from "@radix-ui/react-slider";
+import { motion } from "framer-motion";
 import React, { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
@@ -363,18 +364,120 @@ export function FlowClient() {
 
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-8">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -left-32 -top-24 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="absolute right-0 top-12 h-80 w-80 rounded-full bg-indigo-500/20 blur-3xl" />
+        <motion.div
+          aria-hidden
+          className="absolute inset-x-10 top-10 h-24 rounded-3xl bg-gradient-to-r from-white/5 via-white/0 to-white/5"
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+
       {/* HEADER */}
-      <section className="space-y-2">
-        <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
-          Flow
-        </h1>
-        <p className="text-sm text-slate-400 max-w-2xl">
-          Laboratorium Twoich przepływów. Filtruj, eksploruj, grupuj transakcje
-          i baw się kategoriami. Wszystko, co dzieje się na Twoich kontach –
-          w jednym workspace.
-        </p>
-      </section>
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/80 via-slate-900/70 to-slate-950/60 p-6 shadow-xl shadow-black/30"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_50%),radial-gradient(circle_at_80%_30%,rgba(129,140,248,0.16),transparent_48%),radial-gradient(circle_at_40%_80%,rgba(236,72,153,0.16),transparent_45%)]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent" />
+
+        <div className="relative grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-slate-200">
+              Flow Workspace
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-80" />
+                <span className="absolute inset-0 animate-[pulse-ring_5s_ease-in-out_infinite] rounded-full bg-emerald-400/60" />
+              </span>
+            </div>
+            <div className="space-y-3">
+              <h1 className="text-3xl font-semibold leading-tight text-white md:text-4xl">
+                Minimalistyczny cockpit do sterowania przepływami.
+              </h1>
+              <p className="max-w-2xl text-sm text-slate-300 md:text-base">
+                Zachowaj pełną funkcjonalność analizy, ale w bardziej uporządkowanej przestrzeni. Filtry, automatyzacje i podgląd transakcji są teraz w jednym spójnym, interaktywnym układzie.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/import"
+                className="group inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-slate-900 shadow-lg shadow-white/30 transition-transform hover:-translate-y-0.5"
+              >
+                Dodaj nowy wyciąg
+                <span className="h-6 w-6 rounded-full bg-slate-900 text-white grid place-items-center text-[10px] transition-transform group-hover:translate-x-0.5">
+                  +
+                </span>
+              </Link>
+              <Link
+                href="/lab"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-emerald-300/60 hover:bg-emerald-500/15"
+              >
+                Eksperymentuj w Labie
+              </Link>
+              <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] text-slate-200">
+                Zakres <span className="font-semibold text-white">{rangeText}</span>
+                <span className="h-1.5 w-16 rounded-full bg-gradient-to-r from-emerald-400 via-indigo-400 to-pink-400" />
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card glass-card-hover-soft relative overflow-hidden border-white/5 bg-white/5 p-4">
+            <div className="absolute -left-8 top-6 h-28 w-28 rounded-full bg-emerald-500/25 blur-3xl" />
+            <div className="absolute -right-10 -bottom-8 h-32 w-32 rounded-full bg-indigo-500/20 blur-3xl" />
+            <div className="relative grid gap-4 text-sm text-slate-100">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Live preview</div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-100">
+                  {filtered.length.toLocaleString("pl-PL")} rekordów
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <KpiCard
+                  label="Transakcje"
+                  value={loading ? "—" : filtered.length.toLocaleString("pl-PL")}
+                  subtitle="Widoczne po filtrach"
+                  compact
+                />
+                <KpiCard
+                  label="Saldo"
+                  value={loading ? "—" : formatCurrency(metrics.balance)}
+                  subtitle={rangeText}
+                  compact
+                />
+              </div>
+              <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+                <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                  Puls aktywności
+                  <span className="inline-flex items-center gap-1 text-emerald-200">
+                    {activeFiltersCount > 0 ? `${activeFiltersCount} filtry` : "Bez filtrów"}
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-[12px] text-slate-200">
+                  <div className="h-10 flex-1 rounded-full bg-gradient-to-r from-emerald-400/25 via-indigo-400/20 to-pink-400/20">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-indigo-400 to-pink-400"
+                      initial={{ width: "15%" }}
+                      animate={{ width: `${Math.min(95, Math.max(12, filtered.length / Math.max(transactions.length || 1, 1) * 100))}%` }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                    />
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">
+                    {Math.max(transactions.length, filtered.length).toLocaleString("pl-PL")}
+                    <span className="text-slate-400"> obserwowane</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.section>
 
       {error && (
         <div className="glass-card border-rose-500/60 bg-rose-500/10 px-4 py-3 text-[12px] text-rose-100">
@@ -383,7 +486,7 @@ export function FlowClient() {
       )}
 
       {/* GŁÓWNY LAYOUT */}
-      <section className="space-y-4">
+      <section className="space-y-5">
         {/* KPI */}
         <section className="grid gap-4 md:grid-cols-3">
           <KpiCard
@@ -432,25 +535,29 @@ export function FlowClient() {
         />
 
         {/* TABELA + SZCZEGÓŁY */}
-        <section className="glass-card glass-card-hover-soft p-4 md:p-5 overflow-hidden">
-          <div className="flex items-center justify-between mb-3 gap-3">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-slate-50">Transakcje</h2>
-              <p className="text-[11px] text-slate-400">
-                Hover na opisie pokazuje pełną treść. Kliknij wiersz, aby rozsunąć szczegóły.
+        <section className="glass-card glass-card-hover-soft overflow-hidden border-white/5 p-4 md:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="min-w-0 space-y-1">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-slate-300">
+                Transakcje
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              </div>
+              <p className="text-[12px] text-slate-400">
+                Hover na opisie pokazuje pełną treść. Kliknij wiersz, aby rozsunąć szczegóły i akceptować automatyzacje.
               </p>
             </div>
-            <div className="text-[11px] text-slate-400 text-right whitespace-nowrap">
-              Zakres:{" "}
-              <span className="text-slate-200 font-medium">{rangeText}</span>
-              <br />
-              Wyświetlane:{" "}
-              <span className="text-slate-200 font-medium">{filtered.length}</span>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                Zakres: <span className="text-white font-semibold">{rangeText}</span>
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                Wyświetlane: <span className="text-white font-semibold">{filtered.length}</span>
+              </span>
             </div>
           </div>
 
           <Tooltip.Provider delayDuration={180}>
-            <div className="mt-3 flex flex-col lg:flex-row gap-4 items-stretch h-[560px] md:h-[600px] xl:h-[640px]">
+            <div className="mt-2 flex flex-col lg:flex-row gap-4 items-stretch h-[560px] md:h-[600px] xl:h-[640px]">
               <div
                 className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
                 style={{
@@ -941,20 +1048,32 @@ function KpiCard({
   label,
   value,
   subtitle,
+  compact = false,
 }: {
   label: string;
   value: string;
   subtitle: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="glass-card glass-card-hover-strong p-4 flex flex-col justify-between">
-      <div>
-        <div className="text-[11px] uppercase tracking-wide text-slate-400">
-          {label}
+    <div
+      className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 shadow-lg shadow-black/20 transition-all hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-emerald-500/20 ${
+        compact ? "p-3" : "md:p-5"
+      }`}
+    >
+      <div className="absolute inset-0 opacity-70 blur-3xl bg-gradient-to-br from-emerald-400/10 via-indigo-400/10 to-pink-400/10" />
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-indigo-400 to-pink-400" />
+
+      <div className="relative flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+            {label}
+          </div>
+          <div className="mt-2 text-xl font-semibold text-slate-50">{value}</div>
         </div>
-        <div className="mt-2 text-xl font-semibold text-slate-50">{value}</div>
+        <div className="mt-1 h-8 w-8 rounded-full bg-white/10 ring-1 ring-white/10" />
       </div>
-      <div className="mt-3 text-[11px] text-slate-500">{subtitle}</div>
+      <div className="relative mt-3 text-[11px] text-slate-400">{subtitle}</div>
     </div>
   );
 }
