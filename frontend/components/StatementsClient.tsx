@@ -1,8 +1,8 @@
 "use client";
 
 import { StatementSummary } from "@/lib/serverApi";
-import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
 
 type Props = {
   statements: StatementSummary[];
@@ -50,79 +50,86 @@ export function StatementsClient({ statements }: Props) {
   }, [statements, statusFilter]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* nagłówek */}
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Statements</h1>
-        <p className="text-sm text-slate-400">
-          Lista zaimportowanych wyciągów z informacją o okresie, koncie i
-          statusie przetwarzania.
-        </p>
-      </header>
+      <section className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/60 p-6 shadow-lg shadow-black/30">
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-800/40 via-transparent to-emerald-700/30 blur-3xl" />
+        <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-[11px] font-medium text-indigo-200">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              Spójny widok wyciągów
+            </div>
+            <div>
+              <h1 className="text-3xl font-semibold text-slate-50">Statements</h1>
+              <p className="mt-1 text-sm text-slate-400">
+                Nowoczesny, minimalistyczny widok wyciągów z szybką filtracją i
+                mikrointerakcjami dopasowanymi do całej aplikacji.
+              </p>
+            </div>
 
-      {/* podsumowanie + filtry statusu */}
-      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm">
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <div className="text-xs text-slate-400">Liczba wyciągów</div>
-            <div className="text-lg font-semibold text-slate-50">
-              {total}
+            <div className="grid gap-3 sm:grid-cols-3 text-[11px] text-slate-300">
+              <SummaryPill
+                label="Liczba wyciągów"
+                value={total.toString()}
+                helper="Wszystkie zaimportowane PDFy"
+                accent="from-indigo-500/60 via-indigo-400/40 to-indigo-300/30"
+              />
+              <SummaryPill
+                label="Zakończone sukcesem"
+                value={byStatus["success"].toString()}
+                helper="Pełne importy bez błędów"
+                accent="from-emerald-500/60 via-emerald-400/40 to-emerald-300/30"
+              />
+              <SummaryPill
+                label="Wymagają uwagi"
+                value={(byStatus["partial"] + byStatus["failed"]).toString()}
+                helper="Partial / failed"
+                accent="from-amber-500/60 via-amber-400/40 to-rose-400/30"
+              />
             </div>
           </div>
-          <div>
-            <div className="text-xs text-slate-400">Statusy importu</div>
-            <div className="flex gap-3 text-[11px] text-slate-400">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                success: {byStatus["success"]}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                partial: {byStatus["partial"]}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-rose-400" />
-                failed: {byStatus["failed"]}
-              </span>
+
+          <div className="relative inline-flex self-start overflow-hidden rounded-full border border-slate-800/80 bg-slate-900/80 p-1 text-[11px] shadow-lg shadow-black/20">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-transparent to-emerald-400/10" />
+            <div className="relative flex items-center gap-1">
+              {([
+                ["all", "Wszystkie"],
+                ["success", "Success"],
+                ["partial", "Partial"],
+                ["failed", "Failed"],
+              ] as [StatusFilter, string][]).map(([value, label]) => {
+                const active = statusFilter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setStatusFilter(value)}
+                    className={[
+                      "relative px-3 py-1 rounded-full transition duration-200",
+                      active
+                        ? "bg-indigo-500 text-slate-50 shadow-[0_12px_30px_-18px_rgba(99,102,241,0.9)]"
+                        : "text-slate-400 hover:text-slate-100",
+                    ].join(" ")}
+                  >
+                    {active && (
+                      <span className="absolute inset-0 -z-10 rounded-full bg-indigo-500/20 blur" />
+                    )}
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </div>
-
-        <div className="inline-flex rounded-full bg-slate-950/80 border border-slate-700 p-0.5 text-[11px] self-start">
-          {(
-            [
-              ["all", "Wszystkie"],
-              ["success", "Success"],
-              ["partial", "Partial"],
-              ["failed", "Failed"],
-            ] as [StatusFilter, string][]
-          ).map(([value, label]) => {
-            const active = statusFilter === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setStatusFilter(value)}
-                className={[
-                  "px-3 py-1 rounded-full transition-colors",
-                  active
-                    ? "bg-indigo-500 text-slate-50"
-                    : "text-slate-400 hover:text-slate-100",
-                ].join(" ")}
-              >
-                {label}
-              </button>
-            );
-          })}
         </div>
       </section>
 
       {/* lista wyciągów */}
       {filtered.length === 0 ? (
-        <p className="text-sm text-slate-400">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/50 p-6 text-sm text-slate-400">
           Brak wyciągów w wybranym filtrze. Zaimportuj plik PDF w zakładce
-          Flow.
-        </p>
+          <span className="text-slate-200"> Flow</span> lub przełącz filtr.
+        </div>
       ) : (
         <section className="grid gap-4 lg:grid-cols-2">
           {filtered.map((s, idx) => (
@@ -130,6 +137,31 @@ export function StatementsClient({ statements }: Props) {
           ))}
         </section>
       )}
+    </div>
+  );
+}
+
+function SummaryPill({
+  label,
+  value,
+  helper,
+  accent,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  accent: string;
+}) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3 shadow-inner shadow-black/20">
+      <div className={`absolute inset-0 bg-gradient-to-r ${accent} opacity-60 transition duration-300 group-hover:opacity-90`} />
+      <div className="relative space-y-1">
+        <div className="text-[11px] uppercase tracking-wide text-slate-300/80">
+          {label}
+        </div>
+        <div className="text-xl font-semibold text-slate-50">{value}</div>
+        <div className="text-[11px] text-slate-300">{helper}</div>
+      </div>
     </div>
   );
 }
@@ -175,7 +207,7 @@ function StatementCard({
 
   return (
     <motion.div
-      className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 hover:border-indigo-400/60 hover:shadow-lg hover:shadow-indigo-500/10 transition-all flex flex-col gap-3 cursor-default"
+      className="group rounded-3xl border border-slate-800/80 bg-slate-950/60 p-5 shadow-md transition duration-200 hover:-translate-y-1 hover:border-indigo-400/60 hover:shadow-xl hover:shadow-indigo-500/10 flex flex-col gap-4 cursor-default"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03, duration: 0.25, ease: "easeOut" }}
@@ -183,8 +215,15 @@ function StatementCard({
       {/* top: konto + status */}
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <div className="text-sm font-medium text-slate-100">
-            {statement.account_name}
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold text-slate-100">
+              {statement.account_name}
+            </div>
+            {statement.is_reimported && (
+              <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">
+                Reimport
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-slate-500">
             {statement.institution ?? "Instytucja nieznana"} ·{" "}
@@ -200,7 +239,7 @@ function StatementCard({
         <div className="flex flex-col items-end gap-1">
           <span
             className={[
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border",
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] border shadow-inner shadow-black/20",
               statusBadge.bg,
               statusBadge.border,
               statusBadge.text,
@@ -210,11 +249,10 @@ function StatementCard({
             <span>{statusBadge.label}</span>
           </span>
 
-          {statement.is_reimported && (
+          {reimportInfo && (
             <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-200 border border-indigo-400/60">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-300" />
-              <span>reimported</span>
-              {/* <span>reimported ×{statement.import_runs_count}</span> */}
+              <span>{reimportInfo}</span>
             </span>
           )}
         </div>
@@ -222,25 +260,25 @@ function StatementCard({
 
 
       {/* okres + data wystawienia */}
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <div className="space-y-0.5">
-          <div className="text-slate-500">Okres wyciągu</div>
-          <div className="text-slate-200">{period}</div>
-        </div>
-        <div className="text-right space-y-0.5">
-          <div className="text-slate-500">Data wystawienia</div>
-          <div className="text-slate-200">{issue}</div>
+      <div className="rounded-2xl border border-slate-800/70 bg-slate-900/60 px-3 py-2 text-[11px]">
+        <div className="flex items-center justify-between gap-2">
+          <div className="space-y-0.5">
+            <div className="text-slate-500">Okres wyciągu</div>
+            <div className="text-slate-200">{period}</div>
+          </div>
+          <div className="text-right space-y-0.5">
+            <div className="text-slate-500">Data wystawienia</div>
+            <div className="text-slate-200">{issue}</div>
+          </div>
         </div>
       </div>
 
       {/* dół: statystyki importu */}
-      <div className="mt-3 flex flex-col gap-2 text-[11px]">
+      <div className="mt-2 grid gap-2 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-3 text-[11px]">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <div className="text-slate-500">Wiersze</div>
-            <div className="text-slate-200 text-sm font-medium">
-              {rowsInfo}
-            </div>
+            <div className="text-slate-200 text-sm font-medium">{rowsInfo}</div>
             <div
               className={
                 (statement.error_rows ?? 0) > 0
@@ -280,13 +318,6 @@ function StatementCard({
             )}
           </div>
         </div>
-
-        {/* <div className="flex items-center justify-between gap-2">
-          <div className="text-slate-500 italic">
-            Szczegóły transakcji w zakładce{" "}
-            <span className="text-slate-200 not-italic">Flow</span>
-          </div>
-        </div> */}
       </div>
 
     </motion.div>
