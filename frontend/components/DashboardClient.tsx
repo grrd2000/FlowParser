@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import type { Transaction } from "@/lib/serverApi";
+import { fetchTransactions, type Transaction } from "@/lib/serverApi";
 
 import { useAuth } from "@/components/AuthProvider";
 import { SignedOutState } from "@/components/SignedOutState";
@@ -19,9 +19,6 @@ type DashboardClientProps = {
 };
 
 type TxExt = Transaction & { amountNum: number; date: Date };
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
@@ -54,13 +51,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`${API_BASE}/transactions`, {
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status}`);
-        }
-        const raw: Transaction[] = await res.json();
+        const raw = await fetchTransactions();
         const parsed = normalizeTransactions(raw);
         setTransactions(parsed);
       } catch (e: any) {
