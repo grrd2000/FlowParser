@@ -67,7 +67,7 @@ from app.auth_routes import router as auth_router
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))  # 30 days
 
-DEV_AUTO_USER = os.getenv("DEV_AUTO_USER", "true").lower() == "true"
+DEV_AUTO_USER = os.getenv("DEV_AUTO_USER", "true").lower() == "false"
 DEV_USER_EMAIL = os.getenv("DEV_USER_EMAIL", "demo@example.com")
 DEV_USER_PASSWORD = os.getenv("DEV_USER_PASSWORD", "demo123")
 DEV_USER_FULL_NAME = os.getenv("DEV_USER_FULL_NAME", "Demo User")
