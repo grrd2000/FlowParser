@@ -355,10 +355,14 @@ class TransactionIn(BaseModel):
 # -----------------------
 
 @app.post("/transactions/manual")
-def create_manual_transaction(payload: TransactionIn, db: Session = Depends(get_db)):
+def create_manual_transaction(
+    payload: TransactionIn,
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
     """Dodaje ręczną transakcję (niezależną od wyciągu)."""
     account = db.get(Account, payload.account_id)
-    if not account:
+    if not account or account.user_id != user.id:
         raise HTTPException(status_code=404, detail="Account not found")
 
     tx = Transaction(
@@ -396,6 +400,7 @@ def list_transactions(
     to: Optional[date] = Query(None, alias="to"),
     category: Optional[str] = None,
     sort: str = Query("date_desc", pattern="^(date_asc|date_desc)$"),
+    user: User = Depends(auth_get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -410,6 +415,9 @@ def list_transactions(
 
     if account_id is not None:
         stmt = stmt.where(Transaction.account_id == account_id)
+    else:
+        stmt = stmt.join(Account, Account.id == Transaction.account_id)
+        stmt = stmt.where(Account.user_id == user.id)
     if from_ is not None:
         stmt = stmt.where(Transaction.operation_date >= from_)
     if to is not None:
