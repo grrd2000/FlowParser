@@ -53,20 +53,23 @@ export function UserMenu() {
     <div className="relative" ref={wrapRef}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="
-          inline-flex items-center gap-2
-          rounded-full border border-white/10
-          bg-white/5 px-2.5 py-1.5
-          text-[11px] text-slate-200
-          hover:bg-white/10 transition-colors
-        "
+        className={[
+          "group inline-flex items-center gap-2",
+          "rounded-full border border-white/10",
+          "bg-gradient-to-r from-slate-900/90 via-slate-800/70 to-slate-900/90",
+          "px-3 py-1.5 text-[11px] text-slate-100 shadow-lg shadow-black/30",
+          "transition-all duration-150",
+          "hover:border-indigo-400/40 hover:shadow-indigo-500/20",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70",
+          open ? "border-indigo-400/60 shadow-indigo-500/30" : "",
+        ].join(" ")}
       >
         <span
           className="
             inline-flex h-7 w-7 items-center justify-center
-            rounded-full border border-white/10
-            bg-gradient-to-br from-indigo-400/60 to-emerald-400/40
-            text-[11px] font-semibold text-slate-950
+            rounded-full border border-white/10 bg-gradient-to-br
+            from-indigo-400/80 via-sky-300/70 to-emerald-300/60
+            text-[11px] font-semibold text-slate-950 shadow-inner
           "
         >
           {initials}
@@ -74,25 +77,34 @@ export function UserMenu() {
         <span className="hidden sm:inline-block max-w-[140px] truncate">
           {label}
         </span>
-        <span className="opacity-70">▾</span>
+        <span
+          className={[
+            "grid h-6 w-6 place-items-center rounded-full border border-white/10",
+            "bg-white/5 text-[10px] text-slate-200 transition-transform duration-150",
+            "group-hover:translate-y-[1px]",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+        >
+          ▾
+        </span>
       </button>
 
       <div
         className={[
-          "absolute right-0 mt-2 w-[260px] overflow-hidden rounded-2xl",
-          "border border-white/10 bg-slate-950/75 backdrop-blur-xl",
-          "shadow-2xl shadow-black/40",
-          "transition-all duration-150",
+          "absolute right-0 mt-3 w-[280px] overflow-hidden rounded-3xl",
+          "border border-indigo-400/30 bg-slate-950/80 backdrop-blur-2xl",
+          "shadow-[0_20px_80px_-24px_rgba(0,0,0,0.65)]",
+          "transition-all duration-200",
           open
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 -translate-y-1 pointer-events-none",
         ].join(" ")}
       >
-        <div className="px-3 py-2 border-b border-white/10">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+        <div className="px-4 py-3 border-b border-white/10 bg-gradient-to-r from-white/5 via-transparent to-white/5">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-indigo-200/90">
             Zalogowany jako
           </div>
-          <div className="mt-0.5 text-[12px] font-medium text-slate-100 truncate">
+          <div className="mt-1 text-[12px] font-semibold text-slate-50 truncate">
             {user.email}
           </div>
         </div>
@@ -114,7 +126,7 @@ export function UserMenu() {
           />
         </nav>
 
-        <div className="border-t border-white/10 p-2">
+        <div className="border-t border-white/10 p-3 bg-white/5">
           <button
             onClick={() => {
               setOpen(false);
@@ -122,9 +134,10 @@ export function UserMenu() {
             }}
             className="
               w-full rounded-xl border border-white/10
-              bg-white/5 px-3 py-2
-              text-left text-[12px] text-slate-200
-              hover:bg-white/10 transition-colors
+              bg-gradient-to-r from-rose-500/70 via-amber-400/70 to-rose-500/70
+              px-3 py-2 text-center text-[12px] font-semibold
+              text-slate-950 shadow-lg shadow-rose-500/20
+              transition-transform duration-150 hover:scale-[1.01]
             "
           >
             Logout
@@ -151,15 +164,15 @@ function MenuLink({
       href={href}
       onClick={onClick}
       className="
-        block px-3 py-2
+        block px-4 py-3
         hover:bg-white/5 transition-colors
       "
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] text-slate-200">{label}</span>
-        <span className="text-slate-500">→</span>
+        <span className="text-[12px] font-semibold text-slate-100">{label}</span>
+        <span className="text-xs text-indigo-300">→</span>
       </div>
-      {sub && <div className="mt-0.5 text-[10px] text-slate-500">{sub}</div>}
+      {sub && <div className="mt-0.5 text-[10px] text-slate-400/90">{sub}</div>}
     </Link>
   );
 }
