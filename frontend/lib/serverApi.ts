@@ -138,6 +138,24 @@ function buildUrl(path: string) {
     : `${API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+async function getServerCookieHeader(): Promise<string | undefined> {
+  if (typeof window !== "undefined") return undefined;
+
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = cookies();
+    const serialized = cookieStore
+      .getAll()
+      .map(({ name, value }) => `${name}=${value}`)
+      .join("; ");
+
+    return serialized || undefined;
+  } catch (err) {
+    console.warn("Nie udało się odczytać ciasteczek w środowisku serwera", err);
+    return undefined;
+  }
+}
+
 async function parseJsonSafe(res: Response) {
   // dla 204/empty body
   const text = await res.text();
@@ -157,6 +175,8 @@ async function requestJson<T>(
     unauthorizedValue?: T;
   }
 ): Promise<T> {
+  const cookieHeader = await getServerCookieHeader();
+
   const res = await fetch(buildUrl(path), {
     cache: init.cache ?? "no-store",
     credentials: "include", // kluczowe: cookie-session/JWT w HttpOnly
@@ -166,6 +186,7 @@ async function requestJson<T>(
       ...(init.body && !(init.body instanceof FormData)
         ? { "Content-Type": "application/json" }
         : {}),
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
     },
   });
 
