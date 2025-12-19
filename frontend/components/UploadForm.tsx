@@ -184,29 +184,30 @@ export function UploadForm() {
       {/* dropzone + input */}
       <div
         className={[
-          "relative rounded-2xl border px-4 py-5 transition-colors",
+          "relative overflow-hidden rounded-2xl border px-5 py-6 transition-all duration-300",
           isDragging
-            ? "border-indigo-400 bg-indigo-500/10"
-            : "border-slate-700 bg-slate-900/60 hover:border-indigo-400/70",
+            ? "border-indigo-400/70 bg-gradient-to-br from-indigo-500/15 via-slate-900/70 to-emerald-500/10 shadow-[0_10px_40px_-20px_rgba(99,102,241,0.6)]"
+            : "border-slate-800 bg-slate-900/60 hover:border-indigo-400/60 hover:bg-slate-900/80",
         ].join(" ")}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="flex flex-col items-center gap-2 text-xs text-slate-300">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-slate-600 bg-slate-900/80">
-            <span className="text-lg">⬆️</span>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(99,102,241,0.12),transparent_35%),radial-gradient(ellipse_at_bottom_right,rgba(16,185,129,0.1),transparent_40%)]" />
+        <div className="relative flex flex-col items-center gap-3 text-xs text-slate-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/80 text-lg text-indigo-200 shadow-inner shadow-black/40">
+            ⬆️
           </div>
-          <div className="text-center">
-            <p className="font-medium text-slate-100">
+          <div className="text-center space-y-1">
+            <p className="text-sm font-semibold text-slate-50">
               Przeciągnij tutaj pliki PDF
             </p>
             <p className="text-[11px] text-slate-400">
               Możesz dodać wiele wyciągów naraz. Obsługiwane: PKO BP (PDF).
             </p>
           </div>
-          <div className="mt-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-600 bg-slate-900/80 px-3 py-1 text-[11px] text-slate-200 hover:border-indigo-400/80 hover:text-slate-50">
+          <div className="mt-1">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-[11px] font-medium text-slate-100 transition-all hover:-translate-y-0.5 hover:border-indigo-400 hover:text-slate-50">
               <span>Wybierz pliki...</span>
               <input
                 type="file"
@@ -230,10 +231,10 @@ export function UploadForm() {
           type="button"
           onClick={handleStartImport}
           disabled={!canStart}
-          className="inline-flex items-center justify-center rounded-full
-                     bg-indigo-500 px-4 py-1.5 font-medium text-slate-950
-                     hover:bg-indigo-400 disabled:opacity-40 disabled:hover:bg-indigo-500
-                     transition-colors"
+          className="inline-flex items-center justify-center gap-1 rounded-full
+                     bg-gradient-to-r from-indigo-500 via-indigo-400 to-emerald-400 px-4 py-1.5 font-semibold text-slate-950
+                     shadow-lg shadow-indigo-900/40 transition-all hover:-translate-y-0.5 hover:shadow-indigo-900/60
+                     disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0"
         >
           {isRunning ? "Importuję batch..." : "Start batch import"}
         </button>
@@ -242,8 +243,8 @@ export function UploadForm() {
           onClick={handleClearQueue}
           disabled={files.length === 0 || isRunning}
           className="inline-flex items-center justify-center rounded-full
-                     border border-slate-600 px-3 py-1.5 text-slate-300
-                     hover:border-slate-400 hover:text-slate-100 disabled:opacity-40"
+                     border border-slate-700 px-3 py-1.5 text-slate-300 backdrop-blur
+                     transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:text-slate-50 disabled:opacity-40"
         >
           Wyczyść kolejkę
         </button>
@@ -259,7 +260,7 @@ export function UploadForm() {
 
       {/* lista plików z progressem */}
       {files.length > 0 && (
-        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/60 p-3 max-h-64 overflow-y-auto">
+        <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-3 shadow-inner shadow-black/30">
           {files.map((item) => (
             <FileRow key={item.id} item={item} />
           ))}
@@ -305,15 +306,21 @@ function FileRow({ item }: { item: FileItem }) {
       : "text-slate-300";
 
   return (
-    <div className="space-y-1 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-[11px]">
+    <div className="space-y-1 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-[11px] transition-colors hover:border-indigo-400/60 hover:bg-slate-900">
       <div className="flex items-center justify-between gap-2">
-        <div className="truncate text-slate-100">{item.file.name}</div>
+        <div className="truncate font-medium text-slate-100">{item.file.name}</div>
         <div className={`text-[10px] ${textColor}`}>{phaseLabel}</div>
       </div>
-      <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden mt-1">
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
         <div
-          className={`h-full ${barColor} transition-all duration-200`}
-          style={{ width: `${isActive ? Math.max(5, progress) : progress}%` }}
+          className={`h-full ${barColor} transition-all duration-300`}
+          style={{
+            width: `${isActive ? Math.max(5, progress) : progress}%`,
+            backgroundImage:
+              item.phase === "error"
+                ? undefined
+                : "linear-gradient(90deg, rgba(99,102,241,0.9), rgba(16,185,129,0.9))",
+          }}
         />
       </div>
       {item.message && (
