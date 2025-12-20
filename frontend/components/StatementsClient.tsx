@@ -1,6 +1,7 @@
 "use client";
 
 import { StatementSummary } from "@/lib/serverApi";
+import * as Popover from "@radix-ui/react-popover";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 
@@ -9,15 +10,15 @@ type Props = {
 };
 
 type StatusFilter = "all" | "success" | "partial" | "failed";
+type IconProps = { className?: string };
+type IconComponent = (props: IconProps) => JSX.Element;
+type FilterOption = { value: string; label: string; helper?: string };
 
 export function StatementsClient({ statements }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [slide, setSlide] = useState(0);
-
-  const selectBase =
-    "appearance-none rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1 text-[12px] text-slate-100 shadow-inner shadow-black/30 transition focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/50";
 
   const { filtered, total, byStatus, years, months } = useMemo(() => {
     const normStatus = (s: string | null) => {
@@ -86,6 +87,32 @@ export function StatementsClient({ statements }: Props) {
 
   const slides = useMemo(() => chunkArray(filtered, 4), [filtered]);
   const activeSlide = Math.min(slide, Math.max(slides.length - 1, 0));
+
+  const yearOptions: FilterOption[] = [
+    {
+      value: "all",
+      label: "Wszystkie lata",
+      helper: "Cała oś czasu",
+    },
+    ...years.map((y) => ({
+      value: y,
+      label: y,
+      helper: `Dane z ${y} roku`,
+    })),
+  ];
+
+  const monthOptions: FilterOption[] = [
+    {
+      value: "all",
+      label: "Wszystkie miesiące",
+      helper: "Bez zawężania dat",
+    },
+    ...months.map((m) => ({
+      value: m.toString(),
+      label: monthLabel(Number(m)),
+      helper: `Importy z miesiąca ${monthLabel(Number(m))}`,
+    })),
+  ];
 
   return (
     <div className="space-y-8">
@@ -171,46 +198,31 @@ export function StatementsClient({ statements }: Props) {
       ) : (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
-            <div className="relative inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 pr-8 shadow-inner shadow-black/30">
-              <span className="text-slate-400">Rok</span>
-              <select
-                value={yearFilter}
-                onChange={(e) => {
-                  setYearFilter(e.target.value);
-                  setSlide(0);
-                }}
-                className={selectBase}
-                style={{ colorScheme: "dark" }}
-              >
-                <option value="all">Wszystkie</option>
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">▼</span>
-            </div>
-
-            <div className="relative inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 pr-8 shadow-inner shadow-black/30">
-              <span className="text-slate-400">Miesiąc</span>
-              <select
-                value={monthFilter}
-                onChange={(e) => {
-                  setMonthFilter(e.target.value);
-                  setSlide(0);
-                }}
-                className={selectBase}
-                style={{ colorScheme: "dark" }}
-              >
-                <option value="all">Wszystkie</option>
-                {months.map((m) => (
-                  <option key={m} value={m.toString()}>
-                    {monthLabel(Number(m))}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">▼</span>
+            <FilterControl
+              label="Rok"
+              icon={CalendarRangeIcon}
+              highlightTone="from-indigo-500/50 via-indigo-400/40 to-indigo-300/30"
+              value={yearFilter}
+              options={yearOptions}
+              onChange={(value) => {
+                setYearFilter(value);
+                setSlide(0);
+              }}
+            />
+            <FilterControl
+              label="Miesiąc"
+              icon={CalendarDaysIcon}
+              highlightTone="from-emerald-500/40 via-emerald-400/30 to-emerald-300/30"
+              value={monthFilter}
+              options={monthOptions}
+              onChange={(value) => {
+                setMonthFilter(value);
+                setSlide(0);
+              }}
+            />
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-[10px] uppercase tracking-[0.1em] text-indigo-200/90 shadow-inner shadow-black/30">
+              <SparklesIcon className="h-3.5 w-3.5 text-indigo-300" />
+              <span>Filtry dopasowane do UI</span>
             </div>
           </div>
 
@@ -291,6 +303,188 @@ export function StatementsClient({ statements }: Props) {
         </section>
       )}
     </div>
+  );
+}
+
+function FilterControl({
+  label,
+  value,
+  options,
+  onChange,
+  icon: Icon,
+  highlightTone,
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  icon: IconComponent;
+  highlightTone: string;
+}) {
+  const active =
+    options.find((o) => o.value === value) ?? options.find((o) => o.value === "all") ?? options[0];
+
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        className="group relative inline-flex min-w-[180px] items-center gap-3 rounded-full border border-slate-800/80 bg-slate-950/70 px-3 py-2 pr-4 text-left shadow-inner shadow-black/30 transition hover:border-indigo-400/60 hover:shadow-indigo-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 data-[state=open]:border-indigo-400/70"
+        aria-label={`Filtruj po polu ${label}`}
+      >
+        <div className="absolute inset-0 overflow-hidden rounded-full">
+          <span
+            className={`absolute inset-0 bg-gradient-to-r ${highlightTone} opacity-0 transition duration-300 group-hover:opacity-40 group-data-[state=open]:opacity-70`}
+          />
+          <span className="absolute inset-0 rounded-full border border-slate-700/70" />
+        </div>
+
+        <div className="relative flex items-center justify-center rounded-full bg-slate-900/80 p-1.5 text-indigo-200 shadow-inner shadow-black/30">
+          <Icon className="h-4 w-4" />
+        </div>
+
+        <div className="relative flex flex-1 flex-col">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">{label}</span>
+          <span className="text-sm font-semibold text-slate-100">{active?.label ?? value}</span>
+          {active?.helper && (
+            <span className="text-[10px] text-slate-400">{active.helper}</span>
+          )}
+        </div>
+
+        <span className="relative rounded-full bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-200 shadow-inner shadow-black/30">
+          ▼
+        </span>
+      </Popover.Trigger>
+
+      <Popover.Content
+        sideOffset={10}
+        className="z-50 w-[240px] rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
+      >
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-900/60 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-slate-400">
+          <Icon className="h-3.5 w-3.5 text-indigo-300" />
+          <span>Wybierz {label.toLowerCase()}</span>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          {options.map((option) => (
+            <Popover.Close asChild key={option.value}>
+              <button
+                type="button"
+                onClick={() => onChange(option.value)}
+                className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition duration-150 hover:-translate-y-[1px] hover:border-indigo-400/60 hover:bg-slate-900/90 ${
+                  option.value === value
+                    ? "border-indigo-400/70 bg-slate-900/70 text-slate-100 shadow-lg shadow-indigo-500/10"
+                    : "border-slate-800/80 bg-slate-950/60 text-slate-300"
+                }`}
+              >
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                    option.value === value
+                      ? "border-indigo-300 bg-indigo-500/20 text-indigo-100"
+                      : "border-slate-700 bg-slate-900 text-slate-400"
+                  }`}
+                >
+                  {option.value === value ? (
+                    <CheckIcon className="h-3.5 w-3.5" />
+                  ) : (
+                    option.label.slice(0, 1)
+                  )}
+                </span>
+
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold">{option.label}</span>
+                  {option.helper && (
+                    <span className="text-[10px] text-slate-400">{option.helper}</span>
+                  )}
+                </div>
+              </button>
+            </Popover.Close>
+          ))}
+        </div>
+
+        <Popover.Arrow className="fill-slate-800/80" />
+      </Popover.Content>
+    </Popover.Root>
+  );
+}
+
+function CalendarRangeIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M16 3v4" />
+      <path d="M8 3v4" />
+      <path d="M3 9h18" />
+      <path d="M8 15h3" />
+      <path d="M13 15h3" />
+      <path d="M8 12h5" />
+    </svg>
+  );
+}
+
+function CalendarDaysIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M16 3v4" />
+      <path d="M8 3v4" />
+      <path d="M3 9h18" />
+      <path d="M8 13h2v2H8z" />
+      <path d="M12 13h2v2h-2z" />
+      <path d="M16 13h2v2h-2z" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+function SparklesIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4Z" />
+      <path d="M5 19l1-2.5 2.5-1-2.5-1L5 12l-1 2.5L1.5 15l2.5 1Z" />
+      <path d="M19 19.5l.8-2 2-1-.8-2-.8 2-2 .8 2 1Z" />
+    </svg>
   );
 }
 
