@@ -752,20 +752,12 @@ function CategoryDonutChart({
   }, [categories, selectedCategory]);
 
   const getSelectedIndices = useCallback((chart: any): number[] => {
-    const sdp = chart?.w?.globals?.selectedDataPoints;
-    // Zwykle: selectedDataPoints[seriesIndex] -> tablica indeksów
-    const first = Array.isArray(sdp) ? sdp[0] : null;
+    const selected = chart?.w?.globals?.selectedDataPoints;
+    if (!Array.isArray(selected)) return [];
 
-    const indices: number[] = [];
-    if (Array.isArray(first)) {
-      for (const v of first) {
-        if (typeof v === "number") indices.push(v);
-        else if (Array.isArray(v)) {
-          for (const vv of v) if (typeof vv === "number") indices.push(vv);
-        }
-      }
-    }
-    return indices;
+    return selected
+      .flat(Infinity)
+      .filter((v: unknown): v is number => typeof v === "number");
   }, []);
 
   const baseColors = useMemo(
