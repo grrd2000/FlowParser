@@ -1521,27 +1521,13 @@ function TransactionSideDetails({
               Kategoria
             </div>
 
-            <select
-              className="
-                mt-1 w-full rounded-full bg-slate-900/70 border border-slate-700/60
-                px-3 py-1 text-[11px] text-slate-100 focus:outline-none
-                focus:ring-1 focus:ring-indigo-400/80
-              "
-              value={transaction.category_id ?? ""}
-              onChange={(e) =>
-                onChangeCategory(
-                  transaction.id,
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
+            <CategoryDropdown
+              value={transaction.category_id}
+              categories={categories}
+              onChange={(categoryId) =>
+                onChangeCategory(transaction.id, categoryId)
               }
-            >
-              <option value="">— brak kategorii —</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div className="flex flex-col items-end gap-1 pt-5">
@@ -1658,6 +1644,177 @@ function TransactionSideDetails({
         Ten panel będzie się dalej “inteligentnie” rozbudowywał w Lab.
       </div>
     </aside>
+  );
+}
+
+function CategoryDropdown({
+  value,
+  categories,
+  onChange,
+}: {
+  value: number | null;
+  categories: Category[];
+  onChange: (categoryId: number | null) => void;
+}) {
+  const options = [
+    {
+      value: "",
+      label: "Brak kategorii",
+      helper: "Transakcja pozostanie nieprzypisana",
+      color: "#475569",
+    },
+    ...categories.map((cat) => ({
+      value: cat.id.toString(),
+      label: cat.name,
+      helper: "Przypisz tę kategorię",
+      color: cat.color ?? "#a5b4fc",
+    })),
+  ];
+
+  const active =
+    options.find((opt) => opt.value === (value?.toString() ?? "")) ?? options[0];
+
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        className="group relative mt-1 inline-flex w-full items-center gap-2 rounded-full border border-slate-800/80 bg-slate-950/70 px-3 py-1.5 pr-3 text-left shadow-inner shadow-black/30 transition hover:border-indigo-400/60 hover:shadow-indigo-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 data-[state=open]:border-indigo-400/70"
+        aria-label="Zmień kategorię transakcji"
+      >
+        <div className="absolute inset-0 overflow-hidden rounded-full">
+          <span className="absolute inset-0 bg-gradient-to-r from-indigo-500/30 via-indigo-400/30 to-emerald-400/30 opacity-0 transition duration-300 group-hover:opacity-40 group-data-[state=open]:opacity-70" />
+          <span className="absolute inset-0 rounded-full border border-slate-700/70" />
+        </div>
+
+        <div className="relative flex items-center justify-center rounded-full bg-slate-900/80 p-1 text-indigo-200 shadow-inner shadow-black/30">
+          <TagIcon className="h-4 w-4" />
+        </div>
+
+        <div className="relative flex flex-1 flex-col min-w-0">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
+            Kategoria
+          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="h-2.5 w-2.5 rounded-full border border-slate-800/80 shadow-inner shadow-black/40"
+              style={{ backgroundColor: active.color }}
+            />
+            <span className="text-[13px] font-semibold text-slate-100 truncate">
+              {active.label}
+            </span>
+          </div>
+          {active.helper && (
+            <span className="text-[9px] text-slate-400">
+              {active.helper}
+            </span>
+          )}
+        </div>
+
+        <span className="relative rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-slate-200 shadow-inner shadow-black/30">
+          ▼
+        </span>
+      </Popover.Trigger>
+
+      <Popover.Content
+        sideOffset={10}
+        className="z-50 w-[260px] max-h-[340px] overflow-y-auto rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
+      >
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-900/60 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-slate-400">
+          <TagIcon className="h-3.5 w-3.5 text-indigo-300" />
+          <span>Wybierz kategorię</span>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          {options.map((option) => {
+            const isActive = option.value === (value?.toString() ?? "");
+            return (
+              <Popover.Close
+                asChild
+                key={option.value === "" ? "none" : option.value}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange(option.value === "" ? null : Number(option.value))
+                  }
+                  className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-1.5 text-left transition duration-150 hover:-translate-y-[1px] hover:border-indigo-400/60 hover:bg-slate-900/90 ${
+                    isActive
+                      ? "border-indigo-400/70 bg-slate-900/70 text-slate-100 shadow-lg shadow-indigo-500/10"
+                      : "border-slate-800/80 bg-slate-950/60 text-slate-300"
+                  }`}
+                >
+                  <span
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-800/80 bg-slate-900 text-[11px] font-semibold"
+                    style={{ backgroundColor: `${option.color}20`, color: option.color }}
+                  >
+                    ●
+                  </span>
+
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-sm font-semibold truncate">{option.label}</span>
+                    {option.helper && (
+                      <span className="text-[10px] text-slate-400 truncate">
+                        {option.helper}
+                      </span>
+                    )}
+                  </div>
+
+                  <span
+                    className={`ml-auto flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-semibold ${
+                      isActive
+                        ? "border-indigo-300 bg-indigo-500/20 text-indigo-100"
+                        : "border-slate-700 bg-slate-900 text-slate-400"
+                    }`}
+                  >
+                    {isActive ? (
+                      <CheckIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      option.label.slice(0, 1)
+                    )}
+                  </span>
+                </button>
+              </Popover.Close>
+            );
+          })}
+        </div>
+
+        <Popover.Arrow className="fill-slate-800/80" />
+      </Popover.Content>
+    </Popover.Root>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20.59 13.41 12 4.82 4.41 12.41a2 2 0 0 0 0 2.83l4.35 4.35a2 2 0 0 0 2.83 0l8.59-8.59Z" />
+      <path d="M8 8h.01" />
+    </svg>
   );
 }
 
