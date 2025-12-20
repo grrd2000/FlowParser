@@ -25,7 +25,7 @@ export function TopNav() {
         bg-slate-950/60 backdrop-blur-2xl
       "
     >
-      <div className="mx-auto max-w-6xl px-4 md:px-6">
+      <div className="mx-auto w-full max-w-screen-2xl px-4 md:px-6 lg:px-10">
         <div className="relative mt-2 flex h-16 items-center justify-between gap-4 rounded-full border border-white/10 bg-white/5 px-4 shadow-xl shadow-black/30 ring-1 ring-white/10 backdrop-blur-2xl">
           {/* brand */}
           <Link href="/" className="flex items-center gap-3 rounded-full px-2 py-2 transition-transform hover:translate-y-[-1px]">
