@@ -733,6 +733,47 @@ function withOpacity(color: string, alpha: number) {
   return color;
 }
 
+
+function polarToCartesian(
+  cx: number,
+  cy: number,
+  r: number,
+  angleDeg: number
+) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return {
+    x: cx + r * Math.cos(rad),
+    y: cy + r * Math.sin(rad),
+  };
+}
+
+function describeDonutSlice(
+  cx: number,
+  cy: number,
+  rOuter: number,
+  rInner: number,
+  startAngle: number,
+  endAngle: number
+) {
+  const sweep = endAngle - startAngle;
+  if (sweep <= 0) return "";
+
+  const largeArcFlag = sweep > 180 ? 1 : 0;
+
+  const outerStart = polarToCartesian(cx, cy, rOuter, startAngle);
+  const outerEnd = polarToCartesian(cx, cy, rOuter, endAngle);
+  const innerEnd = polarToCartesian(cx, cy, rInner, endAngle);
+  const innerStart = polarToCartesian(cx, cy, rInner, startAngle);
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${rOuter} ${rOuter} 0 ${largeArcFlag} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${rInner} ${rInner} 0 ${largeArcFlag} 0 ${innerStart.x} ${innerStart.y}`,
+    "Z",
+  ].join(" ");
+}
+
 function CategoryDonutChart({
   categories,
   loading,
@@ -754,8 +795,6 @@ function CategoryDonutChart({
     [categories]
   );
 
-  // Kontrolujemy "aktywną" kategorię WYŁĄCZNIE stanem React (a nie wewnętrzną selekcją ApexCharts)
-  // – dzięki temu klik w listę zawsze aktualizuje wygląd wykresu.
   const colors = useMemo(
     () =>
       baseColors.map((color, idx) => {
@@ -767,63 +806,64 @@ function CategoryDonutChart({
     [baseColors, categories, selectedCategory]
   );
 
-  // Najbardziej "kuloodporne": wymuszamy remount wykresu przy zmianie filtra,
-  // żeby ApexCharts nie trzymał starej, wewnętrznej selekcji (expanded slice).
-  const chartKey = useMemo(() => {
-    const s = categories.map((c) => c.value).join("|");
-    return `donut-${selectedCategory ?? "none"}-${s}`;
-  }, [categories, selectedCategory]);
-
-  const options: ApexCharts.ApexOptions = useMemo(
-    () => ({
-      chart: {
-        type: "donut",
-        events: {
-          dataPointSelection: (_event, _chartContext, config) => {
-            const idx = (config as any)?.dataPointIndex ?? -1;
-            if (idx < 0) return;
-
-            const bucket = categories[idx];
-            if (!bucket) return;
-
-            onCategorySelect(bucket.categoryId ?? null);
-          },
-          click: (_event, _chartContext, config) => {
-            const idx = (config as any)?.dataPointIndex ?? -1;
-            if (idx === -1) onCategorySelect(undefined);
-          },
-        },
-      },
-      legend: { show: false },
-      labels: categories.map((c) => c.name),
-      colors,
-      dataLabels: { enabled: false },
-      stroke: { show: false },
-
-      // Wyłączamy domyślne "kliknięcie/expand" ApexCharts dla pie/donut,
-      // bo i tak sterujemy wyglądem przez `colors`.
-      plotOptions: {
-        pie: {
-          expandOnClick: false,
-          donut: { size: "60%" },
-        },
-      },
-
-      // Na wszelki wypadek wyłączamy filtry aktywnego/hover,
-      // żeby nie było dodatkowych efektów "selected".
-      states: {
-        active: { filter: { type: "none" } },
-        hover: { filter: { type: "none" } },
-      },
-
-      tooltip: {
-        y: {
-          formatter: (v: number) => formatCurrency(v),
-        },
-      },
-    }),
-    [categories, colors, onCategorySelect]
+  const total = useMemo(
+    () =>
+      categories.reduce(
+        (sum, c) => sum + (Number.isFinite(c.value) ? c.value : 0),
+        0
+      ),
+    [categories]
   );
+
+  const slices = useMemo(() => {
+    if (!categories.length || total <= 0) return [];
+
+    const cx = 50;
+    const cy = 50;
+    const rOuter = 46;
+    const rInner = 28;
+
+    let angle = -90;
+    return categories.map((c, idx) => {
+      const value = c.value;
+      const sweep = (value / total) * 360;
+      const startAngle = angle;
+      const endAngle = angle + sweep;
+      angle = endAngle;
+
+      const d = describeDonutSlice(
+        cx,
+        cy,
+        rOuter,
+        rInner,
+        startAngle,
+        endAngle
+      );
+
+      const bucketId = c.categoryId ?? null;
+      const isActive =
+        selectedCategory !== undefined &&
+        (selectedCategory ?? null) === bucketId;
+
+      const mid = (startAngle + endAngle) / 2;
+      const offset = isActive ? 2.2 : 0;
+      const midRad = (mid * Math.PI) / 180;
+      const dx = Math.cos(midRad) * offset;
+      const dy = Math.sin(midRad) * offset;
+
+      return {
+        idx,
+        d,
+        label: c.name,
+        value,
+        categoryId: bucketId,
+        fill: colors[idx],
+        isActive,
+        dx,
+        dy,
+      };
+    });
+  }, [categories, colors, selectedCategory, total]);
 
   if (loading) {
     return (
@@ -832,7 +872,7 @@ function CategoryDonutChart({
       </div>
     );
   }
-  if (categories.length === 0) {
+  if (categories.length === 0 || total <= 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-[11px] text-slate-500">
         Brak wydatków w wybranym okresie.
@@ -840,25 +880,55 @@ function CategoryDonutChart({
     );
   }
 
-  const seriesData = categories.map((c) => c.value);
-
   return (
     <div className="flex-1 flex flex-col gap-3">
       <div className="flex items-center justify-center">
-        <ReactApexChart
-          key={chartKey}
-          type="donut"
-          options={options}
-          series={seriesData}
+        <svg
+          viewBox="0 0 100 100"
+          width="100%"
           height={180}
-        />
+          className="max-w-[240px]"
+          role="img"
+          aria-label="Rozkład wydatków (donut)"
+          onClick={() => onCategorySelect(undefined)}
+        >
+          <g>
+            {slices.map((s) => (
+              <path
+                key={`${s.categoryId ?? "null"}-${s.label}`}
+                d={s.d}
+                fill={s.fill}
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth={0.8}
+                style={{
+                  cursor: "pointer",
+                  transition: "transform 160ms ease, opacity 160ms ease",
+                  transform: `translate(${s.dx}px, ${s.dy}px)`,
+                  transformOrigin: "50px 50px",
+                  outline: "none", // na wszelki wypadek (gdyby coś jednak złapało focus)
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCategorySelect(s.categoryId);
+                }}
+              >
+                <title>
+                  {s.label}: {formatCurrency(s.value)}
+                </title>
+              </path>
+            ))}
+          </g>
+
+          {/* USUNIĘTE: tekst ze środka */}
+        </svg>
       </div>
+
       <div className="space-y-1 max-h-32 overflow-y-auto pr-1 text-[11px]">
         {categories.map((c, idx) => {
           const bucketId = c.categoryId ?? null;
-          const isActive = (selectedCategory ?? undefined) !== undefined
-            ? (selectedCategory ?? null) === bucketId
-            : false;
+          const isActive =
+            selectedCategory !== undefined &&
+            (selectedCategory ?? null) === bucketId;
 
           return (
             <button
