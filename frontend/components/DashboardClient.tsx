@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import {
@@ -40,6 +40,9 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
   const [transactions, setTransactions] = useState<TxExt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [range, setRange] = useState<RangeKey>(initialRange);
+  const [selectedCategory, setSelectedCategory] = useState<
+    number | null | undefined
+  >(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,9 +77,10 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
         const parsed = normalizeTransactions(rawTx);
         setTransactions(parsed);
         setCategories(rawCategories);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(e);
-        setError(e?.message ?? "Błąd podczas ładowania danych.");
+        const message = e instanceof Error ? e.message : null;
+        setError(message ?? "Błąd podczas ładowania danych.");
       } finally {
         setLoading(false);
       }
@@ -92,7 +96,11 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     categorySeries,
     heatmapSeries,
   } = useMemo(() => {
-    const { filtered, startDate } = filterByRange(transactions, range);
+    const { filtered: rangeFiltered, startDate } = filterByRange(
+      transactions,
+      range
+    );
+    const filtered = filterByCategory(rangeFiltered, selectedCategory);
     const metrics = computeMetrics(filtered);
     const netFlowSeries = buildNetFlowSeries(filtered, range);
     const categorySeries = groupByCategory(filtered);
@@ -105,12 +113,28 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       categorySeries,
       heatmapSeries,
     };
-  }, [transactions, range]);
+  }, [transactions, range, selectedCategory]);
 
   const coloredCategories = useMemo(
     () => applyCategoryColors(categorySeries, categories),
     [categorySeries, categories]
   );
+  const selectedCategoryLabel = useMemo(() => {
+    if (selectedCategory === undefined) return null;
+    const match = coloredCategories.find((bucket) => {
+      const bucketId = bucket.categoryId ?? null;
+      return bucketId === selectedCategory;
+    });
+    if (match) return match.name;
+    if (selectedCategory === null) return "Brak kategorii";
+    return "Wybrana kategoria";
+  }, [coloredCategories, selectedCategory]);
+
+  const handleCategorySelect = useCallback((categoryId?: number | null) => {
+    setSelectedCategory((prev) =>
+      prev === categoryId ? undefined : categoryId ?? null
+    );
+  }, []);
   const rangeText = rangeLabel(range, startDate);
   const dailyAverage = useMemo(() => {
     if (!filtered.length) return 0;
@@ -293,9 +317,45 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
                 Udział kategorii w całkowitych wydatkach.
               </p>
             </div>
-            <span className="badge-soft">Top 8</span>
+            <div className="flex flex-col items-end gap-2">
+              <span className="badge-soft">Top 8</span>
+              {selectedCategory !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => handleCategorySelect(undefined)}
+                  className="text-[11px] text-indigo-100 hover:text-white underline-offset-4 hover:underline"
+                >
+                  Wyczyść filtr
+                </button>
+              )}
+            </div>
           </div>
-          <CategoryDonutChart categories={coloredCategories} loading={loading} />
+          {selectedCategory === undefined ? (
+            <p className="text-[11px] text-slate-400 mb-2">
+              Kliknij dowolny wycinek lub pozycję z listy, aby przefiltrować cały
+              dashboard (jak w PowerBI). Ponowne kliknięcie wyczyści filtr.
+            </p>
+          ) : (
+            <div className="flex items-center gap-2 text-[11px] text-emerald-100 mb-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-3 py-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" aria-hidden />
+                Filtr: {selectedCategoryLabel}
+              </span>
+              <button
+                type="button"
+                className="text-indigo-100 hover:text-white underline-offset-4 hover:underline"
+                onClick={() => handleCategorySelect(undefined)}
+              >
+                Resetuj
+              </button>
+            </div>
+          )}
+          <CategoryDonutChart
+            categories={coloredCategories}
+            loading={loading}
+            selectedCategory={selectedCategory}
+            onCategorySelect={handleCategorySelect}
+          />
         </div>
       </section>
 
@@ -636,13 +696,95 @@ const DONUT_FALLBACK_COLORS = [
   "#14b8a6",
 ];
 
+function withOpacity(color: string, alpha: number) {
+  if (!color.startsWith("#")) return color;
+  const hex = color.slice(1);
+
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16);
+    const g = parseInt(hex[1] + hex[1], 16);
+    const b = parseInt(hex[2] + hex[2], 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  if (hex.length === 6) {
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  return color;
+}
+
 function CategoryDonutChart({
   categories,
   loading,
+  selectedCategory,
+  onCategorySelect,
 }: {
   categories: CategoryBucket[];
   loading: boolean;
+  selectedCategory?: number | null;
+  onCategorySelect: (categoryId?: number | null) => void;
 }) {
+  const baseColors = useMemo(
+    () =>
+      categories.map(
+        (c, idx) => c.color || DONUT_FALLBACK_COLORS[idx % DONUT_FALLBACK_COLORS.length]
+      ),
+    [categories]
+  );
+
+  const colors = useMemo(
+    () =>
+      baseColors.map((color, idx) => {
+        if (selectedCategory === undefined) return color;
+        const bucket = categories[idx];
+        const bucketId = bucket?.categoryId ?? null;
+        const isActive = bucketId === selectedCategory;
+        return isActive ? color : withOpacity(color, 0.35);
+      }),
+    [baseColors, categories, selectedCategory]
+  );
+
+  const options: ApexCharts.ApexOptions = useMemo(
+    () => ({
+      chart: {
+        type: "donut",
+        events: {
+          dataPointSelection: (_event, _chartContext, config) => {
+            const bucket = categories[config.dataPointIndex];
+            if (!bucket) return;
+            onCategorySelect(bucket.categoryId ?? null);
+          },
+        },
+      },
+      legend: {
+        show: false,
+      },
+      labels: categories.map((c) => c.name),
+      colors,
+      dataLabels: { enabled: false },
+      stroke: { show: false },
+      states: {
+        active: { filter: { type: "lighten", value: 0.5 } },
+        normal: { filter: { type: "none" } },
+      },
+      plotOptions: {
+        pie: {
+          donut: { size: "60%" },
+        },
+      },
+      tooltip: {
+        y: {
+          formatter: (v: number) => formatCurrency(v),
+        },
+      },
+    }),
+    [categories, colors, onCategorySelect]
+  );
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-[11px] text-slate-500">
@@ -658,31 +800,6 @@ function CategoryDonutChart({
     );
   }
 
-  const colors = categories.map(
-    (c, idx) => c.color || DONUT_FALLBACK_COLORS[idx % DONUT_FALLBACK_COLORS.length]
-  );
-
-  const options: ApexCharts.ApexOptions = {
-    chart: { type: "donut" },
-    legend: {
-      show: false,
-    },
-    labels: categories.map((c) => c.name),
-    colors,
-    dataLabels: { enabled: false },
-    stroke: { show: false },
-    plotOptions: {
-      pie: {
-        donut: { size: "60%" },
-      },
-    },
-    tooltip: {
-      y: {
-        formatter: (v: number) => formatCurrency(v),
-      },
-    },
-  };
-
   const seriesData = categories.map((c) => c.value);
 
   return (
@@ -696,24 +813,35 @@ function CategoryDonutChart({
         />
       </div>
       <div className="space-y-1 max-h-32 overflow-y-auto pr-1 text-[11px]">
-        {categories.map((c, idx) => (
-          <div
-            key={c.name}
-            className="flex items-center justify-between text-slate-200"
-          >
-            <span className="flex items-center gap-2">
-              <span
-                className="h-3 w-3 rounded-sm"
-                style={{ backgroundColor: colors[idx] }}
-                aria-hidden
-              />
-              <span>{c.name}</span>
-            </span>
-            <span className="text-slate-400">
-              {formatCurrency(c.value)}
-            </span>
-          </div>
-        ))}
+        {categories.map((c, idx) => {
+          const bucketId = c.categoryId ?? null;
+          const isActive = selectedCategory === bucketId;
+          return (
+            <button
+              key={c.name}
+              type="button"
+              onClick={() => onCategorySelect(bucketId)}
+              aria-pressed={isActive}
+              className={`flex w-full items-center justify-between rounded-md border px-2 py-1 text-left transition ${
+                isActive
+                  ? "border-emerald-300/60 bg-white/10 text-white"
+                  : "border-transparent text-slate-200 hover:border-white/10 hover:bg-white/5"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span
+                  className="h-3 w-3 rounded-sm"
+                  style={{ backgroundColor: colors[idx] }}
+                  aria-hidden
+                />
+                <span>{c.name}</span>
+              </span>
+              <span className="text-slate-400">
+                {formatCurrency(c.value)}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -847,7 +975,7 @@ function RecentTransactionsList({
   return (
     <div className="space-y-1">
       {transactions.map((t, idx) => {
-        const amount = parseAmount(t.amount as any);
+        const amount = parseAmount(t.amount);
         const isPositive = amount >= 0;
         const isFaded = idx === transactions.length - 1;
 
@@ -890,15 +1018,16 @@ function normalizeTransactions(transactions: Transaction[]): TxExt[] {
   return transactions
     .map((t) => ({
       ...t,
-      amountNum: parseAmount(t.amount as any),
+      amountNum: parseAmount(t.amount),
       date: parseDate(t.operation_date),
     }))
     .filter((t) => !!t.date) as TxExt[];
 }
 
-function parseAmount(raw: string): number {
-  if (!raw) return 0;
-  const cleaned = raw
+function parseAmount(raw: string | number | null | undefined): number {
+  if (raw == null) return 0;
+  const rawStr = typeof raw === "number" ? raw.toString() : raw;
+  const cleaned = rawStr
     .replace(/\s/g, "")
     .replace("PLN", "")
     .replace(",", ".");
@@ -926,6 +1055,11 @@ function filterByRange(data: TxExt[], range: RangeKey) {
   }
   const filtered = sorted.filter((t) => t.date >= start);
   return { filtered, startDate: start };
+}
+
+function filterByCategory(data: TxExt[], categoryId?: number | null) {
+  if (categoryId === undefined) return data;
+  return data.filter((t) => (t.category_id ?? null) === (categoryId ?? null));
 }
 
 function computeStartDate(last: Date, range: RangeKey): Date | null {
