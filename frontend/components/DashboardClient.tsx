@@ -119,6 +119,10 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     () => applyCategoryColors(categorySeries, categories),
     [categorySeries, categories]
   );
+  const donutCategories = useMemo(
+    () => coloredCategories.slice(0, 8),
+    [coloredCategories]
+  );
   const selectedCategoryLabel = useMemo(() => {
     if (selectedCategory === undefined) return null;
     const match = coloredCategories.find((bucket) => {
@@ -363,7 +367,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
             </div>
           )}
           <CategoryDonutChart
-            categories={coloredCategories}
+            categories={donutCategories}
             loading={loading}
             selectedCategory={selectedCategory}
             onCategorySelect={handleCategorySelect}
