@@ -42,6 +42,24 @@
   }
 }
 
+@keyframes aurora {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(80px);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translate3d(10%, -6%, 0) scale(1.05);
+    filter: blur(90px);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate3d(-8%, 4%, 0) scale(1);
+    filter: blur(80px);
+    opacity: 0.5;
+  }
+}
+
 /* te nazwy odpowiadają klasom animate-[...] z AppShell */
 @layer utilities {
   .animate-\[float_18s_ease-in-out_infinite\] {
@@ -55,6 +73,32 @@
   }
   .animate-\[pulse-ring_5s_ease-in-out_infinite\] {
     animation: pulse-ring 5s ease-in-out infinite;
+  }
+
+  .bg-grid-slate {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(circle at 40% 20%, rgba(0, 0, 0, 0.9), transparent 65%);
+  }
+
+  .aurora-pane {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 25% 20%, rgba(129, 140, 248, 0.38), transparent 45%),
+      radial-gradient(circle at 80% 10%, rgba(45, 212, 191, 0.3), transparent 40%),
+      radial-gradient(circle at 60% 70%, rgba(94, 234, 212, 0.18), transparent 50%);
+    mix-blend-mode: screen;
+    opacity: 0.6;
+    animation: aurora 24s ease-in-out infinite alternate;
+  }
+
+  .aurora-pane--secondary {
+    filter: blur(60px);
+    background: radial-gradient(circle at 70% 50%, rgba(56, 189, 248, 0.25), transparent 45%),
+      radial-gradient(circle at 35% 80%, rgba(167, 139, 250, 0.24), transparent 50%);
+    animation-duration: 28s;
   }
 }
 
