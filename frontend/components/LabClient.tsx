@@ -538,12 +538,14 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
   }
 
   return (
-    <div className="relative mx-auto flex h-full max-w-6xl flex-col gap-8 px-4 pb-12 pt-6 md:px-8">
-        <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.12),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.12),transparent_32%),linear-gradient(120deg,rgba(9,12,20,0.96),rgba(12,19,33,0.92))]" />
-        <div className="absolute inset-0 -z-10 opacity-50 bg-[linear-gradient(0deg,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px]" />
-        <div className="pointer-events-none absolute inset-x-6 top-8 -z-10 h-32 rounded-[28px] bg-gradient-to-r from-indigo-500/20 via-sky-500/12 to-emerald-400/18 blur-3xl" />
+    <div className="relative space-y-8 pb-12 lg:space-y-10">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="bg-orbit bg-orbit--left" />
+        <div className="bg-orbit bg-orbit--right" />
+        <div className="absolute inset-x-10 top-6 h-24 rounded-full bg-gradient-to-r from-indigo-500/25 via-slate-200/5 to-emerald-400/25 blur-3xl" />
+      </div>
 
-        {/* Hero */}
+      {/* Hero */}
         <section className="glass-card glass-card-hover-strong relative overflow-hidden border border-white/10 px-6 py-8 shadow-[0_15px_80px_rgba(0,0,0,0.45)] md:px-9">
           <div className="absolute -top-16 left-6 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl" />
           <div className="absolute -bottom-20 right-10 h-36 w-36 rounded-full bg-emerald-500/25 blur-3xl" />
