@@ -75,11 +75,20 @@ const SELECT_CLASS =
   "h-9 w-full rounded-full bg-slate-900/70 border border-white/10 px-3 text-[12px] text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400/70";
 const SELECT_STYLE = { colorScheme: "dark" as const };
 
-export function LabClient() {
+type LabInitialData = {
+  insights: LabInsights;
+  categories: Category[];
+  stats: Record<number, number>;
+  rules: CategoryRule[];
+};
+
+export function LabClient({ initialData }: { initialData?: LabInitialData | null }) {
   const { user, authLoading } = useAuth();
 
-  const [data, setData] = useState<LabInsights | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<LabInsights | null>(
+    initialData?.insights ?? null
+  );
+  const [loading, setLoading] = useState(!initialData);
 
   // AI suggestions
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -89,8 +98,8 @@ export function LabClient() {
   const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
 
   // Categories
-  const [cats, setCats] = useState<Category[]>([]);
-  const [catStats, setCatStats] = useState<Record<number, number>>({});
+  const [cats, setCats] = useState<Category[]>(initialData?.categories ?? []);
+  const [catStats, setCatStats] = useState<Record<number, number>>(initialData?.stats ?? {});
   const [catName, setCatName] = useState("");
   const [catColor, setCatColor] = useState<string>("#7c3aed");
   const [catError, setCatError] = useState<string | null>(null);
@@ -102,8 +111,8 @@ export function LabClient() {
   const [editColor, setEditColor] = useState<string>("#7c3aed");
 
   // Smart rules
-  const [rules, setRules] = useState<CategoryRule[]>([]);
-  const [rulesLoading, setRulesLoading] = useState(true);
+  const [rules, setRules] = useState<CategoryRule[]>(initialData?.rules ?? []);
+  const [rulesLoading, setRulesLoading] = useState(!initialData);
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [rulesBusyId, setRulesBusyId] = useState<number | "create" | "apply" | "reorder" | "delete" | null>(null);
 
@@ -178,9 +187,23 @@ export function LabClient() {
   const ruleCount = rules.length;
   const categoryCount = cats.length;
 
-  const loadAll = async () => {
-    setLoading(true);
-    setRulesLoading(true);
+  const applyLoadedData = (
+    lab: LabInsights,
+    categories: Category[],
+    stats: Record<number, number>,
+    ruleList: CategoryRule[]
+  ) => {
+    setData(lab);
+    setCats(categories);
+    setCatStats(stats);
+    setRules(ruleList);
+  };
+
+  const loadAll = async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+      setRulesLoading(true);
+    }
     setCatError(null);
     setRulesError(null);
 
@@ -192,18 +215,17 @@ export function LabClient() {
         fetchCategoryRules(),
       ]);
 
-      setData(lab);
-      setCats(categories);
-      setCatStats(stats);
-      setRules(ruleList);
+      applyLoadedData(lab, categories, stats, ruleList);
     } catch (e: any) {
       console.error(e);
       const msg = e?.message ?? "Nie udało się pobrać danych.";
       setCatError(msg);
       setRulesError(msg);
     } finally {
-      setLoading(false);
-      setRulesLoading(false);
+      if (showLoading) {
+        setLoading(false);
+        setRulesLoading(false);
+      }
     }
   };
 
@@ -215,10 +237,7 @@ export function LabClient() {
         fetchCategoryStats(),
         fetchCategoryRules(),
       ]);
-      setData(lab);
-      setCats(categories);
-      setCatStats(stats);
-      setRules(ruleList);
+      applyLoadedData(lab, categories, stats, ruleList);
     } catch (e) {
       console.warn("refreshAll failed:", e);
     }
@@ -244,9 +263,21 @@ export function LabClient() {
       return;
     }
 
-    loadAll();
+    if (initialData) {
+      applyLoadedData(
+        initialData.insights,
+        initialData.categories,
+        initialData.stats,
+        initialData.rules
+      );
+      setLoading(false);
+      setRulesLoading(false);
+      loadAll(false);
+    } else {
+      loadAll(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user]);// ---------- AI suggestions ----------
+  }, [authLoading, user, initialData]);// ---------- AI suggestions ----------
   const onEnableSuggestion = async (s: LabSuggestion) => {
     setBusyKey(s.suggestion_key);
     setLastApplied(null);
