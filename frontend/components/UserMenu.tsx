@@ -54,29 +54,34 @@ export function UserMenu() {
       <button
         onClick={() => setOpen((v) => !v)}
         className={[
-          "group inline-flex items-center gap-2",
-          "rounded-full border border-white/10",
-          "bg-gradient-to-r from-slate-900/90 via-slate-800/70 to-slate-900/90",
-          "px-3 py-1.5 text-[11px] text-slate-100 shadow-lg shadow-black/30",
+          "group inline-flex items-center gap-3",
+          "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl",
+          "px-3.5 py-1.5 text-[11px] text-slate-100 shadow-inner shadow-black/30",
           "transition-all duration-150",
-          "hover:border-indigo-400/40 hover:shadow-indigo-500/20",
+          "hover:border-indigo-400/50 hover:bg-white/10",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70",
-          open ? "border-indigo-400/60 shadow-indigo-500/30" : "",
+          open ? "border-indigo-400/60 bg-white/10" : "",
         ].join(" ")}
       >
         <span
           className="
-            inline-flex h-7 w-7 items-center justify-center
-            rounded-full border border-white/10 bg-gradient-to-br
-            from-indigo-400/80 via-sky-300/70 to-emerald-300/60
-            text-[11px] font-semibold text-slate-950 shadow-inner
+            inline-flex h-8 w-8 items-center justify-center
+            rounded-xl border border-white/10 bg-gradient-to-br
+            from-indigo-400/90 via-sky-300/80 to-emerald-300/80
+            text-[11px] font-semibold text-slate-950 shadow-inner shadow-black/20
           "
         >
           {initials}
         </span>
-        <span className="hidden sm:inline-block max-w-[140px] truncate">
-          {label}
-        </span>
+        <div className="hidden sm:flex flex-col leading-tight">
+          <span className="max-w-[140px] truncate text-[11px] font-semibold">
+            {label}
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.14em] text-slate-400">
+            Konto aktywne
+          </span>
+        </div>
+        <span className="sm:hidden text-[11px] font-semibold">{label}</span>
         <span
           className={[
             "grid h-6 w-6 place-items-center rounded-full border border-white/10",
@@ -91,8 +96,8 @@ export function UserMenu() {
 
       <div
         className={[
-          "absolute right-0 mt-3 w-[280px] overflow-hidden rounded-3xl",
-          "border border-indigo-400/30 bg-slate-950/80 backdrop-blur-2xl",
+          "absolute right-0 mt-3 w-[300px] overflow-hidden rounded-3xl",
+          "border border-white/10 bg-gradient-to-b from-slate-950/90 via-slate-900/90 to-slate-950/95 backdrop-blur-2xl",
           "shadow-[0_20px_80px_-24px_rgba(0,0,0,0.65)]",
           "transition-all duration-200",
           open
@@ -100,12 +105,19 @@ export function UserMenu() {
             : "opacity-0 -translate-y-1 pointer-events-none",
         ].join(" ")}
       >
-        <div className="px-4 py-3 border-b border-white/10 bg-gradient-to-r from-white/5 via-transparent to-white/5">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-indigo-200/90">
-            Zalogowany jako
-          </div>
-          <div className="mt-1 text-[12px] font-semibold text-slate-50 truncate">
-            {user.email}
+        <div className="px-4 py-4 border-b border-white/10 bg-white/5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-indigo-200/90">
+                Zalogowany jako
+              </div>
+              <div className="mt-1 text-[12px] font-semibold text-slate-50 truncate">
+                {user.email}
+              </div>
+            </div>
+            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-200 shadow-inner shadow-emerald-500/10">
+              Online
+            </span>
           </div>
         </div>
 
@@ -126,16 +138,16 @@ export function UserMenu() {
           />
         </nav>
 
-        <div className="border-t border-white/10 p-3 bg-white/5">
+        <div className="border-t border-white/10 p-4 bg-white/5">
           <button
             onClick={() => {
               setOpen(false);
               logout();
             }}
             className="
-              w-full rounded-xl border border-white/10
-              bg-gradient-to-r from-rose-500/70 via-amber-400/70 to-rose-500/70
-              px-3 py-2 text-center text-[12px] font-semibold
+              w-full rounded-xl border border-rose-400/30
+              bg-gradient-to-r from-rose-500/80 via-amber-400/80 to-rose-500/80
+              px-3 py-2 text-center text-[12px] font-semibold uppercase tracking-[0.08em]
               text-slate-950 shadow-lg shadow-rose-500/20
               transition-transform duration-150 hover:scale-[1.01]
             "
@@ -164,13 +176,20 @@ function MenuLink({
       href={href}
       onClick={onClick}
       className="
-        block px-4 py-3
+        group block px-4 py-3
         hover:bg-white/5 transition-colors
       "
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] font-semibold text-slate-100">{label}</span>
-        <span className="text-xs text-indigo-300">→</span>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] text-indigo-200">
+            •
+          </span>
+          <span className="text-[12px] font-semibold text-slate-100">{label}</span>
+        </div>
+        <span className="text-xs text-indigo-300 transition-transform group-hover:translate-x-0.5">
+          →
+        </span>
       </div>
       {sub && <div className="mt-0.5 text-[10px] text-slate-400/90">{sub}</div>}
     </Link>
