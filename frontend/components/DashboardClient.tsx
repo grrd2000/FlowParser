@@ -131,9 +131,10 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
   }, [coloredCategories, selectedCategory]);
 
   const handleCategorySelect = useCallback((categoryId?: number | null) => {
-    setSelectedCategory((prev) =>
-      prev === categoryId ? undefined : categoryId ?? null
-    );
+    setSelectedCategory((prev) => {
+      if (categoryId === undefined) return undefined; // explicit reset
+      return prev === categoryId ? undefined : categoryId ?? null;
+    });
   }, []);
   const rangeText = rangeLabel(range, startDate);
   const dailyAverage = useMemo(() => {
