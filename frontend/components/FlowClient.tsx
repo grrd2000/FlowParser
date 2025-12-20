@@ -1482,81 +1482,82 @@ function TransactionSideDetails({
     <aside
       className={[
         "min-w-[320px] max-w-[320px]",
-        "h-full min-h-0 flex flex-col rounded-2xl border border-white/10 bg-slate-950/70",
-        "px-3 py-3 md:px-4 md:py-4",
+        "h-full min-h-0 flex flex-col glass-card glass-card-hover-soft border-white/10 bg-slate-950/80",
+        "px-4 py-4 md:px-5 md:py-5",
         "text-[11px]",
         "transition-opacity duration-300 ease-in-out",
         open ? "opacity-100" : "opacity-0 pointer-events-none",
       ].join(" ")}
     >
       {/* Nagłówek */}
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="badge-soft inline-flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70 shadow-sm shadow-emerald-400/40" />
             Szczegóły transakcji
           </div>
-          <div className="mt-1 text-[10px] text-slate-500 whitespace-nowrap">
+          <div className="text-[10px] text-slate-400 whitespace-nowrap">
             ID {transaction.id}
           </div>
         </div>
 
-        <span
+        <div
           className={[
-            "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
+            "inline-flex items-center rounded-2xl border px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap shadow-inner",
+            "shadow-black/30 backdrop-blur",
             transaction.amountNum >= 0
-              ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
-              : "border-rose-400/60 bg-rose-500/10 text-rose-200",
+              ? "border-emerald-300/60 bg-emerald-500/15 text-emerald-100"
+              : "border-rose-300/60 bg-rose-500/15 text-rose-100",
           ].join(" ")}
         >
           {formatCurrency(transaction.amountNum)}
-        </span>
+        </div>
       </div>
 
       {/* treść – przewijana wewnątrz */}
-      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+      <div className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1">
         {/* Kategoria + źródło */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
-              Kategoria
+        <div className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 shadow-inner shadow-black/20">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
+                Kategoria
+              </div>
+
+              <CategoryDropdown
+                value={transaction.category_id}
+                categories={categories}
+                onChange={(categoryId) =>
+                  onChangeCategory(transaction.id, categoryId)
+                }
+              />
             </div>
 
-            <CategoryDropdown
-              value={transaction.category_id}
-              categories={categories}
-              onChange={(categoryId) =>
-                onChangeCategory(transaction.id, categoryId)
-              }
-            />
-          </div>
-
-          <div className="flex flex-col items-end gap-1 pt-5">
-            {transaction.category_source ? (
-              <span className="text-[9px] uppercase tracking-[0.16em] text-slate-500 whitespace-nowrap">
-                źródło:
-                <span className="ml-1 text-indigo-300/90">
-                  {transaction.category_source}
+            <div className="flex flex-col items-end gap-1 pt-4">
+              {transaction.category_source ? (
+                <span className="text-[10px] uppercase tracking-[0.14em] text-indigo-200 whitespace-nowrap">
+                  Źródło: {transaction.category_source}
                 </span>
-              </span>
-            ) : (
-              <span className="text-[9px] text-slate-600 whitespace-nowrap">
-                źródło: —
-              </span>
-            )}
+              ) : (
+                <span className="text-[10px] text-slate-600 whitespace-nowrap">
+                  Źródło: —
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         {/* ✅ Dyskretna “automatyzacja podobnych” */}
         {ruleSuggestion && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[11px] text-slate-100 font-medium flex items-center gap-1.5">
+          <div className="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-3 py-3 flex items-start justify-between gap-3 shadow-inner shadow-indigo-500/10">
+            <div className="min-w-0 space-y-1">
+              <div className="text-[11px] text-indigo-50 font-semibold flex items-center gap-1.5">
                 <span className="text-[12px]">✨</span>
                 Automatyzacja podobnych
               </div>
-              <div className="mt-1 text-[10px] text-slate-400">
+              <div className="text-[10px] text-indigo-50/80 leading-snug">
                 Często pojawia się{" "}
-                <span className="text-indigo-200 font-semibold">
+                <span className="text-white font-semibold">
                   {ruleSuggestion.pattern_value}
                 </span>
                 . Chcesz automatycznie przypisać tę kategorię do podobnych transakcji
@@ -1569,17 +1570,17 @@ function TransactionSideDetails({
                 onClick={onAcceptRuleSuggestion}
                 disabled={enablingSuggestion}
                 className="
-                  rounded-full border border-indigo-400/60 bg-indigo-500/20
-                  px-3 py-1 text-[11px] font-medium text-indigo-100
-                  hover:bg-indigo-500/30 transition-colors
-                  disabled:opacity-50 disabled:cursor-not-allowed
+                  rounded-full border border-white/40 bg-white/15
+                  px-3 py-1.5 text-[11px] font-semibold text-white
+                  hover:bg-white/25 transition-colors
+                  disabled:opacity-60 disabled:cursor-not-allowed
                 "
               >
                 {enablingSuggestion ? "Włączanie…" : "Włącz"}
               </button>
               <button
                 onClick={onDismissRuleSuggestion}
-                className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                className="text-[10px] text-indigo-100/70 hover:text-white transition-colors"
                 type="button"
               >
                 Nie teraz
@@ -1590,24 +1591,24 @@ function TransactionSideDetails({
 
         {/* ✅ Banner po sukcesie “Włącz” */}
         {automationBanner && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+          <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-3 py-3 space-y-1 shadow-inner shadow-emerald-500/10">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-100">
               Automatyzacja
             </div>
-            <div className="mt-1 text-[11px] text-slate-200">
+            <div className="text-[11px] text-emerald-50">
               Włączona dla podobnych · zastosowano do{" "}
-              <span className="text-indigo-200 font-semibold">
+              <span className="text-white font-semibold">
                 {automationBanner.count}
               </span>
             </div>
-            <div className="mt-0.5 text-[10px] text-slate-500">
+            <div className="text-[10px] text-emerald-50/80">
               Wzorzec:{" "}
-              <span className="text-slate-300">{automationBanner.token}</span>
+              <span className="text-white/90">{automationBanner.token}</span>
               {automationBanner.categoryName ? (
                 <>
                   {" "}
                   →{" "}
-                  <span className="text-slate-300">
+                  <span className="text-white/90">
                     {automationBanner.categoryName}
                   </span>
                 </>
@@ -1616,21 +1617,26 @@ function TransactionSideDetails({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <DetailCell label="Data operacji" value={operationDate} />
-          <DetailCell label="Data waluty" value={valueDate} />
-          <DetailCell
-            label="Źródło"
-            value={transaction.is_manual ? "Ręczna" : "Import PDF"}
-          />
-          <DetailCell label="Konto (ID)" value={String(transaction.account_id)} />
+        <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">
+            Szczegóły operacji
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <DetailCell label="Data operacji" value={operationDate} />
+            <DetailCell label="Data waluty" value={valueDate} />
+            <DetailCell
+              label="Źródło"
+              value={transaction.is_manual ? "Ręczna" : "Import PDF"}
+            />
+            <DetailCell label="Konto (ID)" value={String(transaction.account_id)} />
+          </div>
         </div>
 
-        <div className="space-y-1">
-          <div className="text-slate-500">Pełny opis</div>
+        <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Pełny opis</div>
           <div
             className={[
-              "rounded-2xl border border-white/5 bg-slate-950/80 px-3 py-2 text-[11px]",
+              "rounded-2xl border border-white/5 bg-white/5 px-3 py-2 text-[11px]",
               "max-h-44 overflow-auto",
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
