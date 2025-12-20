@@ -174,6 +174,9 @@ export function LabClient() {
   const total = data?.coverage_total ?? 0;
   const uncategorized = Math.max(0, total - categorized);
   const coveragePct = clampPct(data?.coverage_pct ?? 0);
+  const suggestionCount = visibleSuggestions.length;
+  const ruleCount = rules.length;
+  const categoryCount = cats.length;
 
   const loadAll = async () => {
     setLoading(true);
@@ -509,7 +512,7 @@ export function LabClient() {
         <div className="absolute inset-0 -z-10 opacity-60 bg-[linear-gradient(0deg,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px]" />
         <div className="pointer-events-none absolute inset-x-8 top-10 -z-10 h-32 rounded-[28px] bg-gradient-to-r from-indigo-500/20 via-sky-500/12 to-emerald-400/18 blur-3xl" />
         {/* Hero */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/85 backdrop-blur-2xl shadow-[0_15px_80px_rgba(0,0,0,0.45)] transition-all hover:-translate-y-1 hover:border-indigo-300/50">
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/90 backdrop-blur-2xl shadow-[0_15px_80px_rgba(0,0,0,0.45)] transition-all hover:-translate-y-1 hover:border-indigo-300/50">
           <div className="absolute inset-px rounded-[22px] bg-[linear-gradient(135deg,rgba(255,255,255,0.06),transparent)]" />
           <div className="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_15%_20%,rgba(129,140,248,0.35),transparent_40%),radial-gradient(circle_at_90%_30%,rgba(16,185,129,0.25),transparent_45%)]" />
           <div className="absolute -top-14 left-10 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl animate-[pulse_16s_ease-in-out_infinite]" />
@@ -517,89 +520,102 @@ export function LabClient() {
           <div className="absolute inset-x-10 top-8 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
           <div className="relative px-6 sm:px-9 py-8 flex flex-col gap-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2 max-w-2xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-[11px] text-indigo-100 backdrop-blur">
-                <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
-                Inteligentne centrum automatyzacji
+            <div className="grid gap-6 lg:grid-cols-[1.05fr,0.95fr] items-start">
+              <div className="space-y-4 max-w-3xl">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-[11px] text-indigo-100 backdrop-blur">
+                    <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+                    Inteligentne centrum automatyzacji
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">
+                    Widok inspirowany Flow i Dashboard
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-3xl md:text-[32px] font-semibold text-slate-50 tracking-tight">
+                    Lab
+                  </h1>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">nowoczesny podgląd</span>
+                </div>
+
+                <p className="text-sm md:text-[13px] text-slate-300 leading-relaxed">
+                  Nowy widok Labu łączy DNA dashboardu z interaktywnymi panelami Flow. Najważniejsze metryki masz w zasięgu ręki, a każda akcja podkreśla się subtelną animacją.
+                </p>
+
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={refreshAll}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-100 hover:-translate-y-0.5 hover:bg-white/10 hover:border-white/20 transition-all"
+                  >
+                    <span className="h-2 w-2 rounded-full bg-emerald-300" />
+                    Odśwież dane
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyRulesNow}
+                    disabled={rulesBusyId === "apply"}
+                    className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-[11px] text-emerald-100 hover:-translate-y-0.5 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
+                  >
+                    {rulesBusyId === "apply" ? "Zastosuj…" : "Zastosuj reguły"}
+                  </button>
+                  <Link
+                    href="/flow"
+                    className="inline-flex items-center gap-2 rounded-full border border-indigo-400/50 bg-indigo-500/25 px-3 py-1.5 text-[11px] text-indigo-100 hover:-translate-y-0.5 hover:bg-indigo-500/35 transition-all"
+                  >
+                    Otwórz Flow →
+                  </Link>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <HeroStat
+                    title="Pokrycie kategorii"
+                    value={data ? `${coveragePct.toFixed(2)}%` : "—"}
+                    detail={data ? `${categorized}/${total}` : "włącz import"}
+                  />
+                  <HeroStat
+                    title="Automatyzacje"
+                    value={data ? `${data.assignments_rule}` : "—"}
+                    detail="reguły + AI"
+                  />
+                  <HeroStat
+                    title="Ręczne decyzje"
+                    value={data ? `${data.assignments_manual}` : "—"}
+                    detail="uczą model"
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl md:text-[32px] font-semibold text-slate-50 tracking-tight">
-                  Lab
-                </h1>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">nowoczesny podgląd</span>
+
+              <div className="relative">
+                <CoverageGauge
+                  value={coveragePct}
+                  total={total}
+                  categorized={categorized}
+                  uncategorized={uncategorized}
+                />
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur text-[11px] text-slate-200 shadow-[0_10px_50px_rgba(0,0,0,0.35)]">
+                  <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                    <span>Flow DNA</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-slate-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                      Live
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <BadgePill label="Hover states" desc="podkreślone akcje" />
+                    <BadgePill label="Animacje" desc="subtelne ruchy jak w Flow" />
+                    <BadgePill label="Gradienty" desc="DNA dashboardu" />
+                    <BadgePill label="Focus" desc="klarowna hierarchia" />
+                  </div>
+                </div>
               </div>
-              <p className="text-sm md:text-[13px] text-slate-300 leading-relaxed">
-                Nowy widok Labu to minimalistyczna przestrzeń, która łączy dane, automatyzacje i sugestie w jednym miejscu. Wszystko jest interaktywne, a kluczowe akcje masz pod ręką.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={refreshAll}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-100 hover:-translate-y-0.5 hover:bg-white/10 hover:border-white/20 transition-all"
-              >
-                <span className="h-2 w-2 rounded-full bg-emerald-300" />
-                Odśwież dane
-              </button>
-              <button
-                type="button"
-                onClick={applyRulesNow}
-                disabled={rulesBusyId === "apply"}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-[11px] text-emerald-100 hover:-translate-y-0.5 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
-              >
-                {rulesBusyId === "apply" ? "Zastosuj…" : "Zastosuj reguły"}
-              </button>
-              <Link
-                href="/flow"
-                className="inline-flex items-center gap-2 rounded-full border border-indigo-400/50 bg-indigo-500/25 px-3 py-1.5 text-[11px] text-indigo-100 hover:-translate-y-0.5 hover:bg-indigo-500/35 transition-all"
-              >
-                Otwórz Flow →
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3 text-[11px]">
-            <MiniKpi
-              label="Pokrycie kategorii"
-              value={data ? `${coveragePct.toFixed(2)}%` : "—"}
-              hint={data ? `${categorized}/${total}` : "—"}
-            />
-            <MiniKpi
-              label="Automatyczne przypisania"
-              value={data ? `${data.assignments_rule}` : "—"}
-              hint="reguły / AI"
-            />
-            <MiniKpi
-              label="Do przejrzenia"
-              value={data ? `${uncategorized}` : "—"}
-              hint="bez kategorii"
-            />
-          </div>
-
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] text-slate-300 shadow-[0_10px_50px_rgba(0,0,0,0.35)]">
-            <div className="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_15%_20%,rgba(129,140,248,0.16),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.18),transparent_45%)]" />
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-80" />
-            <div className="relative flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 hover:border-indigo-300/60 hover:text-indigo-50 transition-all">
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-pulse" />
-                Interaktywne panele
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 hover:border-emerald-300/60 hover:text-emerald-50 transition-all">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                Animacje przy akcjach
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 hover:border-sky-300/60 hover:text-sky-50 transition-all">
-                <span className="h-1.5 w-1.5 rounded-full bg-sky-300" />
-                Flowowy gradientowy vibe
-              </span>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.25fr,1fr]">
+        <div className="grid gap-6 xl:grid-cols-[1.25fr,1fr]">
         {/* LEFT */}
         <div className="flex flex-col gap-6">
           {/* Smart overview */}
@@ -632,19 +648,19 @@ export function LabClient() {
 
               <div className="mt-4 grid gap-3 sm:grid-cols-3 text-[11px]">
                 <MiniKpi
-                  label="Pokrycie kategorii"
-                  value={data ? `${coveragePct.toFixed(2)}%` : "—"}
-                  hint={data ? `${categorized}/${total}` : "—"}
+                  label="Widoczne sugestie"
+                  value={loading ? "—" : `${suggestionCount}`}
+                  hint="czeka na decyzję"
                 />
                 <MiniKpi
-                  label="Automatyczne przypisania"
-                  value={data ? `${data.assignments_rule}` : "—"}
-                  hint="reguły / AI"
+                  label="Reguły"
+                  value={rulesLoading ? "—" : `${ruleCount}`}
+                  hint="kolejność = priorytet"
                 />
                 <MiniKpi
-                  label="Do przejrzenia"
-                  value={data ? `${uncategorized}` : "—"}
-                  hint="bez kategorii"
+                  label="Kategorie"
+                  value={loading ? "—" : `${categoryCount}`}
+                  hint="mapa w Flow"
                 />
               </div>
 
@@ -1468,6 +1484,121 @@ function MiniKpi({ label, value, hint }: { label: string; value: string; hint: s
       <div className="relative text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
       <div className="relative mt-1 text-[16px] font-semibold text-slate-50">{value}</div>
       <div className="relative mt-0.5 text-[10px] text-slate-500">{hint}</div>
+    </div>
+  );
+}
+
+function HeroStat({
+  title,
+  value,
+  detail,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-[0_10px_40px_rgba(0,0,0,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300/50">
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-r from-indigo-500/15 to-emerald-500/15 transition-opacity" />
+      <div className="relative text-[10px] uppercase tracking-[0.16em] text-slate-500">{title}</div>
+      <div className="relative mt-1 text-[15px] font-semibold text-slate-50">{value}</div>
+      <div className="relative mt-0.5 text-[10px] text-slate-400">{detail}</div>
+    </div>
+  );
+}
+
+function BadgePill({ label, desc }: { label: string; desc: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/50 px-3 py-2 text-left text-[11px] text-slate-200 transition-all hover:border-indigo-300/50 hover:bg-indigo-500/10">
+      <span className="h-2 w-2 rounded-full bg-gradient-to-br from-indigo-300 to-emerald-300 shadow-[0_0_0_4px_rgba(99,102,241,0.15)]" />
+      <div className="leading-tight">
+        <div className="font-medium text-slate-50">{label}</div>
+        <div className="text-[10px] text-slate-400">{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function CoverageGauge({
+  value,
+  total,
+  categorized,
+  uncategorized,
+}: {
+  value: number;
+  total: number;
+  categorized: number;
+  uncategorized: number;
+}) {
+  const pct = clampPct(value ?? 0);
+  const uncategorizedPct = clampPct((uncategorized / Math.max(1, total)) * 100);
+
+  return (
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/85 via-slate-950/70 to-slate-900/70 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+      <div className="absolute -top-10 -left-6 h-28 w-28 rounded-full bg-indigo-500/10 blur-3xl" />
+      <div className="absolute -bottom-16 right-0 h-32 w-32 rounded-full bg-emerald-500/10 blur-3xl" />
+
+      <div className="relative flex items-center gap-5 sm:gap-6">
+        <div className="relative h-36 w-36 shrink-0">
+          <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.06),transparent_60%)]" />
+          <div
+            className="relative h-full w-full rounded-full border border-white/10 bg-slate-950/70 shadow-inner"
+            style={{
+              background: `conic-gradient(from 180deg, rgba(129,140,248,0.75) ${pct}%, rgba(255,255,255,0.08) ${pct}% 100%)`,
+            }}
+          >
+            <div className="absolute inset-3 rounded-full border border-white/5 bg-slate-950/80 flex flex-col items-center justify-center text-center">
+              <div className="text-[12px] text-slate-400">Pokrycie</div>
+              <div className="text-lg font-semibold text-slate-50">{Number.isFinite(pct) ? pct.toFixed(1) : "—"}%</div>
+              <div className="text-[10px] text-slate-500">{categorized}/{total}</div>
+            </div>
+          </div>
+          <div className="absolute -inset-1 rounded-full border border-indigo-400/20 opacity-60 animate-[spin_16s_linear_infinite]" />
+        </div>
+
+        <div className="flex-1 space-y-3 text-[11px] text-slate-300">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+            <span>Status danych</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-slate-300">
+              {total === 0 ? "czeka" : "aktywny"}
+            </span>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span>Pokryte kategorie</span>
+              <span className="text-slate-100">{categorized.toLocaleString("pl-PL")}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400 transition-all"
+                style={{ width: `${pct.toFixed(0)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span>Do przejrzenia</span>
+              <span className="text-amber-200">{uncategorized.toLocaleString("pl-PL")}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-300 via-amber-200 to-transparent transition-all"
+                style={{ width: `${uncategorizedPct.toFixed(0)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] text-slate-400">
+            <div className="flex items-center justify-between text-slate-300">
+              <span>Łącznie rekordów</span>
+              <span className="text-slate-100">{total.toLocaleString("pl-PL")}</span>
+            </div>
+            <div className="mt-1 text-[10px] text-slate-500">Sugestie AI priorytetyzują brakujące kategorie.</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
