@@ -96,6 +96,7 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [suggestionSort, setSuggestionSort] = useState<"potential" | "manual">("potential");
   const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
+  const [suggestionQuery, setSuggestionQuery] = useState("");
 
   // Categories
   const [cats, setCats] = useState<Category[]>(initialData?.categories ?? []);
@@ -104,6 +105,7 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
   const [catColor, setCatColor] = useState<string>("#7c3aed");
   const [catError, setCatError] = useState<string | null>(null);
   const [catBusy, setCatBusy] = useState<number | "create" | null>(null);
+  const [categorySearch, setCategorySearch] = useState("");
 
   // Inline edit categories
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -115,6 +117,7 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
   const [rulesLoading, setRulesLoading] = useState(!initialData);
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [rulesBusyId, setRulesBusyId] = useState<number | "create" | "apply" | "reorder" | "delete" | null>(null);
+  const [ruleFilter, setRuleFilter] = useState<"all" | "enabled" | "disabled">("all");
 
   // create rule form
   const [newRuleCategoryId, setNewRuleCategoryId] = useState<number | "">("");
@@ -157,17 +160,42 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
     return [...cats].sort((a, b) => a.name.localeCompare(b.name, "pl"));
   }, [cats]);
 
+  const filteredCats = useMemo(() => {
+    const term = categorySearch.trim().toLowerCase();
+    if (!term) return sortedCats;
+    return sortedCats.filter((c) => c.name.toLowerCase().includes(term));
+  }, [categorySearch, sortedCats]);
+
   const sortedRules = useMemo(() => {
     return [...rules].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
   }, [rules]);
+
+  const filteredRules = useMemo(() => {
+    if (ruleFilter === "enabled") return sortedRules.filter((r) => r.enabled);
+    if (ruleFilter === "disabled") return sortedRules.filter((r) => !r.enabled);
+    return sortedRules;
+  }, [ruleFilter, sortedRules]);
 
   const visibleSuggestions = useMemo(() => {
     if (!data) return [];
     return data.suggestions.filter((s) => !dismissed.has(s.suggestion_key));
   }, [data, dismissed]);
 
+  const filteredSuggestions = useMemo(() => {
+    const term = suggestionQuery.trim().toLowerCase();
+    if (!term) return visibleSuggestions;
+
+    return visibleSuggestions.filter((s) => {
+      const cat = catById.get(s.category_id);
+      return (
+        s.pattern_value.toLowerCase().includes(term) ||
+        (cat?.name?.toLowerCase().includes(term) ?? false)
+      );
+    });
+  }, [catById, suggestionQuery, visibleSuggestions]);
+
   const sortedSuggestions = useMemo(() => {
-    const arr = [...visibleSuggestions];
+    const arr = [...filteredSuggestions];
     if (suggestionSort === "potential") {
       return arr.sort(
         (a, b) => (b.potential_matches ?? 0) - (a.potential_matches ?? 0)
@@ -177,13 +205,15 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
     return arr.sort(
       (a, b) => (b.manual_occurrences ?? 0) - (a.manual_occurrences ?? 0)
     );
-  }, [suggestionSort, visibleSuggestions]);
+  }, [filteredSuggestions, suggestionSort]);
 
   const categorized = data?.coverage_categorized ?? 0;
   const total = data?.coverage_total ?? 0;
   const uncategorized = Math.max(0, total - categorized);
   const coveragePct = clampPct(data?.coverage_pct ?? 0);
   const suggestionCount = visibleSuggestions.length;
+  const hasSuggestions = suggestionCount > 0;
+  const hasFilteredSuggestions = sortedSuggestions.length > 0;
   const ruleCount = rules.length;
   const categoryCount = cats.length;
 
@@ -841,9 +871,26 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
 
               {/* Rules list */}
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-                <div className="px-4 py-2 border-b border-white/10 text-[10px] uppercase tracking-[0.16em] text-slate-500 flex items-center justify-between">
+                <div className="px-4 py-2 border-b border-white/10 text-[10px] uppercase tracking-[0.16em] text-slate-500 flex flex-wrap items-center justify-between gap-3">
                   <span>Aktywne reguły</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                    <div className="inline-flex rounded-full border border-white/10 bg-slate-900/60 p-1">
+                      {["all", "enabled", "disabled"].map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setRuleFilter(mode as any)}
+                          className={[
+                            "px-3 py-1 rounded-full capitalize",
+                            ruleFilter === mode
+                              ? "bg-indigo-500/80 text-slate-950 shadow"
+                              : "text-slate-200 hover:bg-white/5",
+                          ].join(" ")}
+                        >
+                          {mode === "all" ? "wszystkie" : mode === "enabled" ? "aktywne" : "wstrzymane"}
+                        </button>
+                      ))}
+                    </div>
                     <button
                       type="button"
                       onClick={applyRulesNow}
@@ -858,13 +905,15 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
 
                 {rulesLoading ? (
                   <div className="px-4 py-4 text-[11px] text-slate-400">Ładowanie reguł…</div>
-                ) : sortedRules.length === 0 ? (
+                ) : filteredRules.length === 0 ? (
                   <div className="px-4 py-4 text-[11px] text-slate-400">
-                    Brak reguł. Skorzystaj z sugestii AI albo dodaj własną automatyzację powyżej.
+                    {sortedRules.length === 0
+                      ? "Brak reguł. Skorzystaj z sugestii AI albo dodaj własną automatyzację powyżej."
+                      : "Brak wyników dla tego filtra. Zmień widok lub dodaj nową regułę."}
                   </div>
                 ) : (
                   <div className="divide-y divide-white/10">
-                    {sortedRules.map((r, idx) => {
+                    {filteredRules.map((r, idx) => {
                       const isEditing = editingRuleId === r.id;
                       const cat = catById.get(r.category_id);
                       const isBusy = rulesBusyId === r.id || rulesBusyId === "reorder" || rulesBusyId === "delete";
@@ -1055,6 +1104,31 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 </div>
               )}
 
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] text-slate-300">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  <span className="h-2 w-2 rounded-full bg-indigo-300 animate-[pulse_6s_ease-in-out_infinite]" />
+                  Szybkie filtrowanie
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-500">🔍</div>
+                    <input
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      placeholder="Szukaj kategorii…"
+                      className="h-9 w-48 rounded-full border border-white/10 bg-slate-900/70 pl-9 pr-3 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-400/70"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCategorySearch("")}
+                    className="rounded-full border border-white/10 bg-white/0 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/10 transition-colors"
+                  >
+                    Wyczyść
+                  </button>
+                </div>
+              </div>
+
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:border-white/20 transition-colors">
                 {/* naprawiony layout: button nie rozciąga się */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -1101,7 +1175,7 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 </div>
 
                 <div className="divide-y divide-white/10">
-                  {sortedCats.map((c) => {
+                  {filteredCats.map((c) => {
                     const count = catStats[c.id] ?? 0;
                     const isEditing = editingId === c.id;
 
@@ -1184,9 +1258,11 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                     );
                   })}
 
-                  {sortedCats.length === 0 && (
+                  {filteredCats.length === 0 && (
                     <div className="px-4 py-4 text-[11px] text-slate-400">
-                      Brak kategorii. Dodaj pierwszą powyżej.
+                      {sortedCats.length === 0
+                        ? "Brak kategorii. Dodaj pierwszą powyżej."
+                        : "Nic nie znaleziono — spróbuj innego hasła lub wyczyść filtr."}
                     </div>
                   )}
                 </div>
@@ -1261,6 +1337,16 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                   </button>
                 </div>
 
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-500">🔎</div>
+                  <input
+                    value={suggestionQuery}
+                    onChange={(e) => setSuggestionQuery(e.target.value)}
+                    placeholder="Filtruj sugestie…"
+                    className="h-9 w-44 rounded-full border border-white/10 bg-slate-900/70 pl-9 pr-3 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-400/70"
+                  />
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setSuggestionsCollapsed((prev) => !prev)}
@@ -1275,7 +1361,7 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-[11px] text-slate-400">
                 Ładowanie modułu AI…
               </div>
-            ) : !data || visibleSuggestions.length === 0 ? (
+            ) : !data || !hasSuggestions ? (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-[11px] text-slate-400 space-y-2">
                 <div className="text-slate-200 font-medium">Tryb uczenia</div>
                 <div>
@@ -1306,6 +1392,22 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 >
                   Otwórz
                 </button>
+              </div>
+            ) : !hasFilteredSuggestions ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-[11px] text-slate-300 space-y-1">
+                <div className="text-slate-100 font-medium">Nic nie pasuje do filtra</div>
+                <div className="text-slate-400">
+                  Spróbuj innego hasła lub wyczyść filtr, aby zobaczyć wszystkie podpowiedzi AI.
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setSuggestionQuery("")}
+                    className="rounded-full border border-white/10 bg-white/0 px-3 py-1 text-[11px] text-slate-200 hover:bg-white/10"
+                  >
+                    Wyczyść filtr
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-2">
