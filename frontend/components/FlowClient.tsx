@@ -963,19 +963,21 @@ function FlowSidebar({
   onKindChange: (k: "all" | "income" | "expense") => void;
 }) {
   return (
-    <aside className="glass-card p-4 space-y-4 h-fit">
-      <div className="space-y-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-          Filtry
-        </div>
-        <p className="text-[11px] text-slate-500">
-          Typ + zakres czasu. Pozostałe filtry masz w panelu nad tabelą.
+    <aside className="h-fit rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-[0_12px_50px_-30px_rgba(0,0,0,0.8)] backdrop-blur">
+      <div className="relative pb-4">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Filtry</div>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+          Typ + zakres czasu. Pozostałe filtry są w panelu nad tabelą.
         </p>
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-white/0 via-white/10 to-white/0" />
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">Typ przepływu</div>
-        <div className="flex flex-wrap gap-1">
+      <div className="space-y-3 py-4">
+        <div className="flex items-center justify-between text-[11px] text-slate-300">
+          <span className="font-medium text-slate-200">Typ przepływu</span>
+          <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">3 opcje</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <ChipButton active={kind === "all"} onClick={() => onKindChange("all")}>
             Wszystkie
           </ChipButton>
@@ -994,19 +996,22 @@ function FlowSidebar({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">Presety zakresów</div>
-        <div className="grid grid-cols-3 gap-1 text-[11px]">
+      <div className="space-y-3 py-4">
+        <div className="flex items-center justify-between text-[11px] text-slate-300">
+          <span className="font-medium text-slate-200">Presety zakresów</span>
+          <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Szybki wybór</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-[11px]">
           {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => onRangeChange(key)}
               className={[
-                "rounded-full px-2 py-1 border transition-all",
+                "rounded-xl border px-3 py-2 text-center transition-colors",
                 range === key
-                  ? "bg-white/80 text-slate-900 border-white"
-                  : "bg-white/0 text-slate-300 border-white/10 hover:bg-white/10",
+                  ? "border-white/60 bg-white/90 text-slate-900 shadow-inner shadow-white/60"
+                  : "border-white/10 bg-white/0 text-slate-300 hover:border-white/30 hover:bg-white/5",
               ].join(" ")}
             >
               {rangeLabelShort(key)}
@@ -1015,13 +1020,15 @@ function FlowSidebar({
         </div>
       </div>
 
-      <div className="border-t border-white/10 pt-3 text-[11px] text-slate-500">
-        Tip: hover na “Opis” pokazuje pełny tekst bez rozwalania wierszy.
+      <div className="flex items-start gap-2 rounded-xl border border-white/5 bg-white/5 px-3 py-3 text-[11px] text-slate-400">
+        <div className="mt-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
+        <p className="leading-relaxed">
+          Tip: hover na “Opis” pokazuje pełny tekst bez rozwalania wierszy.
+        </p>
       </div>
     </aside>
   );
 }
-
 function ChipButton({
   active,
   onClick,
@@ -1036,10 +1043,10 @@ function ChipButton({
       type="button"
       onClick={onClick}
       className={[
-        "px-3 py-1 rounded-full text-[11px] border transition-all",
+        "rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors",
         active
-          ? "bg-white/80 text-slate-900 border-white shadow-md shadow-white/40"
-          : "bg-white/0 text-slate-300 border-white/10 hover:bg-white/10",
+          ? "border-white/60 bg-white/90 text-slate-900 shadow-inner shadow-white/60"
+          : "border-white/10 bg-white/0 text-slate-200 hover:border-white/30 hover:bg-white/5",
       ].join(" ")}
     >
       {children}
