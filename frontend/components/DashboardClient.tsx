@@ -157,9 +157,9 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_20%,rgba(16,185,129,0.14),transparent_45%),radial-gradient(circle_at_80%_12%,rgba(129,140,248,0.16),transparent_42%),radial-gradient(circle_at_75%_75%,rgba(236,72,153,0.18),transparent_50%)]" />
         <motion.div
           aria-hidden
-          className="absolute -inset-x-10 top-10 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent"
-          animate={{ opacity: [0.2, 1, 0.2] }}
-          transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute -inset-x-10 top-6 h-14 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.18),transparent_65%)] blur-3xl"
+          animate={{ opacity: [0.18, 0.38, 0.18] }}
+          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
         />
 
         <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
