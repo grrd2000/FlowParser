@@ -30,11 +30,7 @@ const steps = [
 
 export default function LandingPage() {
   return (
-    <div className="relative mx-auto max-w-screen-2xl overflow-hidden space-y-16 px-6 md:px-10 lg:px-14">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="bg-orbit bg-orbit--left" />
-        <div className="bg-orbit bg-orbit--right" />
-      </div>
+    <div className="mx-auto max-w-screen-2xl space-y-16 px-6 md:px-10 lg:px-14">
 
       <section className="relative grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
         <motion.div
