@@ -1481,7 +1481,7 @@ function TransactionSideDetails({
   return (
     <aside
       className={[
-        "min-w-[320px] max-w-[320px]",
+        "min-w-[360px] max-w-[360px]",
         "h-full min-h-0 flex flex-col glass-card glass-card-hover-soft border-white/10 bg-slate-950/80",
         "px-4 py-4 md:px-5 md:py-5",
         "text-[11px]",
@@ -1515,9 +1515,9 @@ function TransactionSideDetails({
       </div>
 
       {/* treść – przewijana wewnątrz */}
-      <div className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1">
+      <div className="flex-1 min-h-0 space-y-5 overflow-y-auto pr-1">
         {/* Kategoria + źródło */}
-        <div className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 shadow-inner shadow-black/20">
+        <div className="space-y-2 border-b border-white/5 pb-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
@@ -1533,29 +1533,24 @@ function TransactionSideDetails({
               />
             </div>
 
-            <div className="flex flex-col items-end gap-1 pt-4">
-              {transaction.category_source ? (
-                <span className="text-[10px] uppercase tracking-[0.14em] text-indigo-200 whitespace-nowrap">
-                  Źródło: {transaction.category_source}
-                </span>
-              ) : (
-                <span className="text-[10px] text-slate-600 whitespace-nowrap">
-                  Źródło: —
-                </span>
-              )}
+            <div className="flex flex-col items-end gap-1 pt-2 text-[10px] text-slate-400">
+              <span className="uppercase tracking-[0.14em] text-indigo-200">Źródło</span>
+              <span className="text-slate-100 whitespace-nowrap">
+                {transaction.category_source ?? "—"}
+              </span>
             </div>
           </div>
         </div>
 
         {/* ✅ Dyskretna “automatyzacja podobnych” */}
         {ruleSuggestion && (
-          <div className="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-3 py-3 flex items-start justify-between gap-3 shadow-inner shadow-indigo-500/10">
+          <div className="rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3 py-3 flex items-start justify-between gap-3 shadow-inner shadow-indigo-500/10">
             <div className="min-w-0 space-y-1">
-              <div className="text-[11px] text-indigo-50 font-semibold flex items-center gap-1.5">
+              <div className="text-[11px] text-indigo-50 font-semibold flex items-center gap-1.5 leading-relaxed">
                 <span className="text-[12px]">✨</span>
                 Automatyzacja podobnych
               </div>
-              <div className="text-[10px] text-indigo-50/80 leading-snug">
+              <div className="text-[10px] text-indigo-50/80 leading-relaxed">
                 Często pojawia się{" "}
                 <span className="text-white font-semibold">
                   {ruleSuggestion.pattern_value}
@@ -1591,7 +1586,7 @@ function TransactionSideDetails({
 
         {/* ✅ Banner po sukcesie “Włącz” */}
         {automationBanner && (
-          <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-3 py-3 space-y-1 shadow-inner shadow-emerald-500/10">
+          <div className="rounded-xl border border-emerald-300/20 bg-emerald-500/10 px-3 py-3 space-y-1 shadow-inner shadow-emerald-500/10">
             <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-100">
               Automatyzacja
             </div>
@@ -1617,7 +1612,7 @@ function TransactionSideDetails({
           </div>
         )}
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 space-y-2">
+        <div className="space-y-2 border-b border-white/5 pb-4">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">
             Szczegóły operacji
           </div>
@@ -1632,12 +1627,12 @@ function TransactionSideDetails({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-3 space-y-2">
+        <div className="space-y-2 pt-1">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Pełny opis</div>
           <div
             className={[
-              "rounded-2xl border border-white/5 bg-white/5 px-3 py-2 text-[11px]",
-              "max-h-44 overflow-auto",
+              "rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-[11px]",
+              "max-h-44 overflow-auto leading-relaxed",
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
