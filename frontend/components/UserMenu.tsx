@@ -54,21 +54,20 @@ export function UserMenu() {
       <button
         onClick={() => setOpen((v) => !v)}
         className={[
-          "group inline-flex items-center gap-3",
-          "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl",
-          "px-3.5 py-1.5 text-[11px] text-slate-100 shadow-inner shadow-black/30",
+          "group inline-flex items-center gap-2",
+          "px-1.5 py-1 text-[11px] text-slate-100",
           "transition-all duration-150",
-          "hover:border-indigo-400/50 hover:bg-white/10",
+          "hover:text-white",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70",
-          open ? "border-indigo-400/60 bg-white/10" : "",
+          open ? "text-white" : "",
         ].join(" ")}
       >
         <span
           className="
-            inline-flex h-8 w-8 items-center justify-center
-            rounded-xl border border-white/10 bg-gradient-to-br
+            inline-flex h-7 w-7 items-center justify-center
+            rounded-full border border-white/15 bg-gradient-to-br
             from-indigo-400/90 via-sky-300/80 to-emerald-300/80
-            text-[11px] font-semibold text-slate-950 shadow-inner shadow-black/20
+            text-[10px] font-semibold text-slate-950 shadow-inner shadow-black/20
           "
         >
           {initials}
@@ -84,8 +83,7 @@ export function UserMenu() {
         <span className="sm:hidden text-[11px] font-semibold">{label}</span>
         <span
           className={[
-            "grid h-6 w-6 place-items-center rounded-full border border-white/10",
-            "bg-white/5 text-[10px] text-slate-200 transition-transform duration-150",
+            "grid h-6 w-6 place-items-center text-[10px] text-slate-200 transition-transform duration-150",
             "group-hover:translate-y-[1px]",
             open ? "rotate-180" : "",
           ].join(" ")}
