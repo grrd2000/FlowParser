@@ -86,19 +86,26 @@
   .aurora-pane {
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at 25% 20%, rgba(129, 140, 248, 0.38), transparent 45%),
-      radial-gradient(circle at 80% 10%, rgba(45, 212, 191, 0.3), transparent 40%),
-      radial-gradient(circle at 60% 70%, rgba(94, 234, 212, 0.18), transparent 50%);
+    background: radial-gradient(circle at 25% 20%, rgba(129, 140, 248, 0.34), transparent 45%),
+      radial-gradient(circle at 80% 10%, rgba(45, 212, 191, 0.26), transparent 40%),
+      radial-gradient(circle at 60% 70%, rgba(94, 234, 212, 0.16), transparent 50%);
     mix-blend-mode: screen;
-    opacity: 0.6;
-    animation: aurora 24s ease-in-out infinite alternate;
+    opacity: 0.55;
   }
 
   .aurora-pane--secondary {
-    filter: blur(60px);
-    background: radial-gradient(circle at 70% 50%, rgba(56, 189, 248, 0.25), transparent 45%),
-      radial-gradient(circle at 35% 80%, rgba(167, 139, 250, 0.24), transparent 50%);
-    animation-duration: 28s;
+    filter: blur(52px);
+    background: radial-gradient(circle at 70% 50%, rgba(56, 189, 248, 0.22), transparent 45%),
+      radial-gradient(circle at 35% 80%, rgba(167, 139, 250, 0.22), transparent 50%);
+  }
+
+  .aurora-pane--animated {
+    animation: aurora 26s ease-in-out infinite alternate;
+    will-change: transform, filter;
+  }
+
+  .aurora-pane--static {
+    animation: none;
   }
 }
 
@@ -189,7 +196,6 @@
 @layer base {
   body {
     @apply min-h-screen bg-gradient-to-br from-[#0a0f1c] via-[#101828] to-[#1a2235] text-slate-200 antialiased;
-    background-attachment: fixed;
     font-family: Arial, Helvetica, sans-serif;
   }
 

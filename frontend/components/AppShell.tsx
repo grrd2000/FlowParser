@@ -6,13 +6,18 @@ import { usePathname } from "next/navigation";
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isLanding = pathname === "/";
+  const enableBackdropMotion = isLanding;
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-grid-slate opacity-40 mix-blend-screen" />
-        <div className="aurora-pane" />
-        <div className="aurora-pane aurora-pane--secondary" />
+        <div className={`aurora-pane ${enableBackdropMotion ? "aurora-pane--animated" : "aurora-pane--static"}`} />
+        <div
+          className={`aurora-pane aurora-pane--secondary ${
+            enableBackdropMotion ? "aurora-pane--animated" : "aurora-pane--static"
+          }`}
+        />
         <div className="absolute inset-x-0 top-12 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
       </div>
 
