@@ -447,7 +447,7 @@ export function FlowClient() {
                 />
                 <KpiCard
                   label="Saldo"
-                  value={loading ? "—" : formatCurrency(metrics.balance)}
+                  value={loading ? "—" : formatCurrency(metrics.net)}
                   subtitle={rangeText}
                   compact
                 />
@@ -562,7 +562,7 @@ export function FlowClient() {
               <div
                 className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
                 style={{
-                  flexBasis: detailOpen ? "calc(100% - 320px)" : "100%",
+                  flexBasis: detailOpen ? "calc(100% - 360px)" : "100%",
                   flexGrow: 1,
                   flexShrink: 1,
                 }}
@@ -578,7 +578,7 @@ export function FlowClient() {
 
               <div
                 className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0 h-full min-h-0"
-                style={{ flexBasis: detailOpen ? "320px" : "0px" }}
+                style={{ flexBasis: detailOpen ? "360px" : "0px" }}
               >
                 <div className="h-full flex justify-start">
                   {selectedTx && (
