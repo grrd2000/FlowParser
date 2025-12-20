@@ -14,6 +14,7 @@ export type Transaction = {
   is_manual: boolean;
   category_id?: number | null;
   category_source?: string | null;
+  category_confidence?: number | null;
 };
 
 export type UserProfile = {
@@ -284,8 +285,8 @@ export async function fetchCategories(): Promise<Category[]> {
 export async function updateTransactionCategory(
   txId: number,
   categoryId: number | null
-): Promise<{ transaction: Transaction; rule_suggestion: RuleSuggestion | null }> {
-  return requestJson<{ transaction: Transaction; rule_suggestion: RuleSuggestion | null }>(
+): Promise<Transaction & { rule_suggestion: RuleSuggestion | null }> {
+  return requestJson<Transaction & { rule_suggestion: RuleSuggestion | null }>(
     `/transactions/${txId}/category`,
     {
       method: "PUT",

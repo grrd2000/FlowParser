@@ -266,7 +266,7 @@ export function FlowClient() {
 
   const handleChangeCategory = async (txId: number, categoryId: number | null) => {
     try {
-      const { transaction: updated, rule_suggestion } =
+      const { rule_suggestion, ...updated } =
         await updateTransactionCategory(txId, categoryId);
 
       setTransactions((prev) =>
