@@ -20,9 +20,7 @@ export function TopNav() {
   return (
     <header className="fixed top-0 left-0 right-0 z-40 bg-slate-950/80 backdrop-blur-xl">
       <div className="mx-auto w-full max-w-screen-2xl px-4 md:px-6 lg:px-10">
-        <div className="relative mt-2 flex h-16 items-center justify-between gap-4 rounded-full border border-white/5 bg-gradient-to-r from-slate-950/90 via-slate-900/70 to-slate-950/90 px-4 shadow-[0_15px_45px_-25px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-indigo-500/10 via-sky-400/5 to-emerald-400/10 blur-xl" aria-hidden />
-
+        <div className="relative mt-2 flex h-16 items-center justify-between gap-4 px-2">
           {/* brand */}
           <Link
             href="/"
@@ -40,7 +38,7 @@ export function TopNav() {
           {/* nav */}
           <nav className="hidden flex-1 justify-center md:flex">
             <div className="relative inline-flex items-center gap-1 rounded-full border border-white/5 bg-slate-900/70 px-1 py-1 shadow-inner shadow-black/20">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-r from-white/5 via-indigo-400/5 to-emerald-400/5" aria-hidden />
+              <div className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-r from-white/5 via-indigo-400/5 to-emerald-400/5" aria-hidden />
               {navItems.map((item) => {
                 const active = isActive(item.href);
                 return (
