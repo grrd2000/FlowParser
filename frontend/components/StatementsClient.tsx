@@ -327,7 +327,7 @@ function FilterControl({
   return (
     <Popover.Root>
       <Popover.Trigger
-        className="group relative inline-flex min-w-[180px] items-center gap-3 rounded-full border border-slate-800/80 bg-slate-950/70 px-3 py-2 pr-4 text-left shadow-inner shadow-black/30 transition hover:border-indigo-400/60 hover:shadow-indigo-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 data-[state=open]:border-indigo-400/70"
+        className="group relative inline-flex min-w-[150px] items-center gap-2 rounded-full border border-slate-800/80 bg-slate-950/70 px-3 py-1.5 pr-3 text-left shadow-inner shadow-black/30 transition hover:border-indigo-400/60 hover:shadow-indigo-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 data-[state=open]:border-indigo-400/70"
         aria-label={`Filtruj po polu ${label}`}
       >
         <div className="absolute inset-0 overflow-hidden rounded-full">
@@ -337,26 +337,26 @@ function FilterControl({
           <span className="absolute inset-0 rounded-full border border-slate-700/70" />
         </div>
 
-        <div className="relative flex items-center justify-center rounded-full bg-slate-900/80 p-1.5 text-indigo-200 shadow-inner shadow-black/30">
+        <div className="relative flex items-center justify-center rounded-full bg-slate-900/80 p-1 text-indigo-200 shadow-inner shadow-black/30">
           <Icon className="h-4 w-4" />
         </div>
 
         <div className="relative flex flex-1 flex-col">
           <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">{label}</span>
-          <span className="text-sm font-semibold text-slate-100">{active?.label ?? value}</span>
+          <span className="text-[13px] font-semibold text-slate-100">{active?.label ?? value}</span>
           {active?.helper && (
-            <span className="text-[10px] text-slate-400">{active.helper}</span>
+            <span className="text-[9px] text-slate-400">{active.helper}</span>
           )}
         </div>
 
-        <span className="relative rounded-full bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-200 shadow-inner shadow-black/30">
+        <span className="relative rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-slate-200 shadow-inner shadow-black/30">
           ▼
         </span>
       </Popover.Trigger>
 
       <Popover.Content
         sideOffset={10}
-        className="z-50 w-[240px] rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
+        className="z-50 w-[220px] max-h-[340px] overflow-y-auto rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
       >
         <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-900/60 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-slate-400">
           <Icon className="h-3.5 w-3.5 text-indigo-300" />
@@ -369,14 +369,14 @@ function FilterControl({
               <button
                 type="button"
                 onClick={() => onChange(option.value)}
-                className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition duration-150 hover:-translate-y-[1px] hover:border-indigo-400/60 hover:bg-slate-900/90 ${
+                className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-1.5 text-left transition duration-150 hover:-translate-y-[1px] hover:border-indigo-400/60 hover:bg-slate-900/90 ${
                   option.value === value
                     ? "border-indigo-400/70 bg-slate-900/70 text-slate-100 shadow-lg shadow-indigo-500/10"
                     : "border-slate-800/80 bg-slate-950/60 text-slate-300"
                 }`}
               >
                 <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-semibold ${
                     option.value === value
                       ? "border-indigo-300 bg-indigo-500/20 text-indigo-100"
                       : "border-slate-700 bg-slate-900 text-slate-400"
