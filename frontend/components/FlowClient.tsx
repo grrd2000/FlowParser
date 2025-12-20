@@ -1481,33 +1481,40 @@ function TransactionSideDetails({
   return (
     <aside
       className={[
-        "min-w-[360px] max-w-[360px]",
-        "h-full min-h-0 flex flex-col glass-card glass-card-hover-soft border-white/10 bg-slate-950/80",
-        "px-4 py-4 md:px-5 md:py-5",
-        "text-[11px]",
-        "transition-opacity duration-300 ease-in-out",
-        open ? "opacity-100" : "opacity-0 pointer-events-none",
+        "min-w-[380px] max-w-[380px]",
+        "h-full min-h-0 flex flex-col rounded-3xl border border-white/10",
+        "bg-gradient-to-b from-slate-900/80 via-slate-950/85 to-slate-950/95 backdrop-blur",
+        "px-5 py-5 md:px-6 md:py-6",
+        "text-[11px] shadow-2xl shadow-black/30",
+        "transition-all duration-300 ease-in-out",
+        open
+          ? "opacity-100 translate-x-0"
+          : "opacity-0 pointer-events-none translate-x-3",
       ].join(" ")}
     >
       {/* Nagłówek */}
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="badge-soft inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70 shadow-sm shadow-emerald-400/40" />
+      <div className="mb-5 flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 shadow-inner shadow-black/20">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-slate-200 shadow-inner shadow-black/30">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/80 shadow-sm shadow-emerald-400/30" />
             Szczegóły transakcji
           </div>
-          <div className="text-[10px] text-slate-400 whitespace-nowrap">
-            ID {transaction.id}
+          <div className="flex items-center gap-2 text-[10px] text-slate-400">
+            <span className="rounded-full bg-slate-800/80 px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-slate-300">
+              ID {transaction.id}
+            </span>
+            <span className="text-slate-500">•</span>
+            <span className="text-slate-300">{transaction.name || "Transakcja"}</span>
           </div>
         </div>
 
         <div
           className={[
-            "inline-flex items-center rounded-2xl border px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap shadow-inner",
-            "shadow-black/30 backdrop-blur",
+            "inline-flex items-center rounded-2xl border px-4 py-2 text-[13px] font-semibold whitespace-nowrap shadow-lg",
+            "shadow-emerald-500/10 backdrop-blur-lg",
             transaction.amountNum >= 0
-              ? "border-emerald-300/60 bg-emerald-500/15 text-emerald-100"
-              : "border-rose-300/60 bg-rose-500/15 text-rose-100",
+              ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-50"
+              : "border-rose-400/40 bg-rose-500/15 text-rose-50",
           ].join(" ")}
         >
           {formatCurrency(transaction.amountNum)}
@@ -1517,7 +1524,7 @@ function TransactionSideDetails({
       {/* treść – przewijana wewnątrz */}
       <div className="flex-1 min-h-0 space-y-5 overflow-y-auto pr-1">
         {/* Kategoria + źródło */}
-        <div className="space-y-2 border-b border-white/5 pb-4">
+        <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
@@ -1586,7 +1593,7 @@ function TransactionSideDetails({
 
         {/* ✅ Banner po sukcesie “Włącz” */}
         {automationBanner && (
-          <div className="rounded-xl border border-emerald-300/20 bg-emerald-500/10 px-3 py-3 space-y-1 shadow-inner shadow-emerald-500/10">
+          <div className="rounded-xl border border-emerald-300/25 bg-gradient-to-r from-emerald-500/10 via-emerald-500/20 to-emerald-400/10 px-4 py-3 space-y-1 shadow-inner shadow-emerald-500/20">
             <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-100">
               Automatyzacja
             </div>
@@ -1612,7 +1619,7 @@ function TransactionSideDetails({
           </div>
         )}
 
-        <div className="space-y-2 border-b border-white/5 pb-4">
+        <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">
             Szczegóły operacji
           </div>
@@ -1627,12 +1634,12 @@ function TransactionSideDetails({
           </div>
         </div>
 
-        <div className="space-y-2 pt-1">
+        <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Pełny opis</div>
           <div
             className={[
-              "rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-[11px]",
-              "max-h-44 overflow-auto leading-relaxed",
+              "rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px]",
+              "max-h-44 overflow-auto leading-relaxed shadow-inner shadow-black/20",
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
@@ -1641,7 +1648,7 @@ function TransactionSideDetails({
         </div>
       </div>
 
-      <div className="pt-2 mt-2 border-t border-white/5 text-[10px] text-slate-500">
+      <div className="pt-3 mt-4 border-t border-white/5 text-[10px] text-slate-500">
         Ten panel będzie się dalej “inteligentnie” rozbudowywał w Lab.
       </div>
     </aside>
