@@ -963,19 +963,26 @@ function FlowSidebar({
   onKindChange: (k: "all" | "income" | "expense") => void;
 }) {
   return (
-    <aside className="glass-card p-4 space-y-4 h-fit">
-      <div className="space-y-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+    <aside className="h-fit rounded-2xl border border-white/8 bg-slate-950/70 p-4 md:p-5 backdrop-blur-xl shadow-inner shadow-white/10 ring-1 ring-white/5">
+      <div className="relative pb-4">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
+          <span className="h-1 w-1 rounded-full bg-indigo-300/80 shadow-[0_0_0_6px_rgba(99,102,241,0.12)]" />
           Filtry
         </div>
-        <p className="text-[11px] text-slate-500">
-          Typ + zakres czasu. Pozostałe filtry masz w panelu nad tabelą.
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+          Typ + zakres czasu. Pozostałe filtry są w panelu nad tabelą.
         </p>
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-indigo-400/0 via-indigo-400/20 to-indigo-400/0" />
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">Typ przepływu</div>
-        <div className="flex flex-wrap gap-1">
+      <div className="space-y-3 py-4">
+        <div className="flex items-center justify-between text-[11px] text-slate-300">
+          <span className="font-medium text-slate-100">Typ przepływu</span>
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-400 ring-1 ring-white/5">
+            3 opcje
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <ChipButton active={kind === "all"} onClick={() => onKindChange("all")}>
             Wszystkie
           </ChipButton>
@@ -994,19 +1001,24 @@ function FlowSidebar({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[11px] font-medium text-slate-300">Presety zakresów</div>
-        <div className="grid grid-cols-3 gap-1 text-[11px]">
+      <div className="space-y-3 border-t border-white/5 py-4">
+        <div className="flex items-center justify-between text-[11px] text-slate-300">
+          <span className="font-medium text-slate-100">Presety zakresów</span>
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-400 ring-1 ring-white/5">
+            Szybki wybór
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
           {(["1m", "3m", "6m", "ytd", "all"] as RangeKey[]).map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => onRangeChange(key)}
               className={[
-                "rounded-full px-2 py-1 border transition-all",
+                "rounded-xl border px-3 py-2 text-left transition-colors",
                 range === key
-                  ? "bg-white/80 text-slate-900 border-white"
-                  : "bg-white/0 text-slate-300 border-white/10 hover:bg-white/10",
+                  ? "border-indigo-200/80 bg-indigo-100 text-slate-900 shadow-inner shadow-indigo-200/70"
+                  : "border-white/10 bg-white/0 text-slate-200 hover:border-white/30 hover:bg-white/5",
               ].join(" ")}
             >
               {rangeLabelShort(key)}
@@ -1015,13 +1027,15 @@ function FlowSidebar({
         </div>
       </div>
 
-      <div className="border-t border-white/10 pt-3 text-[11px] text-slate-500">
-        Tip: hover na “Opis” pokazuje pełny tekst bez rozwalania wierszy.
+      <div className="mt-2 flex items-start gap-2 rounded-xl border border-white/8 bg-slate-900/70 px-3 py-3 text-[11px] text-slate-300 ring-1 ring-white/5">
+        <div className="mt-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
+        <p className="leading-relaxed">
+          Tip: hover na “Opis” pokazuje pełny tekst bez rozwalania wierszy.
+        </p>
       </div>
     </aside>
   );
 }
-
 function ChipButton({
   active,
   onClick,
@@ -1034,12 +1048,13 @@ function ChipButton({
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={[
-        "px-3 py-1 rounded-full text-[11px] border transition-all",
+        onClick={onClick}
+        className={[
+        "rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors", 
+        "shadow-sm shadow-black/10",
         active
-          ? "bg-white/80 text-slate-900 border-white shadow-md shadow-white/40"
-          : "bg-white/0 text-slate-300 border-white/10 hover:bg-white/10",
+          ? "border-indigo-200/80 bg-indigo-100 text-slate-900"
+          : "border-white/10 bg-white/0 text-slate-200 hover:border-white/30 hover:bg-white/5",
       ].join(" ")}
     >
       {children}
