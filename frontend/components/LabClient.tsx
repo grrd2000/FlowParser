@@ -492,7 +492,6 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
         <section className="glass-card glass-card-hover-strong relative overflow-hidden border border-white/10 px-6 py-8 shadow-[0_15px_80px_rgba(0,0,0,0.45)] md:px-9">
           <div className="absolute -top-16 left-6 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl" />
           <div className="absolute -bottom-20 right-10 h-36 w-36 rounded-full bg-emerald-500/25 blur-3xl" />
-          <div className="absolute inset-x-8 top-8 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
           <div className="relative grid items-start gap-8 lg:grid-cols-[1.05fr,0.95fr]">
             <div className="max-w-3xl space-y-5">
