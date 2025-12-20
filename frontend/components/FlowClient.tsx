@@ -562,7 +562,7 @@ export function FlowClient() {
           </div>
 
           <Tooltip.Provider delayDuration={180}>
-            <div className="mt-2 flex flex-col lg:flex-row gap-4 items-stretch h-[560px] md:h-[600px] xl:h-[640px]">
+            <div className="mt-2 flex flex-col lg:flex-row gap-4 items-start">
               <div
                 className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
                 style={{
@@ -581,10 +581,10 @@ export function FlowClient() {
               </div>
 
               <div
-                className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0 h-full min-h-0"
+                className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
                 style={{ flexBasis: detailOpen ? "360px" : "0px" }}
               >
-                <div className="h-full flex justify-start">
+                <div className="flex justify-start">
                   {selectedTx && (
                     <TransactionSideDetails
                       open={detailOpen}
@@ -1486,7 +1486,7 @@ function TransactionSideDetails({
     <aside
       className={[
         "min-w-[380px] max-w-[380px]",
-        "h-full min-h-0 flex flex-col rounded-3xl border border-white/10",
+        "flex flex-col rounded-3xl border border-white/10",
         "bg-gradient-to-b from-slate-900/80 via-slate-950/85 to-slate-950/95 backdrop-blur",
         "px-5 py-5 md:px-6 md:py-6",
         "text-[11px] shadow-2xl shadow-black/30",
@@ -1525,23 +1525,22 @@ function TransactionSideDetails({
         </div>
       </div>
 
-      {/* treść – przewijana wewnątrz */}
-      <div className="flex-1 min-h-0 space-y-5 overflow-y-auto pr-1">
-        {/* Kategoria + źródło */}
-        <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1">
-              <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
-                Kategoria
-              </div>
+        <div className="space-y-5">
+          {/* Kategoria + źródło */}
+          <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
+                  Kategoria
+                </div>
 
-              <CategoryDropdown
-                value={transaction.category_id}
-                categories={categories}
-                onChange={(categoryId) =>
-                  onChangeCategory(transaction.id, categoryId)
-                }
-              />
+                <CategoryDropdown
+                  value={transaction.category_id}
+                  categories={categories}
+                  onChange={(categoryId) =>
+                    onChangeCategory(transaction.id, categoryId)
+                  }
+                />
             </div>
 
             <div className="flex flex-col items-end gap-1 pt-2 text-[10px] text-slate-400">
@@ -1643,7 +1642,7 @@ function TransactionSideDetails({
           <div
             className={[
               "rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px]",
-              "max-h-44 overflow-auto leading-relaxed shadow-inner shadow-black/20",
+              "leading-relaxed shadow-inner shadow-black/20",
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
