@@ -1493,10 +1493,11 @@ function TransactionSideDetails({
     <aside
       className={[
         "min-w-[360px] max-w-[360px] w-[360px]",
-        "flex flex-col border border-white/10",
-        "bg-gradient-to-b from-slate-950/70 via-slate-950/80 to-slate-950/90 backdrop-blur",
+        "flex flex-col rounded-xl border border-slate-800/80",
+        "bg-slate-950/70 backdrop-blur-md text-slate-200",
         "px-4 py-4 text-[11px]",
-        "shadow-2xl shadow-black/30",
+        "shadow-[0_20px_60px_-25px_rgba(0,0,0,0.55)]",
+        "max-h-[calc(100vh-180px)] overflow-y-auto",
         "transition-all duration-300 ease-in-out",
         open
           ? "opacity-100 translate-x-0"
@@ -1504,20 +1505,19 @@ function TransactionSideDetails({
       ].join(" ")}
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-3">
+      <div className="flex items-start justify-between gap-3 border-b border-white/5 pb-3">
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-300">
             Szczegóły transakcji
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           </div>
-          <div className="mt-1 min-w-0 truncate text-[12px] font-medium text-slate-100">
+          <div className="mt-1 min-w-0 truncate text-[12px] font-semibold text-white">
             {transaction.name || "Transakcja"}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-500">
-            <span>ID {transaction.id}</span>
-            <span className="text-slate-600">•</span>
-            <span>{operationDate}</span>
-            <span className="text-slate-600">•</span>
-            <span className="uppercase tracking-[0.16em] text-indigo-200/90">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+            <span className="rounded-full bg-white/5 px-2 py-0.5 text-slate-400">ID {transaction.id}</span>
+            <span className="rounded-full bg-white/5 px-2 py-0.5 text-slate-400">{operationDate}</span>
+            <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-indigo-100/90 uppercase tracking-[0.12em]">
               {transaction.is_manual ? "MANUAL" : "PDF"}
             </span>
           </div>
@@ -1525,26 +1525,22 @@ function TransactionSideDetails({
 
         <div
           className={[
-            "shrink-0 border px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap",
+            "shrink-0 rounded-lg border px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap",
             transaction.amountNum >= 0
-              ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-50"
-              : "border-rose-400/40 bg-rose-500/10 text-rose-50",
+              ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-50"
+              : "border-rose-400/30 bg-rose-500/10 text-rose-50",
           ].join(" ")}
         >
           {formatCurrency(transaction.amountNum)}
         </div>
       </div>
 
-      <div className="mt-3 space-y-4">
+      <div className="mt-3 space-y-4 divide-y divide-white/5">
         {/* Category */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-              Kategoria
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-              {transaction.category_source ?? "—"}
-            </div>
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
+            <span>Kategoria</span>
+            <span className="text-slate-500">{transaction.category_source ?? "—"}</span>
           </div>
 
           <CategoryDropdown
@@ -1556,10 +1552,10 @@ function TransactionSideDetails({
 
         {/* Rule suggestion */}
         {ruleSuggestion && (
-          <div className="border border-indigo-400/20 bg-indigo-500/5 px-3 py-2">
+          <div className="rounded-lg border border-indigo-400/20 bg-indigo-500/5 px-3 py-2 shadow-[0_10px_30px_-18px_rgba(79,70,229,0.6)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.22em] text-indigo-200/90">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-indigo-200/90">
                   Automatyzacja podobnych
                 </div>
                 <div className="text-[11px] text-slate-200 leading-relaxed">
@@ -1576,7 +1572,7 @@ function TransactionSideDetails({
                   type="button"
                   onClick={onAcceptRuleSuggestion}
                   disabled={enablingSuggestion}
-                  className="border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="rounded-md border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white shadow-inner hover:bg-white/15 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {enablingSuggestion ? "Włączanie…" : "Włącz"}
                 </button>
@@ -1594,8 +1590,8 @@ function TransactionSideDetails({
 
         {/* Automation banner */}
         {automationBanner && (
-          <div className="border border-emerald-300/25 bg-emerald-500/5 px-3 py-2 space-y-1">
-            <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/90">
+          <div className="rounded-lg border border-emerald-300/20 bg-emerald-500/5 px-3 py-2 space-y-1 shadow-[0_10px_30px_-18px_rgba(16,185,129,0.6)]">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/90">
               Automatyzacja włączona
             </div>
             <div className="text-[11px] text-slate-200">
@@ -1618,8 +1614,8 @@ function TransactionSideDetails({
         )}
 
         {/* Details */}
-        <div className="border-t border-white/10 pt-3">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 mb-2">
+        <div className="pt-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400 mb-2">
             Dane
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -1634,13 +1630,13 @@ function TransactionSideDetails({
         </div>
 
         {/* Description */}
-        <div className="border-t border-white/10 pt-3">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 mb-2">
+        <div className="pt-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400 mb-2">
             Opis
           </div>
           <div
             className={[
-              "border border-white/10 bg-slate-950/40 px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap",
+              "rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap",
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
@@ -1649,7 +1645,7 @@ function TransactionSideDetails({
         </div>
       </div>
 
-      <div className="mt-auto pt-3 border-t border-white/10 text-[10px] text-slate-600">
+      <div className="mt-auto pt-3 text-[10px] text-slate-500">
         Kliknij ponownie wiersz, aby zamknąć panel.
       </div>
     </aside>
