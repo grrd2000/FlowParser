@@ -270,7 +270,11 @@ export function FlowClient() {
         await updateTransactionCategory(txId, categoryId);
 
       setTransactions((prev) =>
-        prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
+        prev.map((tx) =>
+          tx.id === txId
+            ? { ...tx, ...normalizeTransactions([updated])[0] }
+            : tx
+        )
       );
 
       setAutomationBanner((prev) => (prev?.txId === txId ? null : prev));
@@ -1685,53 +1689,35 @@ function CategoryDropdown({
   return (
     <Popover.Root>
       <Popover.Trigger
-        className="group relative mt-1 inline-flex w-full items-center gap-2 rounded-full border border-slate-800/80 bg-slate-950/70 px-3 py-1.5 pr-3 text-left shadow-inner shadow-black/30 transition hover:border-indigo-400/60 hover:shadow-indigo-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 data-[state=open]:border-indigo-400/70"
+        className="group mt-2 inline-flex w-full items-center justify-between rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-left shadow-inner shadow-black/15 transition hover:border-indigo-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 data-[state=open]:border-indigo-400/70"
         aria-label="Zmień kategorię transakcji"
       >
-        <div className="absolute inset-0 overflow-hidden rounded-full">
-          <span className="absolute inset-0 bg-gradient-to-r from-indigo-500/30 via-indigo-400/30 to-emerald-400/30 opacity-0 transition duration-300 group-hover:opacity-40 group-data-[state=open]:opacity-70" />
-          <span className="absolute inset-0 rounded-full border border-slate-700/70" />
-        </div>
-
-        <div className="relative flex items-center justify-center rounded-full bg-slate-900/80 p-1 text-indigo-200 shadow-inner shadow-black/30">
-          <TagIcon className="h-4 w-4" />
-        </div>
-
-        <div className="relative flex flex-1 flex-col min-w-0">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
             Kategoria
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-100">
             <span
-              className="h-2.5 w-2.5 rounded-full border border-slate-800/80 shadow-inner shadow-black/40"
+              className="h-2 w-2 rounded-full border border-slate-700/80 shadow-inner shadow-black/30"
               style={{ backgroundColor: active.color }}
             />
-            <span className="text-[13px] font-semibold text-slate-100 truncate">
-              {active.label}
-            </span>
+            <span className="truncate">{active.label}</span>
           </div>
-          {active.helper && (
-            <span className="text-[9px] text-slate-400">
-              {active.helper}
-            </span>
-          )}
         </div>
 
-        <span className="relative rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-slate-200 shadow-inner shadow-black/30">
-          ▼
-        </span>
+        <ChevronDownIcon className="h-4 w-4 text-slate-400 transition group-data-[state=open]:text-indigo-200" />
       </Popover.Trigger>
 
       <Popover.Content
         sideOffset={10}
-        className="z-50 w-[260px] max-h-[340px] overflow-y-auto rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
+        className="z-50 w-[220px] max-h-[260px] overflow-y-auto rounded-xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
       >
-        <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-900/60 px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-slate-400">
+        <div className="mb-2 flex items-center gap-2 px-1 text-[10px] uppercase tracking-[0.1em] text-slate-400">
           <TagIcon className="h-3.5 w-3.5 text-indigo-300" />
           <span>Wybierz kategorię</span>
         </div>
 
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           {options.map((option) => {
             const isActive = option.value === (value?.toString() ?? "");
             return (
@@ -1744,41 +1730,31 @@ function CategoryDropdown({
                   onClick={() =>
                     onChange(option.value === "" ? null : Number(option.value))
                   }
-                  className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-1.5 text-left transition duration-150 hover:-translate-y-[1px] hover:border-indigo-400/60 hover:bg-slate-900/90 ${
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition ${
                     isActive
-                      ? "border-indigo-400/70 bg-slate-900/70 text-slate-100 shadow-lg shadow-indigo-500/10"
-                      : "border-slate-800/80 bg-slate-950/60 text-slate-300"
+                      ? "bg-slate-900/80 ring-1 ring-indigo-400/60 text-slate-100"
+                      : "text-slate-300 hover:bg-slate-900/60"
                   }`}
                 >
                   <span
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-800/80 bg-slate-900 text-[11px] font-semibold"
-                    style={{ backgroundColor: `${option.color}20`, color: option.color }}
-                  >
-                    ●
-                  </span>
+                    className="h-2.5 w-2.5 rounded-full border border-slate-800/70"
+                    style={{ backgroundColor: option.color }}
+                  />
 
                   <div className="flex min-w-0 flex-col">
-                    <span className="text-sm font-semibold truncate">{option.label}</span>
-                    {option.helper && (
-                      <span className="text-[10px] text-slate-400 truncate">
+                    <span className="truncate text-sm font-semibold">
+                      {option.label}
+                    </span>
+                    {option.helper && isActive && (
+                      <span className="truncate text-[10px] text-slate-400">
                         {option.helper}
                       </span>
                     )}
                   </div>
 
-                  <span
-                    className={`ml-auto flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-semibold ${
-                      isActive
-                        ? "border-indigo-300 bg-indigo-500/20 text-indigo-100"
-                        : "border-slate-700 bg-slate-900 text-slate-400"
-                    }`}
-                  >
-                    {isActive ? (
-                      <CheckIcon className="h-3.5 w-3.5" />
-                    ) : (
-                      option.label.slice(0, 1)
-                    )}
-                  </span>
+                  {isActive ? (
+                    <CheckIcon className="ml-auto h-3.5 w-3.5 text-indigo-200" />
+                  ) : null}
                 </button>
               </Popover.Close>
             );
@@ -1822,6 +1798,23 @@ function TagIcon({ className }: { className?: string }) {
     >
       <path d="M20.59 13.41 12 4.82 4.41 12.41a2 2 0 0 0 0 2.83l4.35 4.35a2 2 0 0 0 2.83 0l8.59-8.59Z" />
       <path d="M8 8h.01" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
