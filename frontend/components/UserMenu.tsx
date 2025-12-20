@@ -143,11 +143,12 @@ export function UserMenu() {
               logout();
             }}
             className="
-              w-full rounded-xl border border-rose-400/30
-              bg-gradient-to-r from-rose-500/80 via-amber-400/80 to-rose-500/80
+              w-full rounded-xl border border-indigo-200/35
+              bg-gradient-to-r from-indigo-600/80 via-sky-500/80 to-emerald-500/80
               px-3 py-2 text-center text-[12px] font-semibold uppercase tracking-[0.08em]
-              text-slate-950 shadow-lg shadow-rose-500/20
-              transition-transform duration-150 hover:scale-[1.01]
+              text-white shadow-lg shadow-indigo-700/25
+              transition-transform duration-150 hover:scale-[1.01] hover:shadow-indigo-500/30
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70
             "
           >
             Logout

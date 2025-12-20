@@ -204,7 +204,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
               >
                 Importuj dane
               </Link>
-              <Link href="/statements" className="button-ghost">
+              <Link href="/profile/statements" className="button-ghost">
                 Zestawienia
               </Link>
             </div>
