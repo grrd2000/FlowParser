@@ -270,7 +270,11 @@ export function FlowClient() {
         await updateTransactionCategory(txId, categoryId);
 
       setTransactions((prev) =>
-        prev.map((tx) => (tx.id === txId ? { ...tx, ...updated } : tx))
+        prev.map((tx) =>
+          tx.id === txId
+            ? { ...tx, ...normalizeTransactions([updated])[0] }
+            : tx
+        )
       );
 
       setAutomationBanner((prev) => (prev?.txId === txId ? null : prev));
@@ -1696,9 +1700,9 @@ function CategoryDropdown({
           <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
             Kategoria
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-100">
             <span
-              className="h-2.5 w-2.5 rounded-full border border-slate-800/80 shadow-inner shadow-black/40"
+              className="h-2 w-2 rounded-full border border-slate-700/80 shadow-inner shadow-black/30"
               style={{ backgroundColor: active.color }}
             />
             <span className="truncate text-[13px] font-semibold text-slate-100">
@@ -1717,7 +1721,7 @@ function CategoryDropdown({
 
       <Popover.Content
         sideOffset={10}
-        className="z-50 w-[260px] max-h-[340px] overflow-y-auto rounded-2xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
+        className="z-50 w-[220px] max-h-[260px] overflow-y-auto rounded-xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
       >
         <div className="mb-2 flex items-center gap-2 px-1 text-[10px] uppercase tracking-[0.1em] text-slate-400">
           <TagIcon className="h-3.5 w-3.5 text-indigo-300" />
