@@ -1689,10 +1689,14 @@ function CategoryDropdown({
   return (
     <Popover.Root>
       <Popover.Trigger
-        className="group mt-2 inline-flex w-full items-center justify-between rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-left shadow-inner shadow-black/15 transition hover:border-indigo-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 data-[state=open]:border-indigo-400/70"
+        className="group mt-2 inline-flex w-full items-center gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-left shadow-inner shadow-black/20 transition hover:border-indigo-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 data-[state=open]:border-indigo-400/70"
         aria-label="Zmień kategorię transakcji"
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900/70 text-indigo-200 shadow-inner shadow-black/30">
+          <TagIcon className="h-4 w-4" />
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col space-y-1">
           <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
             Kategoria
           </span>
@@ -1701,11 +1705,18 @@ function CategoryDropdown({
               className="h-2 w-2 rounded-full border border-slate-700/80 shadow-inner shadow-black/30"
               style={{ backgroundColor: active.color }}
             />
-            <span className="truncate">{active.label}</span>
+            <span className="truncate text-[13px] font-semibold text-slate-100">
+              {active.label}
+            </span>
           </div>
+          {active.helper && (
+            <span className="text-[10px] text-slate-400">{active.helper}</span>
+          )}
         </div>
 
-        <ChevronDownIcon className="h-4 w-4 text-slate-400 transition group-data-[state=open]:text-indigo-200" />
+        <div className="flex h-8 w-8 items-center justify-center text-slate-400 transition group-data-[state=open]:text-indigo-200">
+          <ChevronDownIcon className="h-4 w-4" />
+        </div>
       </Popover.Trigger>
 
       <Popover.Content
@@ -1730,31 +1741,46 @@ function CategoryDropdown({
                   onClick={() =>
                     onChange(option.value === "" ? null : Number(option.value))
                   }
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition ${
+                  className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-left transition ${
                     isActive
                       ? "bg-slate-900/80 ring-1 ring-indigo-400/60 text-slate-100"
                       : "text-slate-300 hover:bg-slate-900/60"
                   }`}
                 >
                   <span
-                    className="h-2.5 w-2.5 rounded-full border border-slate-800/70"
-                    style={{ backgroundColor: option.color }}
-                  />
+                    className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/70 text-[11px] font-semibold"
+                    style={{
+                      backgroundColor: `${option.color}20`,
+                      color: option.color,
+                    }}
+                  >
+                    ●
+                  </span>
 
                   <div className="flex min-w-0 flex-col">
                     <span className="truncate text-sm font-semibold">
                       {option.label}
                     </span>
-                    {option.helper && isActive && (
+                    {option.helper && (
                       <span className="truncate text-[10px] text-slate-400">
                         {option.helper}
                       </span>
                     )}
                   </div>
 
-                  {isActive ? (
-                    <CheckIcon className="ml-auto h-3.5 w-3.5 text-indigo-200" />
-                  ) : null}
+                  <span
+                    className={`ml-auto flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-semibold ${
+                      isActive
+                        ? "bg-indigo-500/20 text-indigo-100"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {isActive ? (
+                      <CheckIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      option.label.slice(0, 1)
+                    )}
+                  </span>
                 </button>
               </Popover.Close>
             );
