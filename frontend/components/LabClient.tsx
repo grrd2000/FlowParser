@@ -537,118 +537,115 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
     );
   }
 
-    return (
-      <div className="relative flex h-full flex-col gap-6">
+  return (
+    <div className="relative mx-auto flex h-full max-w-6xl flex-col gap-8 px-4 pb-12 pt-6 md:px-8">
         <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.12),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.12),transparent_32%),linear-gradient(120deg,rgba(9,12,20,0.96),rgba(12,19,33,0.92))]" />
-        <div className="absolute inset-0 -z-10 opacity-60 bg-[linear-gradient(0deg,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px]" />
-        <div className="pointer-events-none absolute inset-x-8 top-10 -z-10 h-32 rounded-[28px] bg-gradient-to-r from-indigo-500/20 via-sky-500/12 to-emerald-400/18 blur-3xl" />
+        <div className="absolute inset-0 -z-10 opacity-50 bg-[linear-gradient(0deg,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px]" />
+        <div className="pointer-events-none absolute inset-x-6 top-8 -z-10 h-32 rounded-[28px] bg-gradient-to-r from-indigo-500/20 via-sky-500/12 to-emerald-400/18 blur-3xl" />
+
         {/* Hero */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/90 backdrop-blur-2xl shadow-[0_15px_80px_rgba(0,0,0,0.45)] transition-all hover:-translate-y-1 hover:border-indigo-300/50">
-          <div className="absolute inset-px rounded-[22px] bg-[linear-gradient(135deg,rgba(255,255,255,0.06),transparent)]" />
-          <div className="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_15%_20%,rgba(129,140,248,0.35),transparent_40%),radial-gradient(circle_at_90%_30%,rgba(16,185,129,0.25),transparent_45%)]" />
-          <div className="absolute -top-14 left-10 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl animate-[pulse_16s_ease-in-out_infinite]" />
-          <div className="absolute -bottom-16 right-16 h-32 w-32 rounded-full bg-emerald-500/25 blur-3xl animate-[pulse_18s_ease-in-out_infinite_reverse]" />
-          <div className="absolute inset-x-10 top-8 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+        <section className="glass-card glass-card-hover-strong relative overflow-hidden border border-white/10 px-6 py-8 shadow-[0_15px_80px_rgba(0,0,0,0.45)] md:px-9">
+          <div className="absolute -top-16 left-6 h-32 w-32 rounded-full bg-indigo-500/25 blur-3xl" />
+          <div className="absolute -bottom-20 right-10 h-36 w-36 rounded-full bg-emerald-500/25 blur-3xl" />
+          <div className="absolute inset-x-8 top-8 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
-          <div className="relative px-6 sm:px-9 py-8 flex flex-col gap-6">
-            <div className="grid gap-6 lg:grid-cols-[1.05fr,0.95fr] items-start">
-              <div className="space-y-4 max-w-3xl">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-[11px] text-indigo-100 backdrop-blur">
-                    <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
-                    Inteligentne centrum automatyzacji
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">
-                    Widok inspirowany Flow i Dashboard
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-3xl md:text-[32px] font-semibold text-slate-50 tracking-tight">
-                    Lab
-                  </h1>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">nowoczesny podgląd</span>
-                </div>
-
-                <p className="text-sm md:text-[13px] text-slate-300 leading-relaxed">
-                  Nowy widok Labu łączy DNA dashboardu z interaktywnymi panelami Flow. Najważniejsze metryki masz w zasięgu ręki, a każda akcja podkreśla się subtelną animacją.
-                </p>
-
-                <div className="flex flex-wrap gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={refreshAll}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-100 hover:-translate-y-0.5 hover:bg-white/10 hover:border-white/20 transition-all"
-                  >
-                    <span className="h-2 w-2 rounded-full bg-emerald-300" />
-                    Odśwież dane
-                  </button>
-                  <button
-                    type="button"
-                    onClick={applyRulesNow}
-                    disabled={rulesBusyId === "apply"}
-                    className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-[11px] text-emerald-100 hover:-translate-y-0.5 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
-                  >
-                    {rulesBusyId === "apply" ? "Zastosuj…" : "Zastosuj reguły"}
-                  </button>
-                  <Link
-                    href="/flow"
-                    className="inline-flex items-center gap-2 rounded-full border border-indigo-400/50 bg-indigo-500/25 px-3 py-1.5 text-[11px] text-indigo-100 hover:-translate-y-0.5 hover:bg-indigo-500/35 transition-all"
-                  >
-                    Otwórz Flow →
-                  </Link>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <HeroStat
-                    title="Pokrycie kategorii"
-                    value={data ? `${coveragePct.toFixed(2)}%` : "—"}
-                    detail={data ? `${categorized}/${total}` : "włącz import"}
-                  />
-                  <HeroStat
-                    title="Automatyzacje"
-                    value={data ? `${data.assignments_rule}` : "—"}
-                    detail="reguły + AI"
-                  />
-                  <HeroStat
-                    title="Ręczne decyzje"
-                    value={data ? `${data.assignments_manual}` : "—"}
-                    detail="uczą model"
-                  />
-                </div>
+          <div className="relative grid items-start gap-8 lg:grid-cols-[1.05fr,0.95fr]">
+            <div className="max-w-3xl space-y-5">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-indigo-100">
+                  <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+                  Laboratorium automatyzacji
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">
+                  Spójny z Flow i Dashboard
+                </span>
               </div>
 
-              <div className="relative">
-                <CoverageGauge
-                  value={coveragePct}
-                  total={total}
-                  categorized={categorized}
-                  uncategorized={uncategorized}
-                />
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-3xl md:text-[32px] font-semibold text-slate-50 tracking-tight">Lab</h1>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-200">nowa makieta</span>
+                </div>
+                <p className="text-sm md:text-[13px] leading-relaxed text-slate-300">
+                  Sekcja Lab została przeprojektowana, by lepiej pasować do reszty projektu: szklane karty, gradienty i
+                  klarowna hierarchia elementów pomagają szybciej ocenić stan automatyzacji.
+                </p>
+              </div>
 
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur text-[11px] text-slate-200 shadow-[0_10px_50px_rgba(0,0,0,0.35)]">
-                  <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                    <span>Flow DNA</span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-slate-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
-                      Live
-                    </span>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <BadgePill label="Hover states" desc="podkreślone akcje" />
-                    <BadgePill label="Animacje" desc="subtelne ruchy jak w Flow" />
-                    <BadgePill label="Gradienty" desc="DNA dashboardu" />
-                    <BadgePill label="Focus" desc="klarowna hierarchia" />
-                  </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={refreshAll}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-100 transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/10"
+                >
+                  <span className="h-2 w-2 rounded-full bg-emerald-300" />
+                  Odśwież dane
+                </button>
+                <button
+                  type="button"
+                  onClick={applyRulesNow}
+                  disabled={rulesBusyId === "apply"}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-[11px] text-emerald-100 transition-all hover:-translate-y-0.5 hover:bg-emerald-500/25 disabled:opacity-50"
+                >
+                  {rulesBusyId === "apply" ? "Zastosuj…" : "Zastosuj reguły"}
+                </button>
+                <Link
+                  href="/flow"
+                  className="inline-flex items-center gap-2 rounded-full border border-indigo-400/50 bg-indigo-500/25 px-3 py-1.5 text-[11px] text-indigo-100 transition-all hover:-translate-y-0.5 hover:bg-indigo-500/35"
+                >
+                  Otwórz Flow →
+                </Link>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <HeroStat
+                  title="Pokrycie kategorii"
+                  value={data ? `${coveragePct.toFixed(2)}%` : "—"}
+                  detail={data ? `${categorized}/${total}` : "włącz import"}
+                />
+                <HeroStat
+                  title="Automatyzacje"
+                  value={data ? `${data.assignments_rule}` : "—"}
+                  detail="reguły + AI"
+                />
+                <HeroStat
+                  title="Ręczne decyzje"
+                  value={data ? `${data.assignments_manual}` : "—"}
+                  detail="uczą model"
+                />
+              </div>
+            </div>
+
+            <div className="relative space-y-4">
+              <CoverageGauge
+                value={coveragePct}
+                total={total}
+                categorized={categorized}
+                uncategorized={uncategorized}
+              />
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[11px] text-slate-200 shadow-[0_10px_50px_rgba(0,0,0,0.35)]">
+                <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                  <span>Spójność UI</span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-slate-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                    Live
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <BadgePill label="Glassmorphism" desc="wspólny motyw" />
+                  <BadgePill label="Gradienty" desc="DNA projektu" />
+                  <BadgePill label="Focus" desc="priorytetyzacja akcji" />
+                  <BadgePill label="Ruch" desc="subtelne animacje" />
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.25fr,1fr]">
-        {/* LEFT */}
-        <div className="flex flex-col gap-6">
+        <div className="grid gap-6 xl:grid-cols-[1.2fr,1fr]">
+          {/* LEFT */}
+          <div className="flex flex-col gap-6">
           {/* Smart overview */}
           <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] transition-all hover:-translate-y-1 hover:border-indigo-300/50">
             <div className="absolute -top-16 -right-24 h-44 w-44 rounded-full bg-indigo-500/10 blur-3xl" />
@@ -1200,11 +1197,12 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
           </section>
         </div>
 
-        {/* RIGHT */}
-          <section
-            id="ai"
-            className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/75 via-slate-950/65 to-slate-900/60 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] transition-all hover:-translate-y-1 hover:border-indigo-300/50 overflow-hidden"
-          >
+          {/* RIGHT */}
+          <div className="flex flex-col gap-6">
+            <section
+              id="ai"
+              className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/75 via-slate-950/65 to-slate-900/60 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] transition-all hover:-translate-y-1 hover:border-indigo-300/50 overflow-hidden"
+            >
             <div className="absolute -top-12 left-16 h-28 w-28 rounded-full bg-indigo-500/15 blur-3xl" />
             <div className="absolute -bottom-16 right-10 h-32 w-32 rounded-full bg-emerald-500/12 blur-3xl" />
             <div className="absolute inset-0 opacity-50 bg-[linear-gradient(135deg,rgba(79,70,229,0.08),transparent_40%),linear-gradient(225deg,rgba(16,185,129,0.08),transparent_42%)]" />
@@ -1378,7 +1376,8 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
             )}
           </div>
         </section>
-      </div>
+          </div>
+        </div>
 
       {/* MODAL: Delete Category */}
       {deleteModal && (
