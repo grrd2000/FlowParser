@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import {
@@ -103,7 +103,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     const filtered = filterByCategory(rangeFiltered, selectedCategory);
     const metrics = computeMetrics(filtered);
     const netFlowSeries = buildNetFlowSeries(filtered, range);
-    const categorySeries = groupByCategory(filtered);
+    const categorySeries = groupByCategory(rangeFiltered);
     const heatmapSeries = buildHeatmap(filtered);
     return {
       filtered,
@@ -146,7 +146,18 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     const days = Math.max(1, daySet.size);
     return Math.abs(expenses) / days;
   }, [filtered]);
-  const topCategory = coloredCategories[0];
+  const topCategory = useMemo(() => {
+    if (!coloredCategories.length) return undefined;
+    if (selectedCategory === undefined) return coloredCategories[0];
+
+    const selectedId = selectedCategory ?? null;
+    const match = coloredCategories.find((bucket) => {
+      const bucketId = bucket.categoryId ?? null;
+      return bucketId === selectedId;
+    });
+
+    return match ?? coloredCategories[0];
+  }, [coloredCategories, selectedCategory]);
 
   // Signed out state (after all hooks to satisfy React Rules of Hooks)
   if (!authLoading && !user) {
@@ -729,6 +740,34 @@ function CategoryDonutChart({
   selectedCategory?: number | null;
   onCategorySelect: (categoryId?: number | null) => void;
 }) {
+  const chartRef = useRef<any>(null);
+  const syncingRef = useRef(false);
+  const [chartMounted, setChartMounted] = useState(false);
+
+  const selectedIndex = useMemo(() => {
+    if (selectedCategory === undefined) return null;
+    const selectedId = selectedCategory ?? null;
+    const idx = categories.findIndex((c) => (c.categoryId ?? null) === selectedId);
+    return idx >= 0 ? idx : null;
+  }, [categories, selectedCategory]);
+
+  const getSelectedIndices = useCallback((chart: any): number[] => {
+    const sdp = chart?.w?.globals?.selectedDataPoints;
+    // Zwykle: selectedDataPoints[seriesIndex] -> tablica indeksów
+    const first = Array.isArray(sdp) ? sdp[0] : null;
+
+    const indices: number[] = [];
+    if (Array.isArray(first)) {
+      for (const v of first) {
+        if (typeof v === "number") indices.push(v);
+        else if (Array.isArray(v)) {
+          for (const vv of v) if (typeof vv === "number") indices.push(vv);
+        }
+      }
+    }
+    return indices;
+  }, []);
+
   const baseColors = useMemo(
     () =>
       categories.map(
@@ -749,15 +788,66 @@ function CategoryDonutChart({
     [baseColors, categories, selectedCategory]
   );
 
+  // Synchronizuj "kliknięcie" na wykresie z selectedCategory (także po klikach w listę/legendę).
+  // ApexCharts trzyma własny stan selekcji (rozszerzony wycinek), więc musimy go utrzymywać w zgodzie z React state.
+  useEffect(() => {
+    if (!chartMounted) return;
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const current = getSelectedIndices(chart);
+    const desired = selectedIndex == null ? [] : [selectedIndex];
+
+    // Zablokuj eventy (żeby programatyczne toggle nie wywołało onCategorySelect i nie "odkliknęło" filtra).
+    syncingRef.current = true;
+
+    try {
+      // Odkliknij wszystko, czego nie chcemy
+      for (const idx of current) {
+        if (!desired.includes(idx)) {
+          chart.toggleDataPointSelection(0, idx);
+        }
+      }
+
+      // Kliknij to, co chcemy (jeśli nie jest zaznaczone)
+      for (const idx of desired) {
+        if (!current.includes(idx)) {
+          chart.toggleDataPointSelection(0, idx);
+        }
+      }
+    } finally {
+      // zwolnij blokadę po cyklu event-loop (bezpieczniej niż natychmiast)
+      window.setTimeout(() => {
+        syncingRef.current = false;
+      }, 0);
+    }
+  }, [chartMounted, getSelectedIndices, selectedIndex]);
+
   const options: ApexCharts.ApexOptions = useMemo(
     () => ({
       chart: {
         type: "donut",
         events: {
+          mounted: (chartContext) => {
+            chartRef.current = chartContext;
+            setChartMounted(true);
+          },
           dataPointSelection: (_event, _chartContext, config) => {
-            const bucket = categories[config.dataPointIndex];
+            if (syncingRef.current) return;
+
+            const idx = (config as any)?.dataPointIndex ?? -1;
+            if (idx < 0) return;
+
+            const bucket = categories[idx];
             if (!bucket) return;
+
             onCategorySelect(bucket.categoryId ?? null);
+          },
+          click: (_event, _chartContext, config) => {
+            if (syncingRef.current) return;
+
+            const idx = (config as any)?.dataPointIndex ?? -1;
+            if (idx === -1) onCategorySelect(undefined);
           },
         },
       },
@@ -769,7 +859,10 @@ function CategoryDonutChart({
       dataLabels: { enabled: false },
       stroke: { show: false },
       states: {
-        active: { filter: { type: "lighten", value: 0.5 } },
+        active: {
+          allowMultipleDataPointsSelection: false,
+          filter: { type: "lighten", value: 0.5 },
+        },
         normal: { filter: { type: "none" } },
       },
       plotOptions: {
@@ -819,7 +912,7 @@ function CategoryDonutChart({
           const isActive = selectedCategory === bucketId;
           return (
             <button
-              key={c.name}
+              key={`${bucketId ?? "null"}-${c.name}`}
               type="button"
               onClick={() => onCategorySelect(bucketId)}
               aria-pressed={isActive}
@@ -837,9 +930,7 @@ function CategoryDonutChart({
                 />
                 <span>{c.name}</span>
               </span>
-              <span className="text-slate-400">
-                {formatCurrency(c.value)}
-              </span>
+              <span className="text-slate-400">{formatCurrency(c.value)}</span>
             </button>
           );
         })}
@@ -847,6 +938,7 @@ function CategoryDonutChart({
     </div>
   );
 }
+
 
 function HeatmapGrid({
   data,
