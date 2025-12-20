@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import {
@@ -740,93 +740,42 @@ function CategoryDonutChart({
   selectedCategory?: number | null;
   onCategorySelect: (categoryId?: number | null) => void;
 }) {
-  const chartRef = useRef<any>(null);
-  const syncingRef = useRef(false);
-  const [chartMounted, setChartMounted] = useState(false);
-
-  const selectedIndex = useMemo(() => {
-    if (selectedCategory === undefined) return null;
-    const selectedId = selectedCategory ?? null;
-    const idx = categories.findIndex((c) => (c.categoryId ?? null) === selectedId);
-    return idx >= 0 ? idx : null;
-  }, [categories, selectedCategory]);
-
-  const getSelectedIndices = useCallback((chart: any): number[] => {
-    const selected = chart?.w?.globals?.selectedDataPoints;
-    if (!Array.isArray(selected)) return [];
-
-    return selected
-      .flat(Infinity)
-      .filter((v: unknown): v is number => typeof v === "number");
-  }, []);
-
   const baseColors = useMemo(
     () =>
       categories.map(
-        (c, idx) => c.color || DONUT_FALLBACK_COLORS[idx % DONUT_FALLBACK_COLORS.length]
+        (c, idx) =>
+          c.color ||
+          DONUT_FALLBACK_COLORS[idx % DONUT_FALLBACK_COLORS.length]
       ),
     [categories]
   );
 
+  // Kontrolujemy "aktywną" kategorię WYŁĄCZNIE stanem React (a nie wewnętrzną selekcją ApexCharts)
+  // – dzięki temu klik w listę zawsze aktualizuje wygląd wykresu.
   const colors = useMemo(
     () =>
       baseColors.map((color, idx) => {
         if (selectedCategory === undefined) return color;
-        const bucket = categories[idx];
-        const bucketId = bucket?.categoryId ?? null;
-        const isActive = bucketId === selectedCategory;
+        const bucketId = categories[idx]?.categoryId ?? null;
+        const isActive = bucketId === (selectedCategory ?? null);
         return isActive ? color : withOpacity(color, 0.35);
       }),
     [baseColors, categories, selectedCategory]
   );
 
-  // Synchronizuj "kliknięcie" na wykresie z selectedCategory (także po klikach w listę/legendę).
-  // ApexCharts trzyma własny stan selekcji (rozszerzony wycinek), więc musimy go utrzymywać w zgodzie z React state.
-  useEffect(() => {
-    if (!chartMounted) return;
-    const chart = chartRef.current;
-    if (!chart) return;
-
-    const current = getSelectedIndices(chart);
-    const desired = selectedIndex == null ? [] : [selectedIndex];
-
-    // Zablokuj eventy (żeby programatyczne toggle nie wywołało onCategorySelect i nie "odkliknęło" filtra).
-    syncingRef.current = true;
-
-    try {
-      // Odkliknij wszystko, czego nie chcemy
-      for (const idx of current) {
-        if (!desired.includes(idx)) {
-          chart.toggleDataPointSelection(0, idx);
-        }
-      }
-
-      // Kliknij to, co chcemy (jeśli nie jest zaznaczone)
-      for (const idx of desired) {
-        if (!current.includes(idx)) {
-          chart.toggleDataPointSelection(0, idx);
-        }
-      }
-    } finally {
-      // zwolnij blokadę po cyklu event-loop (bezpieczniej niż natychmiast)
-      window.setTimeout(() => {
-        syncingRef.current = false;
-      }, 0);
-    }
-  }, [chartMounted, getSelectedIndices, selectedIndex]);
+  // Najbardziej "kuloodporne": wymuszamy remount wykresu przy zmianie filtra,
+  // żeby ApexCharts nie trzymał starej, wewnętrznej selekcji (expanded slice).
+  const chartKey = useMemo(() => {
+    const s = categories.map((c) => c.value).join("|");
+    return `donut-${selectedCategory ?? "none"}-${s}`;
+  }, [categories, selectedCategory]);
 
   const options: ApexCharts.ApexOptions = useMemo(
     () => ({
       chart: {
         type: "donut",
         events: {
-          mounted: (chartContext) => {
-            chartRef.current = chartContext;
-            setChartMounted(true);
-          },
           dataPointSelection: (_event, _chartContext, config) => {
-            if (syncingRef.current) return;
-
             const idx = (config as any)?.dataPointIndex ?? -1;
             if (idx < 0) return;
 
@@ -836,32 +785,33 @@ function CategoryDonutChart({
             onCategorySelect(bucket.categoryId ?? null);
           },
           click: (_event, _chartContext, config) => {
-            if (syncingRef.current) return;
-
             const idx = (config as any)?.dataPointIndex ?? -1;
             if (idx === -1) onCategorySelect(undefined);
           },
         },
       },
-      legend: {
-        show: false,
-      },
+      legend: { show: false },
       labels: categories.map((c) => c.name),
       colors,
       dataLabels: { enabled: false },
       stroke: { show: false },
-      states: {
-        active: {
-          allowMultipleDataPointsSelection: false,
-          filter: { type: "lighten", value: 0.5 },
-        },
-        normal: { filter: { type: "none" } },
-      },
+
+      // Wyłączamy domyślne "kliknięcie/expand" ApexCharts dla pie/donut,
+      // bo i tak sterujemy wyglądem przez `colors`.
       plotOptions: {
         pie: {
+          expandOnClick: false,
           donut: { size: "60%" },
         },
       },
+
+      // Na wszelki wypadek wyłączamy filtry aktywnego/hover,
+      // żeby nie było dodatkowych efektów "selected".
+      states: {
+        active: { filter: { type: "none" } },
+        hover: { filter: { type: "none" } },
+      },
+
       tooltip: {
         y: {
           formatter: (v: number) => formatCurrency(v),
@@ -892,6 +842,7 @@ function CategoryDonutChart({
     <div className="flex-1 flex flex-col gap-3">
       <div className="flex items-center justify-center">
         <ReactApexChart
+          key={chartKey}
           type="donut"
           options={options}
           series={seriesData}
@@ -901,7 +852,10 @@ function CategoryDonutChart({
       <div className="space-y-1 max-h-32 overflow-y-auto pr-1 text-[11px]">
         {categories.map((c, idx) => {
           const bucketId = c.categoryId ?? null;
-          const isActive = selectedCategory === bucketId;
+          const isActive = (selectedCategory ?? undefined) !== undefined
+            ? (selectedCategory ?? null) === bucketId
+            : false;
+
           return (
             <button
               key={`${bucketId ?? "null"}-${c.name}`}
