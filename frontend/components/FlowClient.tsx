@@ -1485,148 +1485,137 @@ function TransactionSideDetails({
   return (
     <aside
       className={[
-        "min-w-[380px] max-w-[380px]",
-        "flex flex-col rounded-3xl border border-white/10",
-        "bg-gradient-to-b from-slate-900/80 via-slate-950/85 to-slate-950/95 backdrop-blur",
-        "px-5 py-5 md:px-6 md:py-6",
-        "text-[11px] shadow-2xl shadow-black/30",
+        "min-w-[360px] max-w-[360px] w-[360px]",
+        "flex flex-col border border-white/10",
+        "bg-gradient-to-b from-slate-950/70 via-slate-950/80 to-slate-950/90 backdrop-blur",
+        "px-4 py-4 text-[11px]",
+        "shadow-2xl shadow-black/30",
         "transition-all duration-300 ease-in-out",
         open
           ? "opacity-100 translate-x-0"
           : "opacity-0 pointer-events-none translate-x-3",
       ].join(" ")}
     >
-      {/* Nagłówek */}
-      <div className="mb-5 flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 shadow-inner shadow-black/20">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-slate-200 shadow-inner shadow-black/30">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/80 shadow-sm shadow-emerald-400/30" />
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-3">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
             Szczegóły transakcji
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-slate-400">
-            <span className="rounded-full bg-slate-800/80 px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-slate-300">
-              ID {transaction.id}
+          <div className="mt-1 min-w-0 truncate text-[12px] font-medium text-slate-100">
+            {transaction.name || "Transakcja"}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-500">
+            <span>ID {transaction.id}</span>
+            <span className="text-slate-600">•</span>
+            <span>{operationDate}</span>
+            <span className="text-slate-600">•</span>
+            <span className="uppercase tracking-[0.16em] text-indigo-200/90">
+              {transaction.is_manual ? "MANUAL" : "PDF"}
             </span>
-            <span className="text-slate-500">•</span>
-            <span className="text-slate-300">{transaction.name || "Transakcja"}</span>
           </div>
         </div>
 
         <div
           className={[
-            "inline-flex items-center rounded-2xl border px-4 py-2 text-[13px] font-semibold whitespace-nowrap shadow-lg",
-            "shadow-emerald-500/10 backdrop-blur-lg",
+            "shrink-0 border px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap",
             transaction.amountNum >= 0
-              ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-50"
-              : "border-rose-400/40 bg-rose-500/15 text-rose-50",
+              ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-50"
+              : "border-rose-400/40 bg-rose-500/10 text-rose-50",
           ].join(" ")}
         >
           {formatCurrency(transaction.amountNum)}
         </div>
       </div>
 
-        <div className="space-y-5">
-          {/* Kategoria + źródło */}
-          <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1">
-                <div className="text-slate-500 text-[10px] uppercase tracking-[0.14em]">
-                  Kategoria
-                </div>
-
-                <CategoryDropdown
-                  value={transaction.category_id}
-                  categories={categories}
-                  onChange={(categoryId) =>
-                    onChangeCategory(transaction.id, categoryId)
-                  }
-                />
+      <div className="mt-3 space-y-4">
+        {/* Category */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+              Kategoria
             </div>
-
-            <div className="flex flex-col items-end gap-1 pt-2 text-[10px] text-slate-400">
-              <span className="uppercase tracking-[0.14em] text-indigo-200">Źródło</span>
-              <span className="text-slate-100 whitespace-nowrap">
-                {transaction.category_source ?? "—"}
-              </span>
+            <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+              {transaction.category_source ?? "—"}
             </div>
           </div>
+
+          <CategoryDropdown
+            value={transaction.category_id}
+            categories={categories}
+            onChange={(categoryId) => onChangeCategory(transaction.id, categoryId)}
+          />
         </div>
 
-        {/* ✅ Dyskretna “automatyzacja podobnych” */}
+        {/* Rule suggestion */}
         {ruleSuggestion && (
-          <div className="rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3 py-3 flex items-start justify-between gap-3 shadow-inner shadow-indigo-500/10">
-            <div className="min-w-0 space-y-1">
-              <div className="text-[11px] text-indigo-50 font-semibold flex items-center gap-1.5 leading-relaxed">
-                <span className="text-[12px]">✨</span>
-                Automatyzacja podobnych
+          <div className="border border-indigo-400/20 bg-indigo-500/5 px-3 py-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-indigo-200/90">
+                  Automatyzacja podobnych
+                </div>
+                <div className="text-[11px] text-slate-200 leading-relaxed">
+                  Wykryto powtarzający się token{" "}
+                  <span className="font-semibold text-white">
+                    {ruleSuggestion.pattern_value}
+                  </span>
+                  . Włączyć regułę dla podobnych ({ruleSuggestion.similar_count})?
+                </div>
               </div>
-              <div className="text-[10px] text-indigo-50/80 leading-relaxed">
-                Często pojawia się{" "}
-                <span className="text-white font-semibold">
-                  {ruleSuggestion.pattern_value}
-                </span>
-                . Chcesz automatycznie przypisać tę kategorię do podobnych transakcji
-                ({ruleSuggestion.similar_count})?
-              </div>
-            </div>
 
-            <div className="shrink-0 flex flex-col items-end gap-1">
-              <button
-                onClick={onAcceptRuleSuggestion}
-                disabled={enablingSuggestion}
-                className="
-                  rounded-full border border-white/40 bg-white/15
-                  px-3 py-1.5 text-[11px] font-semibold text-white
-                  hover:bg-white/25 transition-colors
-                  disabled:opacity-60 disabled:cursor-not-allowed
-                "
-              >
-                {enablingSuggestion ? "Włączanie…" : "Włącz"}
-              </button>
-              <button
-                onClick={onDismissRuleSuggestion}
-                className="text-[10px] text-indigo-100/70 hover:text-white transition-colors"
-                type="button"
-              >
-                Nie teraz
-              </button>
+              <div className="shrink-0 flex flex-col items-end gap-1">
+                <button
+                  type="button"
+                  onClick={onAcceptRuleSuggestion}
+                  disabled={enablingSuggestion}
+                  className="border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {enablingSuggestion ? "Włączanie…" : "Włącz"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onDismissRuleSuggestion}
+                  className="text-[10px] text-slate-400 hover:text-slate-200"
+                >
+                  Nie teraz
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* ✅ Banner po sukcesie “Włącz” */}
+        {/* Automation banner */}
         {automationBanner && (
-          <div className="rounded-xl border border-emerald-300/25 bg-gradient-to-r from-emerald-500/10 via-emerald-500/20 to-emerald-400/10 px-4 py-3 space-y-1 shadow-inner shadow-emerald-500/20">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-100">
-              Automatyzacja
+          <div className="border border-emerald-300/25 bg-emerald-500/5 px-3 py-2 space-y-1">
+            <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/90">
+              Automatyzacja włączona
             </div>
-            <div className="text-[11px] text-emerald-50">
-              Włączona dla podobnych · zastosowano do{" "}
-              <span className="text-white font-semibold">
+            <div className="text-[11px] text-slate-200">
+              Zastosowano do{" "}
+              <span className="font-semibold text-white">
                 {automationBanner.count}
-              </span>
+              </span>{" "}
+              podobnych.
             </div>
-            <div className="text-[10px] text-emerald-50/80">
-              Wzorzec:{" "}
-              <span className="text-white/90">{automationBanner.token}</span>
+            <div className="text-[10px] text-slate-400">
+              Wzorzec: <span className="text-slate-200">{automationBanner.token}</span>
               {automationBanner.categoryName ? (
                 <>
                   {" "}
-                  →{" "}
-                  <span className="text-white/90">
-                    {automationBanner.categoryName}
-                  </span>
+                  → <span className="text-slate-200">{automationBanner.categoryName}</span>
                 </>
               ) : null}
             </div>
           </div>
         )}
 
-        <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">
-            Szczegóły operacji
+        {/* Details */}
+        <div className="border-t border-white/10 pt-3">
+          <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 mb-2">
+            Dane
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             <DetailCell label="Data operacji" value={operationDate} />
             <DetailCell label="Data waluty" value={valueDate} />
             <DetailCell
@@ -1637,12 +1626,14 @@ function TransactionSideDetails({
           </div>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-4 shadow-inner shadow-black/10">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Pełny opis</div>
+        {/* Description */}
+        <div className="border-t border-white/10 pt-3">
+          <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 mb-2">
+            Opis
+          </div>
           <div
             className={[
-              "rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px]",
-              "leading-relaxed shadow-inner shadow-black/20",
+              "border border-white/10 bg-slate-950/40 px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap",
               hasDesc ? "text-slate-200" : "text-slate-600 italic",
             ].join(" ")}
           >
@@ -1651,8 +1642,8 @@ function TransactionSideDetails({
         </div>
       </div>
 
-      <div className="pt-3 mt-4 border-t border-white/5 text-[10px] text-slate-500">
-        Ten panel będzie się dalej “inteligentnie” rozbudowywał w Lab.
+      <div className="mt-auto pt-3 border-t border-white/10 text-[10px] text-slate-600">
+        Kliknij ponownie wiersz, aby zamknąć panel.
       </div>
     </aside>
   );
@@ -1667,130 +1658,158 @@ function CategoryDropdown({
   categories: Category[];
   onChange: (categoryId: number | null) => void;
 }) {
-  const options = [
-    {
-      value: "",
-      label: "Brak kategorii",
-      helper: "Transakcja pozostanie nieprzypisana",
-      color: "#475569",
-    },
-    ...categories.map((cat) => ({
-      value: cat.id.toString(),
-      label: cat.name,
-      helper: "Przypisz tę kategorię",
-      color: cat.color ?? "#a5b4fc",
-    })),
-  ];
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+
+  const options = useMemo(
+    () => [
+      {
+        value: "",
+        label: "Brak kategorii",
+        helper: "Pozostaw bez przypisania",
+        color: "#475569",
+      },
+      ...categories.map((cat) => ({
+        value: cat.id.toString(),
+        label: cat.name,
+        helper: "Przypisz kategorię",
+        color: cat.color ?? "#a5b4fc",
+      })),
+    ],
+    [categories]
+  );
 
   const active =
     options.find((opt) => opt.value === (value?.toString() ?? "")) ?? options[0];
 
+  const filtered = useMemo(() => {
+    const nq = normalizeQuery(q);
+    if (!nq) return options;
+    return options.filter((o) => normalizeQuery(o.label).includes(nq));
+  }, [options, q]);
+
+  const pick = (nextValue: string) => {
+    onChange(nextValue === "" ? null : Number(nextValue));
+    setOpen(false);
+  };
+
   return (
-    <Popover.Root>
-      <Popover.Trigger
-        className="group mt-2 inline-flex w-full items-center gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-left shadow-inner shadow-black/20 transition hover:border-indigo-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 data-[state=open]:border-indigo-400/70"
-        aria-label="Zmień kategorię transakcji"
-      >
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900/70 text-indigo-200 shadow-inner shadow-black/30">
-          <TagIcon className="h-4 w-4" />
-        </div>
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="w-full border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400/70"
+          aria-label="Zmień kategorię transakcji"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 border border-white/10"
+                  style={{ backgroundColor: active.color }}
+                />
+                <span className="truncate text-[12px] font-medium text-slate-100">
+                  {active.label}
+                </span>
+              </div>
+              <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                {active.helper}
+              </div>
+            </div>
 
-        <div className="flex min-w-0 flex-1 flex-col space-y-1">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
-            Kategoria
-          </span>
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-100">
-            <span
-              className="h-2 w-2 rounded-full border border-slate-700/80 shadow-inner shadow-black/30"
-              style={{ backgroundColor: active.color }}
-            />
-            <span className="truncate text-[13px] font-semibold text-slate-100">
-              {active.label}
-            </span>
+            <ChevronDownIcon className="h-4 w-4 text-slate-400" />
           </div>
-          {active.helper && (
-            <span className="text-[10px] text-slate-400">{active.helper}</span>
-          )}
-        </div>
-
-        <div className="flex h-8 w-8 items-center justify-center text-slate-400 transition group-data-[state=open]:text-indigo-200">
-          <ChevronDownIcon className="h-4 w-4" />
-        </div>
+        </button>
       </Popover.Trigger>
 
-      <Popover.Content
-        sideOffset={10}
-        className="z-50 w-[220px] max-h-[260px] overflow-y-auto rounded-xl border border-slate-800/80 bg-slate-950/95 p-2 shadow-xl shadow-black/40 backdrop-blur"
-      >
-        <div className="mb-2 flex items-center gap-2 px-1 text-[10px] uppercase tracking-[0.1em] text-slate-400">
-          <TagIcon className="h-3.5 w-3.5 text-indigo-300" />
-          <span>Wybierz kategorię</span>
-        </div>
+      <Popover.Portal>
+        <Popover.Content
+          side="bottom"
+          align="start"
+          sideOffset={8}
+          className="z-50 w-[320px] border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-xl shadow-black/50"
+        >
+          <div className="px-3 py-2 border-b border-white/10">
+            <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+              Wybierz kategorię
+            </div>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Szukaj…"
+              className="mt-2 w-full border border-white/10 bg-slate-950/60 px-2 py-1 text-[12px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-400/60"
+            />
+          </div>
 
-        <div className="flex flex-col gap-0.5">
-          {options.map((option) => {
-            const isActive = option.value === (value?.toString() ?? "");
-            return (
-              <Popover.Close
-                asChild
-                key={option.value === "" ? "none" : option.value}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    onChange(option.value === "" ? null : Number(option.value))
-                  }
-                  className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-left transition ${
-                    isActive
-                      ? "bg-slate-900/80 ring-1 ring-indigo-400/60 text-slate-100"
-                      : "text-slate-300 hover:bg-slate-900/60"
-                  }`}
-                >
-                  <span
-                    className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/70 text-[11px] font-semibold"
-                    style={{
-                      backgroundColor: `${option.color}20`,
-                      color: option.color,
-                    }}
+          <div className="max-h-[280px] overflow-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-3 text-[11px] text-slate-500">
+                Brak wyników.
+              </div>
+            ) : (
+              filtered.map((option) => {
+                const isActive = option.value === (value?.toString() ?? "");
+                return (
+                  <button
+                    key={option.value === "" ? "none" : option.value}
+                    type="button"
+                    onClick={() => pick(option.value)}
+                    className={[
+                      "w-full px-3 py-2 text-left border-b border-white/5 hover:bg-white/5 transition-colors",
+                      isActive ? "bg-white/5" : "",
+                    ].join(" ")}
                   >
-                    ●
-                  </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 border border-white/10"
+                        style={{ backgroundColor: option.color }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12px] text-slate-200">
+                          {option.label}
+                        </div>
+                        <div className="truncate text-[10px] text-slate-500">
+                          {option.helper}
+                        </div>
+                      </div>
+                      {isActive ? (
+                        <CheckIcon className="h-4 w-4 text-indigo-200" />
+                      ) : (
+                        <span className="text-[10px] text-slate-600"> </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
 
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-semibold">
-                      {option.label}
-                    </span>
-                    {option.helper && (
-                      <span className="truncate text-[10px] text-slate-400">
-                        {option.helper}
-                      </span>
-                    )}
-                  </div>
+          <div className="px-3 py-2 border-t border-white/10 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                setQ("");
+                pick("");
+              }}
+              className="text-[11px] text-slate-400 hover:text-slate-200"
+            >
+              Wyczyść
+            </button>
 
-                  <span
-                    className={`ml-auto flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-semibold ${
-                      isActive
-                        ? "bg-indigo-500/20 text-indigo-100"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    {isActive ? (
-                      <CheckIcon className="h-3.5 w-3.5" />
-                    ) : (
-                      option.label.slice(0, 1)
-                    )}
-                  </span>
-                </button>
-              </Popover.Close>
-            );
-          })}
-        </div>
-
-        <Popover.Arrow className="fill-slate-800/80" />
-      </Popover.Content>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="border border-white/20 bg-white/10 px-3 py-1 text-[11px] text-slate-100 hover:bg-white/20"
+            >
+              Zamknij
+            </button>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
     </Popover.Root>
   );
 }
+
 
 function CheckIcon({ className }: { className?: string }) {
   return (
