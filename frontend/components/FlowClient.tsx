@@ -1858,22 +1858,31 @@ function DetailCell({ label, value }: { label: string; value: string }) {
 /* ---------- HELPERS ---------- */
 
 function normalizeTransactions(transactions: Transaction[]): TxExt[] {
-  return transactions.map((t) => {
-    let d = parseDate(t.operation_date);
+  return (transactions ?? []).flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+
+    const opDate = (raw as Transaction | Record<string, unknown>).operation_date;
+    let d = parseDate(opDate);
 
     if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
       try {
-        d = new Date(t.operation_date as any);
+        d = new Date(opDate as any);
       } catch {
         d = new Date();
       }
     }
 
-    return {
-      ...t,
-      amountNum: parseAmount(t.amount as any),
-      date: d,
-    };
+    const amount = (raw as Transaction | Record<string, unknown>).amount ?? "0";
+
+    return [
+      {
+        ...(raw as Transaction),
+        operation_date: opDate ?? "",
+        amount,
+        amountNum: parseAmount(amount as any),
+        date: d,
+      },
+    ];
   });
 }
 
