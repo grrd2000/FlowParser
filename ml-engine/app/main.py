@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 from app.engine import (
     Algorithm,
     RecurringPaymentEngine,
-    build_dataframe,
-    load_sample_dataset,
+    # build_dataframe,
+    # load_sample_dataset,
 )
 
 app = FastAPI(title="FlowParser ML Engine", version="0.1.0")
@@ -54,7 +54,7 @@ def health() -> dict:
 
 @app.post("/train", response_model=TrainResponse)
 def train(req: TrainRequest):
-    df = build_dataframe([tx.model_dump() for tx in req.transactions], include_label=True)
+    df = engine.build_dataframe([tx.model_dump() for tx in req.transactions], include_label=True)
     try:
         result = engine.train(df, algorithm=req.algorithm)
     except ValueError as exc:
@@ -64,14 +64,16 @@ def train(req: TrainRequest):
 
 @app.post("/train-sample", response_model=TrainResponse)
 def train_sample(algorithm: Algorithm = "lightgbm"):
-    df = load_sample_dataset("data/sample_transactions.csv")
+    # xd = r'data/sample_transactions.csv'
+    df = engine.load_sample_dataset()
+    print (df.head())
     result = engine.train(df, algorithm=algorithm)
     return {"algorithm": algorithm, "metrics": result.metrics}
 
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
-    df = build_dataframe([tx.model_dump() for tx in req.transactions], include_label=False)
+    df = engine.build_dataframe([tx.model_dump() for tx in req.transactions], include_label=False)
     try:
         scores = engine.predict(df, algorithm=req.algorithm)
     except ValueError as exc:

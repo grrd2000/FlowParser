@@ -212,19 +212,20 @@ class RecurringPaymentEngine:
         df["desc_len"] = normalized_desc.str.len()
         return df[["day", "weekday", "amount_abs", "amount_mag", "has_keyword", "desc_len"]]
 
+
     @staticmethod
-def _create_model(algorithm: Algorithm, n_features: int):
-    if algorithm == "lightgbm":
-        if LGBMClassifier:
-            return LGBMClassifier(
-                    n_estimators=200,
-                    learning_rate=0.05,
-                    max_depth=-1,
-                    num_leaves=31,
-                    subsample=0.9,
-                    colsample_bytree=0.9,
-                    random_state=42,
-                )
+    def _create_model(algorithm: Algorithm, n_features: int):
+        if algorithm == "lightgbm":
+            if LGBMClassifier:
+                return LGBMClassifier(
+                        n_estimators=200,
+                        learning_rate=0.05,
+                        max_depth=-1,
+                        num_leaves=31,
+                        subsample=0.9,
+                        colsample_bytree=0.9,
+                        random_state=42,
+                    )
             return SimpleBoostingFallback()
         if algorithm == "xgboost":
             if XGBClassifier:
@@ -250,9 +251,9 @@ def _create_model(algorithm: Algorithm, n_features: int):
                     random_seed=42,
                 )
             return SimpleBoostingFallback()
-    if algorithm == "torch_mlp":
-        return TorchMLPClassifier(input_dim=n_features)
-    raise ValueError(f"Unsupported algorithm: {algorithm}")
+        if algorithm == "torch_mlp":
+            return TorchMLPClassifier(input_dim=n_features)
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
 
     def train(self, data: pd.DataFrame, algorithm: Algorithm = "lightgbm") -> TrainingResult:
         if "label" not in data.columns:
@@ -285,23 +286,24 @@ def _create_model(algorithm: Algorithm, n_features: int):
         return model.predict_proba(features)[:, 1]
 
 
-def load_sample_dataset(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    if "label" not in df.columns:
-        raise ValueError("Sample dataset must contain 'label' column")
-    return df
+    def load_sample_dataset(self) -> pd.DataFrame:
+        path = r'data/sample_transactions.csv'
+        df = pd.read_csv(path)
+        if "label" not in df.columns:
+            raise ValueError("Sample dataset must contain 'label' column")
+        return df
 
 
-def build_dataframe(transactions: List[dict], include_label: bool) -> pd.DataFrame:
-    normalized = []
-    for tx in transactions:
-        normalized.append(
-            {
-                "transaction_id": tx.get("transaction_id", tx.get("id")),
-                "date": tx["date"],
-                "amount": float(tx["amount"]),
-                "description": tx.get("description", ""),
-                **({"label": int(tx["label"])} if include_label and "label" in tx else {}),
-            }
-        )
-    return pd.DataFrame(normalized)
+    def build_dataframe(transactions: List[dict], include_label: bool) -> pd.DataFrame:
+        normalized = []
+        for tx in transactions:
+            normalized.append(
+                {
+                    "transaction_id": tx.get("transaction_id", tx.get("id")),
+                    "date": tx["date"],
+                    "amount": float(tx["amount"]),
+                    "description": tx.get("description", ""),
+                    **({"label": int(tx["label"])} if include_label and "label" in tx else {}),
+                }
+            )
+        return pd.DataFrame(normalized)
