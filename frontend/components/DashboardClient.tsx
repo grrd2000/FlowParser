@@ -336,10 +336,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <NetFlowGranularity
-                active={granularity}
-                onChange={handleGranularityChange}
-              />
+              <NetFlowGranularity active={range} onChange={setRange} />
               <span className="badge-soft">Dynamiczny wykres</span>
             </div>
           </div>
@@ -539,14 +536,15 @@ function NetFlowGranularity({
   active,
   onChange,
 }: {
-  active: NetFlowGranularity;
-  onChange: (value: NetFlowGranularity) => void;
+  active: RangeKey;
+  onChange: (value: RangeKey) => void;
 }) {
-  const options: { key: NetFlowGranularity; label: string; desc: string }[] = [
-    { key: "day", label: "Dziennie", desc: "Dokładne pulsowanie" },
-    { key: "week", label: "Tygodniowo", desc: "Wygładzony trend" },
-    { key: "quarter", label: "Kwartalnie", desc: "Szersza perspektywa" },
-    { key: "year", label: "Rocznie", desc: "Historyczny widok" },
+  const options: { key: RangeKey; label: string; desc: string }[] = [
+    { key: "1m", label: "Dziennie", desc: "Ostatnie 30 dni" },
+    { key: "3m", label: "Tygodniowo", desc: "Ostatni kwartał" },
+    { key: "6m", label: "Miesiące", desc: "Pół roku" },
+    { key: "ytd", label: "YTD", desc: "Miesięczne ujęcie" },
+    { key: "all", label: "Kwartały", desc: "Cała historia" },
   ];
 
   return (
