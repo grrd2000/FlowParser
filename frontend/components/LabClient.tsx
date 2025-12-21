@@ -558,6 +558,24 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                   detail="uczą model"
                 />
               </div>
+
+              <div className="grid gap-2 sm:grid-cols-3 text-[11px]">
+                <MiniKpi
+                  label="Sugestie AI"
+                  value={loading ? "—" : `${suggestionCount}`}
+                  hint="zebrane do przejrzenia"
+                />
+                <MiniKpi
+                  label="Reguły"
+                  value={rulesLoading ? "—" : `${ruleCount}`}
+                  hint="kolejność = priorytet"
+                />
+                <MiniKpi
+                  label="Kategorie"
+                  value={loading ? "—" : `${categoryCount}`}
+                  hint="mapa w Flow"
+                />
+              </div>
             </div>
 
             <div className="relative space-y-4">
@@ -567,63 +585,8 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 categorized={categorized}
                 uncategorized={uncategorized}
               />
-
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[11px] text-slate-200 shadow-[0_10px_50px_rgba(0,0,0,0.35)] space-y-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Smart overview</div>
-                    <h2 className="mt-1 text-sm font-semibold text-slate-50">
-                      Jak bardzo „ogarnięte” są Twoje finanse
-                    </h2>
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      Szybki podgląd Labu: pokrycie kategorii, automatyzacje i rzeczy do przejrzenia.
-                    </p>
-                  </div>
-
-                  <Link
-                    href="/flow"
-                    className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 hover:border-white/20 transition-colors"
-                  >
-                    Otwórz Flow →
-                  </Link>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-3 text-[11px]">
-                  <MiniKpi
-                    label="Sugestie AI"
-                    value={loading ? "—" : `${suggestionCount}`}
-                    hint="zebrane do przejrzenia"
-                  />
-                  <MiniKpi
-                    label="Reguły"
-                    value={rulesLoading ? "—" : `${ruleCount}`}
-                    hint="kolejność = priorytet"
-                  />
-                  <MiniKpi
-                    label="Kategorie"
-                    value={loading ? "—" : `${categoryCount}`}
-                    hint="mapa w Flow"
-                  />
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400">
-                    <span>Postęp rozumienia</span>
-                    <span className="text-slate-200">{categorized}/{total}</span>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-black/40 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-indigo-400/80 via-sky-400/70 to-emerald-400/70"
-                      style={{ width: `${coveragePct}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-500">
-                    Najszybsza droga do „inteligencji”: przypisuj kategorie w Flow, a Lab zaproponuje automatyzacje.
-                  </div>
-                </div>
-              </div>
             </div>
-	          </div>
+          </div>
           </section>
 
         <div className="flex flex-col gap-6">
@@ -690,6 +653,44 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                   >
                     {rulesBusyId === "apply" ? "Stosowanie…" : "Zastosuj teraz"}
                   </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] text-slate-300">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    <span className="h-2 w-2 rounded-full bg-emerald-300 animate-[pulse_6s_ease-in-out_infinite]" />
+                    Widok reguł
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="inline-flex rounded-full border border-white/10 bg-slate-900/60 p-1">
+                      {["all", "enabled", "disabled"].map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setRuleFilter(mode as any)}
+                          className={[
+                            "px-3 py-1 rounded-full capitalize",
+                            ruleFilter === mode
+                              ? "bg-indigo-500/80 text-slate-950 shadow"
+                              : "text-slate-200 hover:bg-white/5",
+                          ].join(" ")}
+                        >
+                          {mode === "all" ? "wszystkie" : mode === "enabled" ? "aktywne" : "wstrzymane"}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={applyRulesNow}
+                      disabled={rulesBusyId === "apply"}
+                      className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/15 transition-colors disabled:opacity-50"
+                    >
+                      {rulesBusyId === "apply" ? "Stosowanie…" : "Zastosuj teraz"}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -774,34 +775,7 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
                 <div className="px-4 py-2 border-b border-white/10 text-[10px] uppercase tracking-[0.16em] text-slate-500 flex flex-wrap items-center justify-between gap-3">
                   <span>Aktywne reguły</span>
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
-                    <div className="inline-flex rounded-full border border-white/10 bg-slate-900/60 p-1">
-                      {["all", "enabled", "disabled"].map((mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setRuleFilter(mode as any)}
-                          className={[
-                            "px-3 py-1 rounded-full capitalize",
-                            ruleFilter === mode
-                              ? "bg-indigo-500/80 text-slate-950 shadow"
-                              : "text-slate-200 hover:bg-white/5",
-                          ].join(" ")}
-                        >
-                          {mode === "all" ? "wszystkie" : mode === "enabled" ? "aktywne" : "wstrzymane"}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={applyRulesNow}
-                      disabled={rulesBusyId === "apply"}
-                      className="sm:hidden rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/15 transition-colors disabled:opacity-50"
-                    >
-                      {rulesBusyId === "apply" ? "…" : "Zastosuj"}
-                    </button>
-                    <span className="text-[10px] text-slate-600">Kolejność = priorytet</span>
-                  </div>
+                  <span className="text-[10px] text-slate-600">Kolejność = priorytet</span>
                 </div>
 
                 {rulesLoading ? (
