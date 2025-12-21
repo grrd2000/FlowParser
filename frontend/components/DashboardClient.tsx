@@ -336,8 +336,8 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
           <NetFlowChart series={netFlowSeries} loading={loading} />
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5">
-            <div className="min-w-[260px] flex-1">
+          <div className="flex justify-center pt-6 mt-2 border-t border-white/5">
+            <div className="w-full max-w-2xl justify-center flex">
               <NetFlowGranularity active={granularity} onChange={handleGranularityChange} />
             </div>
           </div>
@@ -548,7 +548,7 @@ function NetFlowGranularity({
   ];
 
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-1.5 py-1 shadow-inner shadow-black/30">
+    <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-1 py-1 shadow-inner shadow-black/20">
       {options.map((opt) => {
         const isActive = opt.key === active;
         return (
@@ -556,15 +556,15 @@ function NetFlowGranularity({
             key={opt.key}
             type="button"
             onClick={() => onChange(opt.key)}
-            className={`group relative overflow-hidden rounded-full px-2.5 py-1.5 text-left text-[11px] transition-all duration-200 ${
+            className={`group relative overflow-hidden rounded-full px-2 py-1.25 text-left text-[10.5px] transition-all duration-200 ${
               isActive
-                ? "bg-gradient-to-r from-emerald-400/90 via-indigo-400/80 to-pink-400/80 text-slate-900 shadow-lg shadow-indigo-500/40"
+                ? "bg-gradient-to-r from-emerald-400/85 via-indigo-400/75 to-pink-400/75 text-slate-900 shadow-md shadow-indigo-500/30"
                 : "text-slate-200 hover:text-white"
             }`}
           >
             <div className="flex items-center gap-2">
               <span
-                className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${
+                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold ${
                   isActive
                     ? "bg-white/70 text-slate-900"
                     : "border border-white/20 bg-white/10 text-slate-200"
