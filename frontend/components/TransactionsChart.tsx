@@ -96,14 +96,7 @@ export function TransactionsChart({
     );
   }, [transactions, granularity]);
 
-  if (buckets.length === 0) {
-    return (
-      <p className="text-xs text-slate-500">
-        Brak danych do wyświetlenia na wykresie dla wybranego zakresu.
-      </p>
-    );
-  }
-
+  const hasData = buckets.length > 0;
   const x = buckets.map((b) => b.label);
   const net = buckets.map((b) => b.net);
   const custom = buckets.map((b) => [b.income, b.expense]);
@@ -177,55 +170,61 @@ export function TransactionsChart({
 
       {/* animowany wykres */}
       <div className="h-64 w-full">
-        <motion.div
-          className="h-full w-full"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        >
-          <Plot
-            data={[
-              {
-                type: "bar",
-                x,
-                y: net,
-                name: "Saldo (netto)",
-                customdata: custom,
-                hovertemplate:
-                  "Okres: %{x}<br>" +
-                  "Saldo: %{y:.2f} zł<br>" +
-                  "Przychody: %{customdata[0]:.2f} zł<br>" +
-                  "Wydatki: %{customdata[1]:.2f} zł<br>" +
-                  "<extra></extra>",
-              } as any,
-            ]}
-            layout={{
-              margin: { l: 40, r: 10, t: 10, b: 40 },
-              paper_bgcolor: "rgba(0,0,0,0)",
-              plot_bgcolor: "rgba(0,0,0,0)",
-              xaxis: {
-                title: "",
-                tickfont: { size: 10, color: "#9ca3af" },
-              },
-              yaxis: {
-                title: "zł",
-                tickfont: { size: 10, color: "#9ca3af" },
-              },
-              showlegend: false,
-            }}
-            config={{
-              displaylogo: false,
-              responsive: true,
-              modeBarButtonsToRemove: [
-                "toImage",
-                "lasso2d",
-                "select2d",
-                "autoScale2d",
-              ],
-            }}
-            style={{ width: "100%", height: "100%" }}
-          />
-        </motion.div>
+        {hasData ? (
+          <motion.div
+            className="h-full w-full"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          >
+            <Plot
+              data={[
+                {
+                  type: "bar",
+                  x,
+                  y: net,
+                  name: "Saldo (netto)",
+                  customdata: custom,
+                  hovertemplate:
+                    "Okres: %{x}<br>" +
+                    "Saldo: %{y:.2f} zł<br>" +
+                    "Przychody: %{customdata[0]:.2f} zł<br>" +
+                    "Wydatki: %{customdata[1]:.2f} zł<br>" +
+                    "<extra></extra>",
+                } as any,
+              ]}
+              layout={{
+                margin: { l: 40, r: 10, t: 10, b: 40 },
+                paper_bgcolor: "rgba(0,0,0,0)",
+                plot_bgcolor: "rgba(0,0,0,0)",
+                xaxis: {
+                  title: "",
+                  tickfont: { size: 10, color: "#9ca3af" },
+                },
+                yaxis: {
+                  title: "zł",
+                  tickfont: { size: 10, color: "#9ca3af" },
+                },
+                showlegend: false,
+              }}
+              config={{
+                displaylogo: false,
+                responsive: true,
+                modeBarButtonsToRemove: [
+                  "toImage",
+                  "lasso2d",
+                  "select2d",
+                  "autoScale2d",
+                ],
+              }}
+              style={{ width: "100%", height: "100%" }}
+            />
+          </motion.div>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-800/80 bg-slate-900/60 p-6 text-center text-xs text-slate-400">
+            Brak danych do wyświetlenia na wykresie dla wybranego zakresu.
+          </div>
+        )}
       </div>
     </div>
   );
