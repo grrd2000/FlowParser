@@ -702,7 +702,7 @@ function NetFlowChart({
 
 
 const UNCATEGORIZED_LABEL = "Brak kategorii";
-const UNCATEGORIZED_COLOR = "#cbd5e1";
+const UNCATEGORIZED_COLOR = "#cbd5e150";
 
 const DONUT_FALLBACK_COLORS = [
   "#fbbf24",
