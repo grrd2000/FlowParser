@@ -34,7 +34,6 @@ function getQuarter(d: Date): { year: number; quarter: number } {
   return { year: d.getFullYear(), quarter: q };
 }
 
-
 export function TransactionsChart({
   transactions,
   initialGranularity,
@@ -109,35 +108,71 @@ export function TransactionsChart({
   const net = buckets.map((b) => b.net);
   const custom = buckets.map((b) => [b.income, b.expense]);
 
+  const granularityOptions: { value: Granularity; label: string; hint: string }[] = [
+    { value: "day", label: "Dziennie", hint: "Najbardziej szczegółowy widok" },
+    { value: "week", label: "Tygodniowo", hint: "Wygładza krótkie skoki" },
+    { value: "month", label: "Miesięcznie", hint: "Dobry do budżetów" },
+    { value: "quarter", label: "Kwartalnie", hint: "Szersza perspektywa" },
+  ];
+
   return (
     <div className="space-y-3">
       {/* przełącznik granulacji */}
-      <div className="inline-flex rounded-full bg-slate-900/70 border border-slate-800 p-0.5 text-[11px]">
-        {(
-          [
-            ["day", "Dziennie"],
-            ["week", "Tygodniowo"],
-            ["month", "Miesięcznie"],
-            ["quarter", "Kwartalnie"],
-          ] as [Granularity, string][]
-        ).map(([value, label]) => {
-          const active = granularity === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setGranularity(value)}
-              className={[
-                "px-3 py-1 rounded-full transition-colors",
-                active
-                  ? "bg-indigo-500 text-slate-50"
-                  : "text-slate-400 hover:text-slate-100",
-              ].join(" ")}
-            >
-              {label}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800/80 bg-slate-900/60 p-3">
+        <div className="space-y-0.5">
+          <p className="text-[11px] uppercase tracking-[0.08em] text-slate-400">
+            Granulacja wykresu
+          </p>
+          <p className="text-sm text-slate-200">
+            Płynnie zmieniaj poziom szczegółowości danych
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {granularityOptions.map(({ value, label, hint }) => {
+            const active = granularity === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setGranularity(value)}
+                className={[
+                  "group relative overflow-hidden rounded-xl border px-3.5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide transition-all duration-300",
+                  active
+                    ? "border-white/10 bg-gradient-to-r from-indigo-500 via-sky-500 to-cyan-400 text-white shadow-[0_10px_40px_rgba(56,189,248,0.35)]"
+                    : "border-slate-800 bg-slate-900/70 text-slate-200 hover:-translate-y-0.5 hover:border-slate-700 hover:text-white",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "block text-[12px] font-semibold",
+                    active ? "text-white" : "text-slate-100",
+                  ].join(" ")}
+                >
+                  {label}
+                </span>
+                <span
+                  className={[
+                    "block text-[10px] font-normal",
+                    active ? "text-white/85" : "text-slate-400",
+                  ].join(" ")}
+                >
+                  {hint}
+                </span>
+
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-20"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.7), transparent 35%), radial-gradient(circle at 80% 0%, rgba(125,211,252,0.55), transparent 35%)",
+                  }}
+                />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* animowany wykres */}
