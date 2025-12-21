@@ -601,6 +601,7 @@ export function FlowClient() {
                       transaction={selectedTx}
                       categories={categories}
                       onChangeCategory={handleChangeCategory}
+                      onCreateCategory={handleCreateCategory}
                       enablingSuggestion={enablingSuggestion}
                       ruleSuggestion={
                         ruleSuggestion &&
@@ -1473,6 +1474,7 @@ function TransactionSideDetails({
   transaction,
   categories,
   onChangeCategory,
+  onCreateCategory,
   ruleSuggestion,
   enablingSuggestion,
   onAcceptRuleSuggestion,
@@ -1483,6 +1485,7 @@ function TransactionSideDetails({
   transaction: TxExt;
   categories: Category[];
   onChangeCategory: (txId: number, categoryId: number | null) => void;
+  onCreateCategory: (payload: { name: string; color?: string | null }) => Promise<Category>;
   ruleSuggestion: (RuleSuggestion & { txId: number }) | null;
   enablingSuggestion: boolean;
   onAcceptRuleSuggestion: () => void;
