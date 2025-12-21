@@ -568,19 +568,58 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 uncategorized={uncategorized}
               />
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[11px] text-slate-200 shadow-[0_10px_50px_rgba(0,0,0,0.35)]">
-                <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                  <span>Spójność UI</span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-slate-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
-                    Live
-                  </span>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-[11px] text-slate-200 shadow-[0_10px_50px_rgba(0,0,0,0.35)] space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Smart overview</div>
+                    <h2 className="mt-1 text-sm font-semibold text-slate-50">
+                      Jak bardzo „ogarnięte” są Twoje finanse
+                    </h2>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Szybki podgląd Labu: pokrycie kategorii, automatyzacje i rzeczy do przejrzenia.
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/flow"
+                    className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 hover:border-white/20 transition-colors"
+                  >
+                    Otwórz Flow →
+                  </Link>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <BadgePill label="Glassmorphism" desc="wspólny motyw" />
-                  <BadgePill label="Gradienty" desc="DNA projektu" />
-                  <BadgePill label="Focus" desc="priorytetyzacja akcji" />
-                  <BadgePill label="Ruch" desc="subtelne animacje" />
+
+                <div className="grid gap-2 sm:grid-cols-3 text-[11px]">
+                  <MiniKpi
+                    label="Sugestie AI"
+                    value={loading ? "—" : `${suggestionCount}`}
+                    hint="zebrane do przejrzenia"
+                  />
+                  <MiniKpi
+                    label="Reguły"
+                    value={rulesLoading ? "—" : `${ruleCount}`}
+                    hint="kolejność = priorytet"
+                  />
+                  <MiniKpi
+                    label="Kategorie"
+                    value={loading ? "—" : `${categoryCount}`}
+                    hint="mapa w Flow"
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Postęp rozumienia</span>
+                    <span className="text-slate-200">{categorized}/{total}</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-black/40 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-400/80 via-sky-400/70 to-emerald-400/70"
+                      style={{ width: `${coveragePct}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 text-[10px] text-slate-500">
+                    Najszybsza droga do „inteligencji”: przypisuj kategorie w Flow, a Lab zaproponuje automatyzacje.
+                  </div>
                 </div>
               </div>
             </div>
@@ -588,72 +627,6 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
         </section>
 
         <div className="flex flex-col gap-6">
-          {/* Smart overview */}
-          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] transition-all hover:-translate-y-1 hover:border-indigo-300/50">
-            <div className="absolute -top-16 -right-24 h-44 w-44 rounded-full bg-indigo-500/10 blur-3xl" />
-            <div className="absolute -bottom-16 -left-24 h-44 w-44 rounded-full bg-emerald-500/10 blur-3xl" />
-
-            <div className="relative px-6 sm:px-7 pt-6 pb-6 space-y-8">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Smart overview</div>
-                  <h2 className="mt-1 text-sm font-semibold text-slate-50 flex items-center gap-2">
-                    Jak bardzo „ogarnięte” są Twoje finanse
-                    <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
-                      beta
-                    </span>
-                  </h2>
-                  <p className="mt-1 text-[11px] text-slate-400 max-w-md">
-                    To jest szybki pulpit Labu: pokrycie kategorii, automatyzacje i rzeczy do przejrzenia.
-                  </p>
-                </div>
-
-                <Link
-                  href="/flow"
-                  className="hidden sm:inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 hover:border-white/20 transition-colors"
-                >
-                  Otwórz Flow →
-                </Link>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3 text-[11px]">
-                <MiniKpi
-                  label="Sugestie AI"
-                  value={loading ? "—" : `${suggestionCount}`}
-                  hint="zebrane do przejrzenia"
-                />
-                <MiniKpi
-                  label="Reguły"
-                  value={rulesLoading ? "—" : `${ruleCount}`}
-                  hint="kolejność = priorytet"
-                />
-                <MiniKpi
-                  label="Kategorie"
-                  value={loading ? "—" : `${categoryCount}`}
-                  hint="mapa w Flow"
-                />
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span>Postęp rozumienia</span>
-                  <span className="text-slate-200">
-                    {categorized}/{total}
-                  </span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-black/30 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-400/80 via-sky-400/70 to-emerald-400/70"
-                    style={{ width: `${coveragePct}%` }}
-                  />
-                </div>
-                <div className="mt-2 text-[10px] text-slate-500">
-                  Najszybsza droga do „inteligencji”: przypisuj kategorie w Flow, a Lab będzie proponował automatyzacje.
-                </div>
-              </div>
-            </div>
-          </section>
-
           {/* SMART RULES */}
             <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/70 via-slate-950/60 to-slate-900/60 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] transition-all hover:-translate-y-1 hover:border-indigo-200/50">
               <div className="absolute -top-10 left-10 h-24 w-24 rounded-full bg-indigo-500/12 blur-3xl" />
@@ -702,78 +675,79 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 </div>
               )}
 
-              {/* Create */}
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:border-white/20 transition-colors">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                  Dodaj automatyzację
+              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(320px,400px),1fr] items-start">
+                {/* Create */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:border-white/20 transition-colors h-full">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                    Dodaj automatyzację
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,1fr,auto] items-center">
+                    <select
+                      style={SELECT_STYLE}
+                      className={SELECT_CLASS}
+                      value={newRuleCategoryId}
+                      onChange={(e) => setNewRuleCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
+                    >
+                      <option value="">Wybierz kategorię…</option>
+                      {sortedCats.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      value={newRuleValue}
+                      onChange={(e) => setNewRuleValue(e.target.value)}
+                      placeholder="np. zabka, uber, spotify…"
+                      className="h-9 w-full rounded-full border border-white/10 bg-slate-900/70 px-3 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-400/70"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={createRule}
+                      disabled={rulesBusyId === "create"}
+                      className={[
+                        "h-9 rounded-full px-3 text-[12px] font-medium whitespace-nowrap shrink-0",
+                        rulesBusyId === "create"
+                          ? "border border-white/10 bg-white/5 text-slate-500 cursor-not-allowed"
+                          : "border border-indigo-400/60 bg-indigo-500/70 text-slate-950 hover:bg-indigo-400 transition-colors",
+                      ].join(" ")}
+                    >
+                      {rulesBusyId === "create" ? "Dodawanie…" : "Dodaj"}
+                    </button>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                    <span>Dopasowanie:</span>
+
+                    <select
+                      style={SELECT_STYLE}
+                      className="h-8 rounded-full bg-slate-900/70 border border-white/10 px-3 text-[11px] text-slate-200 focus:outline-none"
+                      value={newRulePatternType}
+                      onChange={(e) => setNewRulePatternType(e.target.value as any)}
+                    >
+                      <option value="contains">zawiera</option>
+                      <option value="startswith">zaczyna się od</option>
+                      <option value="equals">jest równe</option>
+                    </select>
+
+                    <span>w polu:</span>
+                    <select
+                      style={SELECT_STYLE}
+                      className="h-8 rounded-full bg-slate-900/70 border border-white/10 px-3 text-[11px] text-slate-200 focus:outline-none"
+                      value={newRuleField}
+                      onChange={(e) => setNewRuleField(e.target.value as any)}
+                    >
+                      <option value="description">opis</option>
+                      <option value="raw_description">opis (surowy)</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,1fr,auto] items-center">
-                  <select
-                    style={SELECT_STYLE}
-                    className={SELECT_CLASS}
-                    value={newRuleCategoryId}
-                    onChange={(e) => setNewRuleCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
-                  >
-                    <option value="">Wybierz kategorię…</option>
-                    {sortedCats.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    value={newRuleValue}
-                    onChange={(e) => setNewRuleValue(e.target.value)}
-                    placeholder="np. zabka, uber, spotify…"
-                    className="h-9 w-full rounded-full border border-white/10 bg-slate-900/70 px-3 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-400/70"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={createRule}
-                    disabled={rulesBusyId === "create"}
-                    className={[
-                      "h-9 rounded-full px-3 text-[12px] font-medium whitespace-nowrap shrink-0",
-                      rulesBusyId === "create"
-                        ? "border border-white/10 bg-white/5 text-slate-500 cursor-not-allowed"
-                        : "border border-indigo-400/60 bg-indigo-500/70 text-slate-950 hover:bg-indigo-400 transition-colors",
-                    ].join(" ")}
-                  >
-                    {rulesBusyId === "create" ? "Dodawanie…" : "Dodaj"}
-                  </button>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                  <span>Dopasowanie:</span>
-
-                  <select
-                    style={SELECT_STYLE}
-                    className="h-8 rounded-full bg-slate-900/70 border border-white/10 px-3 text-[11px] text-slate-200 focus:outline-none"
-                    value={newRulePatternType}
-                    onChange={(e) => setNewRulePatternType(e.target.value as any)}
-                  >
-                    <option value="contains">zawiera</option>
-                    <option value="startswith">zaczyna się od</option>
-                    <option value="equals">jest równe</option>
-                  </select>
-
-                  <span>w polu:</span>
-                  <select
-                    style={SELECT_STYLE}
-                    className="h-8 rounded-full bg-slate-900/70 border border-white/10 px-3 text-[11px] text-slate-200 focus:outline-none"
-                    value={newRuleField}
-                    onChange={(e) => setNewRuleField(e.target.value as any)}
-                  >
-                    <option value="description">opis</option>
-                    <option value="raw_description">opis (surowy)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Rules list */}
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+                {/* Rules list */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
                 <div className="px-4 py-2 border-b border-white/10 text-[10px] uppercase tracking-[0.16em] text-slate-500 flex flex-wrap items-center justify-between gap-3">
                   <span>Aktywne reguły</span>
                   <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
@@ -982,6 +956,8 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                     })}
                   </div>
                 )}
+              </div>
+
               </div>
 
               <div className="mt-3 text-[10px] text-slate-500">
