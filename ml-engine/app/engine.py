@@ -5,6 +5,9 @@ from typing import List, Literal
 
 import numpy as np
 import pandas as pd
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
 try:  # Optional heavy dependencies – gracefully degraded if unavailable
     from lightgbm import LGBMClassifier  # type: ignore
@@ -21,7 +24,82 @@ try:
 except ImportError:  # pragma: no cover
     CatBoostClassifier = None
 
-Algorithm = Literal["lightgbm", "xgboost", "catboost"]
+Algorithm = Literal["lightgbm", "xgboost", "catboost", "torch_mlp"]
+
+
+class TorchMLPClassifier:
+    """
+    Lightweight feed-forward network implemented directly in PyTorch.
+
+    This implementation keeps the training loop explicit to allow easy
+    customization while remaining dependency-light.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int = 64,
+        lr: float = 1e-3,
+        weight_decay: float = 1e-4,
+        epochs: int = 75,
+        batch_size: int = 64,
+    ) -> None:
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.Dropout(p=0.1),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, 1),
+        )
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self._fitted = False
+
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        X_tensor = torch.tensor(np.asarray(X, dtype=np.float32))
+        y_tensor = torch.tensor(np.asarray(y, dtype=np.float32)).unsqueeze(-1)
+
+        dataset = TensorDataset(X_tensor, y_tensor)
+        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+
+        self.model.to(device)
+        criterion = nn.BCEWithLogitsLoss()
+        optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
+        )
+
+        self.model.train()
+        for _ in range(self.epochs):
+            for batch_X, batch_y in loader:
+                batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+                optimizer.zero_grad()
+                logits = self.model(batch_X)
+                loss = criterion(logits, batch_y)
+                loss.backward()
+                optimizer.step()
+
+        self.model.eval()
+        self._fitted = True
+        return self
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        if not self._fitted:
+            raise RuntimeError("Model not fitted")
+
+        device = next(self.model.parameters()).device
+        X_tensor = torch.tensor(np.asarray(X, dtype=np.float32)).to(device)
+        with torch.no_grad():
+            logits = self.model(X_tensor).cpu().numpy().reshape(-1)
+        probs = 1 / (1 + np.exp(-logits))
+        return np.vstack([1 - probs, probs]).T
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
 
 
 class SimpleBoostingFallback:
@@ -135,10 +213,10 @@ class RecurringPaymentEngine:
         return df[["day", "weekday", "amount_abs", "amount_mag", "has_keyword", "desc_len"]]
 
     @staticmethod
-    def _create_model(algorithm: Algorithm):
-        if algorithm == "lightgbm":
-            if LGBMClassifier:
-                return LGBMClassifier(
+def _create_model(algorithm: Algorithm, n_features: int):
+    if algorithm == "lightgbm":
+        if LGBMClassifier:
+            return LGBMClassifier(
                     n_estimators=200,
                     learning_rate=0.05,
                     max_depth=-1,
@@ -172,7 +250,9 @@ class RecurringPaymentEngine:
                     random_seed=42,
                 )
             return SimpleBoostingFallback()
-        raise ValueError(f"Unsupported algorithm: {algorithm}")
+    if algorithm == "torch_mlp":
+        return TorchMLPClassifier(input_dim=n_features)
+    raise ValueError(f"Unsupported algorithm: {algorithm}")
 
     def train(self, data: pd.DataFrame, algorithm: Algorithm = "lightgbm") -> TrainingResult:
         if "label" not in data.columns:
@@ -185,7 +265,7 @@ class RecurringPaymentEngine:
             features, labels, test_size=0.25, random_state=42
         )
 
-        model = self._create_model(algorithm)
+        model = self._create_model(algorithm, n_features=features.shape[1])
         model.fit(X_train, y_train)
 
         y_pred = model.predict(X_test)
