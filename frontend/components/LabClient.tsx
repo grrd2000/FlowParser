@@ -623,17 +623,41 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+	          </div>
+          </section>
 
         <div className="flex flex-col gap-6">
-          {/* SMART RULES */}
-            <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/70 via-slate-950/60 to-slate-900/60 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] transition-all hover:-translate-y-1 hover:border-indigo-200/50">
+          {/* Kategorie + Smart rules (układ 2 kolumny) */}
+          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950/70 via-slate-950/60 to-slate-900/60 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.04)] transition-all hover:-translate-y-1 hover:border-indigo-200/50">
               <div className="absolute -top-10 left-10 h-24 w-24 rounded-full bg-indigo-500/12 blur-3xl" />
               <div className="absolute -bottom-14 right-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl" />
               <div className="absolute inset-0 opacity-60 bg-[linear-gradient(115deg,rgba(99,102,241,0.12),transparent_35%),linear-gradient(250deg,rgba(16,185,129,0.12),transparent_38%)]" />
 
-            <div className="relative px-6 sm:px-7 pt-6 pb-6 space-y-8">
+            <div className="relative px-6 sm:px-7 pt-6 pb-6">
+              <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                    Kategoryzacja
+                  </div>
+                  <h2 className="text-base font-semibold text-slate-50">
+                    Kategorie i smart rules
+                  </h2>
+                  <p className="text-[11px] text-slate-400 max-w-2xl">
+                    Po lewej trzymasz mapę wydatków, po prawej ustawiasz automatyzacje, które przejmują powtarzalne decyzje.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                  <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    {categoryCount} kategorii
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    {ruleCount} reguł
+                  </span>
+                </div>
+              </div>
+              <div className="grid gap-8 lg:gap-0 lg:grid-cols-2 lg:divide-x lg:divide-white/10 items-start">
+                {/* Smart rules (prawa kolumna) */}
+                <div className="order-2 lg:order-2 space-y-8 lg:pl-8">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
@@ -675,7 +699,7 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
                 </div>
               )}
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(320px,400px),1fr] items-start">
+              <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(280px,360px),1fr] items-start">
                 {/* Create */}
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:border-white/20 transition-colors h-full">
                   <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -963,7 +987,10 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
               <div className="mt-3 text-[10px] text-slate-500">
                 Reguły działają automatycznie dla nowych importów. „Zastosuj teraz” ogarnia zaległości.
               </div>
-              <div className="pt-6 border-t border-white/10 space-y-4">
+                </div>
+
+                {/* Kategorie (lewa kolumna) */}
+                <div className="order-1 lg:order-1 space-y-5 lg:pr-8">
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Kategorie</div>
                   <h2 className="mt-1 text-sm font-semibold text-slate-50">Twoja mapa wydatków</h2>
@@ -1144,9 +1171,10 @@ export function LabClient({ initialData }: { initialData?: LabInitialData | null
               <div className="text-[10px] text-slate-500">
                 Zmiany widzisz od razu w Flow. Sugestie automatyzacji pojawiają się, gdy przypisujesz kategorie ręcznie.
               </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
         </div>
 
