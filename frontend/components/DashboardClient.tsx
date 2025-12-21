@@ -20,7 +20,7 @@ const ReactApexChart = dynamic(() => import("react-apexcharts"), {
 });
 
 export type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
-type NetFlowGranularity = "day" | "week" | "quarter" | "year";
+type NetFlowGranularity = "day" | "week" | "month" | "quarter" | "year";
 
 type DashboardClientProps = {
   initialRange?: RangeKey;
@@ -44,7 +44,6 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
   const [granularity, setGranularity] = useState<NetFlowGranularity>(
     () => defaultGranularityForRange(initialRange)
   );
-  const [granularityLocked, setGranularityLocked] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<
     number | null | undefined
   >(undefined);
@@ -93,11 +92,9 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     fetchData();
   }, [authLoading, user]);
 
-  useEffect(() => {
-    if (!granularityLocked) {
-      setGranularity(defaultGranularityForRange(range));
-    }
-  }, [range, granularityLocked]);
+  // Granulacja NetFlow jest niezależna od globalnego zakresu (range).
+  // Ustawiamy tylko sensowny domyślny poziom startowy, a później użytkownik
+  // może zmieniać ją przyciskami w panelu NetFlow.
   // 2) Wyliczenia zależne od zakresu
   const {
     filtered,
@@ -153,7 +150,6 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
   }, []);
   const handleGranularityChange = useCallback((value: NetFlowGranularity) => {
     setGranularity(value);
-    setGranularityLocked(true);
   }, []);
   const rangeText = rangeLabel(range, startDate);
   const dailyAverage = useMemo(() => {
@@ -336,7 +332,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <NetFlowGranularity active={range} onChange={setRange} />
+              <NetFlowGranularity active={granularity} onChange={handleGranularityChange} />
               <span className="badge-soft">Dynamiczny wykres</span>
             </div>
           </div>
@@ -536,15 +532,15 @@ function NetFlowGranularity({
   active,
   onChange,
 }: {
-  active: RangeKey;
-  onChange: (value: RangeKey) => void;
+  active: NetFlowGranularity;
+  onChange: (value: NetFlowGranularity) => void;
 }) {
-  const options: { key: RangeKey; label: string; desc: string }[] = [
-    { key: "1m", label: "Dziennie", desc: "Ostatnie 30 dni" },
-    { key: "3m", label: "Tygodniowo", desc: "Ostatni kwartał" },
-    { key: "6m", label: "Miesiące", desc: "Pół roku" },
-    { key: "ytd", label: "YTD", desc: "Miesięczne ujęcie" },
-    { key: "all", label: "Kwartały", desc: "Cała historia" },
+  const options: { key: NetFlowGranularity; label: string; desc: string }[] = [
+    { key: "day", label: "Dziennie", desc: "Dzień po dniu" },
+    { key: "week", label: "Tygodniowo", desc: "Sumy tygodniowe" },
+    { key: "month", label: "Miesięcznie", desc: "Sumy miesięczne" },
+    { key: "quarter", label: "Kwartalnie", desc: "Sumy kwartalne" },
+    { key: "year", label: "Rocznie", desc: "Sumy roczne" },
   ];
 
   return (
@@ -1500,6 +1496,11 @@ function buildNetFlowSeries(data: TxExt[], granularity: NetFlowGranularity) {
         key = `${y}-W${String(week).padStart(2, "0")}`;
         break;
       }
+      case "month": {
+        // miesiące: YYYY-MM
+        key = `${year}-${String(month + 1).padStart(2, "0")}`;
+        break;
+      }
       case "quarter": {
         // kwartały: YYYY-Qx
         const q = Math.floor(month / 3) + 1;
@@ -1567,6 +1568,12 @@ function labelForBucket(key: string, granularity: NetFlowGranularity) {
       const week = parts[1] ?? key;
       return `T${week}`;
     }
+    case "month": {
+      // YYYY-MM -> MM.YY
+      const [y, m] = key.split("-");
+      if (!y || !m) return key;
+      return `${m}.${y.slice(-2)}`;
+    }
     case "quarter": {
       // YYYY-Qx -> Qx YY
       const [y, q] = key.split("-Q");
@@ -1587,7 +1594,7 @@ function defaultGranularityForRange(range: RangeKey): NetFlowGranularity {
     case "6m":
       return "week";
     case "ytd":
-      return "quarter";
+      return "month";
     case "all":
       return "year";
   }
