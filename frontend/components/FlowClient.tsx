@@ -1524,9 +1524,9 @@ function TransactionSideDetails({
             Szczegóły transakcji
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           </div>
-          <div className="mt-1 min-w-0 truncate text-[12px] font-semibold text-white">
+          {/* <div className="mt-1 min-w-0 truncate text-[12px] font-semibold text-white">
             {transaction.name || "Transakcja"}
-          </div>
+          </div> */}
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
             <span className="rounded-full bg-white/5 px-2 py-0.5 text-slate-400">ID {transaction.id}</span>
             <span className="rounded-full bg-white/5 px-2 py-0.5 text-slate-400">{operationDate}</span>
@@ -1560,7 +1560,7 @@ function TransactionSideDetails({
             value={transaction.category_id}
             categories={categories}
             onChange={(categoryId) => onChangeCategory(transaction.id, categoryId)}
-            onCreateCategory={onCreateCategory}
+            onCreateCategory={handleCreateCategory}
           />
         </div>
 
