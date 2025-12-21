@@ -1560,7 +1560,7 @@ function TransactionSideDetails({
             value={transaction.category_id}
             categories={categories}
             onChange={(categoryId) => onChangeCategory(transaction.id, categoryId)}
-            onCreateCategory={handleCreateCategory}
+            onCreateCategory={onCreateCategory}
           />
         </div>
 
