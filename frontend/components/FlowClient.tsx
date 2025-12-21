@@ -15,6 +15,7 @@ import {
   RuleSuggestion,
   fetchTransactions,
   fetchCategories,
+  createCategory,
   updateTransactionCategory,
   Category,
   createCategoryRule,
@@ -289,6 +290,15 @@ export function FlowClient() {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleCreateCategory = async (payload: {
+    name: string;
+    color?: string | null;
+  }) => {
+    const created = await createCategory(payload);
+    setCategories((prev) => [...prev, created]);
+    return created;
   };
 
   const handleAcceptRuleSuggestion = async () => {
@@ -591,6 +601,7 @@ export function FlowClient() {
                       transaction={selectedTx}
                       categories={categories}
                       onChangeCategory={handleChangeCategory}
+                      onCreateCategory={handleCreateCategory}
                       enablingSuggestion={enablingSuggestion}
                       ruleSuggestion={
                         ruleSuggestion &&
@@ -1463,6 +1474,7 @@ function TransactionSideDetails({
   transaction,
   categories,
   onChangeCategory,
+  onCreateCategory,
   ruleSuggestion,
   enablingSuggestion,
   onAcceptRuleSuggestion,
@@ -1473,6 +1485,7 @@ function TransactionSideDetails({
   transaction: TxExt;
   categories: Category[];
   onChangeCategory: (txId: number, categoryId: number | null) => void;
+  onCreateCategory: (payload: { name: string; color?: string | null }) => Promise<Category>;
   ruleSuggestion: (RuleSuggestion & { txId: number }) | null;
   enablingSuggestion: boolean;
   onAcceptRuleSuggestion: () => void;
@@ -1547,6 +1560,7 @@ function TransactionSideDetails({
             value={transaction.category_id}
             categories={categories}
             onChange={(categoryId) => onChangeCategory(transaction.id, categoryId)}
+            onCreateCategory={onCreateCategory}
           />
         </div>
 
@@ -1656,13 +1670,19 @@ function CategoryDropdown({
   value,
   categories,
   onChange,
+  onCreateCategory,
 }: {
   value: number | null;
   categories: Category[];
   onChange: (categoryId: number | null) => void;
+  onCreateCategory: (payload: { name: string; color?: string | null }) => Promise<Category>;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatColor, setNewCatColor] = useState("#a5b4fc");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const options = useMemo(
     () => [
@@ -1694,6 +1714,27 @@ function CategoryDropdown({
   const pick = (nextValue: string) => {
     onChange(nextValue === "" ? null : Number(nextValue));
     setOpen(false);
+  };
+
+  const handleCreate = async () => {
+    const name = newCatName.trim();
+    if (!name) {
+      setCreateError("Podaj nazwę kategorii.");
+      return;
+    }
+
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await onCreateCategory({ name, color: newCatColor });
+      setNewCatName("");
+      setQ("");
+      pick(created.id.toString());
+    } catch (e: any) {
+      setCreateError(e?.message ?? "Nie udało się dodać kategorii.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -1785,6 +1826,60 @@ function CategoryDropdown({
                 );
               })
             )}
+          </div>
+
+          <div className="border-t border-white/10 bg-slate-950/70 px-3 py-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Dodaj nową kategorię</div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-[10px] text-slate-500">Nazwa</label>
+                <input
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="np. Ubrania"
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-[12px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-400/60"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[11px] text-slate-200">
+                  <span
+                    className="h-6 w-6 rounded border border-white/10"
+                    style={{ backgroundColor: newCatColor }}
+                  />
+                  <label className="text-[10px] text-slate-500">Kolor</label>
+                </div>
+                <input
+                  type="color"
+                  value={newCatColor}
+                  onChange={(e) => setNewCatColor(e.target.value)}
+                  className="h-8 w-16 rounded border border-white/10 bg-slate-900"
+                />
+              </div>
+              {createError ? (
+                <div className="text-[10px] text-rose-300">{createError}</div>
+              ) : null}
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewCatName("");
+                    setCreateError(null);
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-slate-200"
+                  disabled={creating}
+                >
+                  Wyczyść
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  className="rounded-lg border border-indigo-300/40 bg-indigo-500/10 px-3 py-1 text-[11px] font-medium text-indigo-100 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={creating}
+                >
+                  {creating ? "Dodawanie…" : "Dodaj i przypisz"}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="px-3 py-2 border-t border-white/10 flex items-center justify-between">
