@@ -130,7 +130,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       return bucketId === selectedCategory;
     });
     if (match) return match.name;
-    if (selectedCategory === null) return "Brak kategorii";
+    if (selectedCategory === null) return UNCATEGORIZED_LABEL;
     return "Wybrana kategoria";
   }, [coloredCategories, selectedCategory]);
 
@@ -701,6 +701,9 @@ function NetFlowChart({
 
 
 
+const UNCATEGORIZED_LABEL = "Brak kategorii";
+const UNCATEGORIZED_COLOR = "#cbd5e1";
+
 const DONUT_FALLBACK_COLORS = [
   "#fbbf24",
   "#22c55e",
@@ -1236,8 +1239,6 @@ function groupByDay(data: TxExt[]) {
 
 
 function groupByCategory(data: TxExt[]): CategoryBucket[] {
-  const UNCATEGORIZED_LABEL = "Brak kategorii";
-
   const map = new Map<string, CategoryBucket>();
   for (const t of data) {
     if (t.amountNum >= 0) continue; // tylko wydatki
@@ -1292,7 +1293,10 @@ function applyCategoryColors(
     const colorFromName = colorByName.get(bucket.name);
     return {
       ...bucket,
-      color: colorFromId ?? colorFromName ?? bucket.color ?? null,
+      color:
+        bucket.name === UNCATEGORIZED_LABEL
+          ? UNCATEGORIZED_COLOR
+          : colorFromId ?? colorFromName ?? bucket.color ?? null,
     };
   });
 }
