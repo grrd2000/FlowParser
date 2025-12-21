@@ -6,3 +6,4 @@ lightgbm==4.5.0
 xgboost==2.1.1
 catboost==1.2.7
 pydantic==2.8.2
+torch==2.3.1
