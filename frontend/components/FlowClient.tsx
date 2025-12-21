@@ -562,7 +562,7 @@ export function FlowClient() {
           </div>
 
           <Tooltip.Provider delayDuration={180}>
-            <div className="mt-2 flex flex-col lg:flex-row gap-4 items-start">
+            <div className="mt-2 flex flex-col lg:flex-row gap-4 items-stretch">
               <div
                 className="min-w-0 transition-[flex-basis] duration-300 ease-in-out"
                 style={{
@@ -581,10 +581,10 @@ export function FlowClient() {
               </div>
 
               <div
-                className="overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
+                className="h-full overflow-hidden transition-[flex-basis] duration-300 ease-in-out flex-shrink-0"
                 style={{ flexBasis: detailOpen ? "360px" : "0px" }}
               >
-                <div className="flex justify-start">
+                <div className="flex justify-start h-full">
                   {selectedTx && (
                     <TransactionSideDetails
                       open={detailOpen}
@@ -1492,7 +1492,7 @@ function TransactionSideDetails({
   return (
     <aside
       className={[
-        "min-w-[360px] max-w-[360px] w-[360px]",
+        "min-w-[360px] max-w-[360px] w-[360px] h-full",
         "flex flex-col rounded-xl border border-slate-800/80",
         "bg-slate-950/70 backdrop-blur-md text-slate-200",
         "px-4 py-4 text-[11px]",
@@ -1701,7 +1701,7 @@ function CategoryDropdown({
       <Popover.Trigger asChild>
         <button
           type="button"
-          className="w-full border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400/70"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400/70"
           aria-label="Zmień kategorię transakcji"
         >
           <div className="flex items-center justify-between gap-3">
@@ -1730,7 +1730,7 @@ function CategoryDropdown({
           side="bottom"
           align="start"
           sideOffset={8}
-          className="z-50 w-[320px] border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-xl shadow-black/50"
+          className="z-50 w-[320px] overflow-hidden rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-xl shadow-xl shadow-black/50"
         >
           <div className="px-3 py-2 border-b border-white/10">
             <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
@@ -1740,7 +1740,7 @@ function CategoryDropdown({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Szukaj…"
-              className="mt-2 w-full border border-white/10 bg-slate-950/60 px-2 py-1 text-[12px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-400/60"
+              className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-[12px] text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-400/60"
             />
           </div>
 
@@ -1802,7 +1802,7 @@ function CategoryDropdown({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="border border-white/20 bg-white/10 px-3 py-1 text-[11px] text-slate-100 hover:bg-white/20"
+              className="rounded-lg border border-white/20 bg-white/10 px-3 py-1 text-[11px] text-slate-100 hover:bg-white/20"
             >
               Zamknij
             </button>
