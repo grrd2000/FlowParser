@@ -20,6 +20,7 @@ const ReactApexChart = dynamic(() => import("react-apexcharts"), {
 });
 
 export type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
+type NetFlowGranularity = "day" | "week" | "quarter" | "year";
 
 type DashboardClientProps = {
   initialRange?: RangeKey;
@@ -40,6 +41,10 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
   const [transactions, setTransactions] = useState<TxExt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [range, setRange] = useState<RangeKey>(initialRange);
+  const [granularity, setGranularity] = useState<NetFlowGranularity>(
+    () => defaultGranularityForRange(initialRange)
+  );
+  const [granularityLocked, setGranularityLocked] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<
     number | null | undefined
   >(undefined);
@@ -87,6 +92,12 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     };
     fetchData();
   }, [authLoading, user]);
+
+  useEffect(() => {
+    if (!granularityLocked) {
+      setGranularity(defaultGranularityForRange(range));
+    }
+  }, [range, granularityLocked]);
   // 2) Wyliczenia zależne od zakresu
   const {
     filtered,
@@ -102,7 +113,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     );
     const filtered = filterByCategory(rangeFiltered, selectedCategory);
     const metrics = computeMetrics(filtered);
-    const netFlowSeries = buildNetFlowSeries(filtered, range);
+    const netFlowSeries = buildNetFlowSeries(filtered, granularity);
     const categorySeries = groupByCategory(rangeFiltered);
     const heatmapSeries = buildHeatmap(filtered);
     return {
@@ -113,7 +124,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       categorySeries,
       heatmapSeries,
     };
-  }, [transactions, range, selectedCategory]);
+  }, [transactions, range, selectedCategory, granularity]);
 
   const coloredCategories = useMemo(
     () => applyCategoryColors(categorySeries, categories),
@@ -139,6 +150,10 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       if (categoryId === undefined) return undefined; // explicit reset
       return prev === categoryId ? undefined : categoryId ?? null;
     });
+  }, []);
+  const handleGranularityChange = useCallback((value: NetFlowGranularity) => {
+    setGranularity(value);
+    setGranularityLocked(true);
   }, []);
   const rangeText = rangeLabel(range, startDate);
   const dailyAverage = useMemo(() => {
@@ -316,7 +331,8 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
             <div>
               <h2 className="text-sm font-semibold text-slate-50">Przepływy w czasie</h2>
               <p className="text-[11px] text-slate-400">
-                Dzienny wynik netto – wpływy minus wydatki.
+                Dzienny wynik netto – wpływy minus wydatki. Wybierz wygodną
+                granulację poniżej.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1460,7 +1476,7 @@ function formatNumberCompact(value: number): string {
   return value.toFixed(0);
 }
 
-function buildNetFlowSeries(data: TxExt[], range: RangeKey) {
+function buildNetFlowSeries(data: TxExt[], granularity: NetFlowGranularity) {
   type Agg = { net: number; income: number; expense: number };
 
   const map = new Map<string, Agg>();
@@ -1472,28 +1488,26 @@ function buildNetFlowSeries(data: TxExt[], range: RangeKey) {
 
     let key: string;
 
-    switch (range) {
-      case "1m": {
+    switch (granularity) {
+      case "day": {
         // dziennie: YYYY-MM-DD
         key = d.toISOString().slice(0, 10);
         break;
       }
-      case "3m": {
+      case "week": {
         // tygodnie: YYYY-Www
         const { year: y, week } = getIsoWeek(d);
         key = `${y}-W${String(week).padStart(2, "0")}`;
         break;
       }
-      case "6m":
-      case "ytd": {
-        // miesiące: YYYY-MM
-        key = `${year}-${String(month + 1).padStart(2, "0")}`;
-        break;
-      }
-      case "all": {
+      case "quarter": {
         // kwartały: YYYY-Qx
         const q = Math.floor(month / 3) + 1;
         key = `${year}-Q${q}`;
+        break;
+      }
+      case "year": {
+        key = `${year}`;
         break;
       }
     }
@@ -1512,7 +1526,7 @@ function buildNetFlowSeries(data: TxExt[], range: RangeKey) {
 
   const points = Array.from(map.entries()).map(([key, agg]) => ({
     key,
-    label: labelForBucket(key, range),
+    label: labelForBucket(key, granularity),
     net: agg.net,
     income: agg.income,
     expense: agg.expense,
@@ -1539,32 +1553,42 @@ function getIsoWeek(date: Date) {
   return { year: tmp.getUTCFullYear(), week };
 }
 
-function labelForBucket(key: string, range: RangeKey) {
-  switch (range) {
-    case "1m": {
+function labelForBucket(key: string, granularity: NetFlowGranularity) {
+  switch (granularity) {
+    case "day": {
       // YYYY-MM-DD -> dd.MM
       const [y, m, d] = key.split("-");
       if (!y || !m || !d) return key;
       return `${d}.${m}`;
     }
-    case "3m": {
+    case "week": {
       // YYYY-Www -> Tww
       const parts = key.split("-W");
       const week = parts[1] ?? key;
       return `T${week}`;
     }
-    case "6m":
-    case "ytd": {
-      // YYYY-MM -> MM.YY
-      const [y, m] = key.split("-");
-      if (!y || !m) return key;
-      return `${m}.${y.slice(-2)}`;
-    }
-    case "all": {
+    case "quarter": {
       // YYYY-Qx -> Qx YY
       const [y, q] = key.split("-Q");
       if (!y || !q) return key;
       return `Q${q} ${y.slice(-2)}`;
     }
+    case "year": {
+      return key;
+    }
+  }
+}
+
+function defaultGranularityForRange(range: RangeKey): NetFlowGranularity {
+  switch (range) {
+    case "1m":
+      return "day";
+    case "3m":
+    case "6m":
+      return "week";
+    case "ytd":
+      return "quarter";
+    case "all":
+      return "year";
   }
 }
