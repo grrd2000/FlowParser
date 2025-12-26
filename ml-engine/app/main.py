@@ -11,6 +11,7 @@ from app.engine import (
     # build_dataframe,
     # load_sample_dataset,
 )
+from app.tfidf import suggest_rule_token
 
 app = FastAPI(title="FlowParser ML Engine", version="0.1.0")
 engine = RecurringPaymentEngine()
@@ -47,6 +48,27 @@ class PredictResponse(BaseModel):
     predictions: List[float]
 
 
+class TokenSuggestionRequest(BaseModel):
+    description: str = Field(..., description="Opis transakcji do zasugerowania tokenu reguły")
+    all_descriptions: List[str] = Field(
+        default_factory=list, description="Zbiór opisów do policzenia DF/IDF"
+    )
+    uncategorized_descriptions: List[str] = Field(
+        default_factory=list, description="Opisy transakcji bez kategorii"
+    )
+    min_similar_for_suggestion: int = Field(
+        10, description="Minimalna liczba podobnych transakcji do wygenerowania sugestii"
+    )
+    max_token_ratio: float = Field(
+        0.35, description="Maksymalny udział tokenu w korpusie, powyżej którego odrzucamy"
+    )
+
+
+class TokenSuggestionResponse(BaseModel):
+    token: str | None
+    similar_count: int
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -79,3 +101,18 @@ def predict(req: PredictRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"algorithm": req.algorithm, "predictions": list(scores)}
+
+
+@app.post("/tfidf/rule-suggestion", response_model=TokenSuggestionResponse)
+def suggest_token(req: TokenSuggestionRequest):
+    result = suggest_rule_token(
+        description=req.description,
+        all_descriptions=req.all_descriptions,
+        uncategorized_descriptions=req.uncategorized_descriptions,
+        min_similar_for_suggestion=req.min_similar_for_suggestion,
+        max_token_ratio=req.max_token_ratio,
+    )
+    if not result:
+        return TokenSuggestionResponse(token=None, similar_count=0)
+
+    return TokenSuggestionResponse(token=result["token"], similar_count=result["similar_count"])

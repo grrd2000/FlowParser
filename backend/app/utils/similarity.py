@@ -3,9 +3,6 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections import Counter, defaultdict
-from math import log
-from typing import Iterable
 
 PHONE_RE = re.compile(
     r"""(
@@ -63,7 +60,7 @@ def normalize_text(s: str) -> str:
 
 def tokenize(s: str) -> list[str]:
     """
-    Tokeny do podobieństwa – bez cyfr, bez placeholderów, sensowna długość.
+    Tokeny do podobieństwa/reguł – bez cyfr, bez placeholderów, sensowna długość.
     """
     s = normalize_text(s)
     out: list[str] = []
@@ -79,48 +76,6 @@ def tokenize(s: str) -> list[str]:
         out.append(tok)
         
     return out
-
-
-def build_df(docs: Iterable[str]) -> tuple[dict[str, int], int]:
-    """
-    Document frequency: w ilu opisach występuje dany token.
-    """
-    df: dict[str, int] = defaultdict(int)
-    n = 0
-    for d in docs:
-        n += 1
-        toks = set(tokenize(d))
-        for t in toks:
-            df[t] += 1
-    return dict(df), n
-
-
-def best_key_token(description: str, df: dict[str, int], n_docs: int) -> str | None:
-    """
-    Wybieramy token “kotwicę” w pełni automatycznie.
-    TF-IDF sprawia, że bardzo ogólne słowa (występujące wszędzie) dostają niski score.
-    """
-    toks = tokenize(description)
-    if not toks:
-        return None
-
-    tf = Counter(toks)
-
-    best = None
-    best_score = -1.0
-    for tok, freq in tf.items():
-        dfi = df.get(tok, 1)
-        # IDF: im częściej token występuje w całej bazie, tym niższy
-        idf = log((n_docs + 1) / (dfi + 1)) + 1.0
-        score = freq * idf
-
-        # dodatkowe zabezpieczenie: tokeny bardzo rzadkie (df=1) czasem są śmieciami,
-        # ale i tak pozwólmy im wygrać tylko jeśli są “słowne”
-        if score > best_score:
-            best_score = score
-            best = tok
-
-    return best
 
 
 def description_contains_token(description: str, token: str) -> bool:
