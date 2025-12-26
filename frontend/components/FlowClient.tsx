@@ -680,6 +680,7 @@ export function FlowClient() {
                 </button>
               </div>
             </div>
+            </div>
 
           <Tooltip.Provider delayDuration={180}>
             <div className="mt-2 flex flex-col lg:flex-row gap-4 items-stretch">
