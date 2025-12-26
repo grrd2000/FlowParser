@@ -86,6 +86,7 @@ export function FlowClient() {
 
   // ✅ nowy panel filtrów
   const [search, setSearch] = useState("");
+  const [hideEmptyDescriptions, setHideEmptyDescriptions] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [includeUncategorized, setIncludeUncategorized] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<"all" | "pdf" | "manual">(
@@ -240,8 +241,13 @@ export function FlowClient() {
             normalizeQuery(t.description ?? "").includes(q)
           );
 
+    // ukryj transakcje bez opisu
+    const afterDescription = hideEmptyDescriptions
+      ? afterSearch.filter((t) => normalizeQuery(t.description ?? "").length > 0)
+      : afterSearch;
+
     // kategorie (multi + brak kategorii)
-    const afterCategories = afterSearch.filter((t) => {
+    const afterCategories = afterDescription.filter((t) => {
       const hasCat = t.category_id != null;
 
       // brak filtrowania kategorii
@@ -290,6 +296,7 @@ export function FlowClient() {
     amountMin,
     amountMax,
     amountAbs,
+    hideEmptyDescriptions,
   ]);
 
   // ✅ zaznaczona transakcja zawsze z aktualnego stanu
@@ -421,12 +428,21 @@ export function FlowClient() {
   const activeFiltersCount = useMemo(() => {
     let n = 0;
     if (normalizeQuery(search).length > 0) n++;
+    if (hideEmptyDescriptions) n++;
     if (selectedCategoryIds.length > 0) n++;
     if (includeUncategorized) n++;
     if (sourceFilter !== "all") n++;
     if (amountMin != null || amountMax != null) n++;
     return n;
-  }, [search, selectedCategoryIds, includeUncategorized, sourceFilter, amountMin, amountMax]);
+  }, [
+    search,
+    hideEmptyDescriptions,
+    selectedCategoryIds,
+    includeUncategorized,
+    sourceFilter,
+    amountMin,
+    amountMax,
+  ]);
 
   const resetSmartFilters = () => {
     setSearch("");
@@ -436,6 +452,7 @@ export function FlowClient() {
     setAmountAbs(true);
     setAmountMin(null);
     setAmountMax(null);
+    setHideEmptyDescriptions(false);
     // density zostawiamy – to “preferencja widoku”
   };
 
@@ -601,6 +618,8 @@ export function FlowClient() {
           setKind={setKind}
           search={search}
           setSearch={setSearch}
+          hideEmptyDescriptions={hideEmptyDescriptions}
+          setHideEmptyDescriptions={setHideEmptyDescriptions}
           categories={categories}
           selectedCategoryIds={selectedCategoryIds}
           setSelectedCategoryIds={setSelectedCategoryIds}
@@ -732,6 +751,8 @@ function FlowFiltersBar({
 
   search,
   setSearch,
+  hideEmptyDescriptions,
+  setHideEmptyDescriptions,
   categories,
   selectedCategoryIds,
   setSelectedCategoryIds,
@@ -758,6 +779,8 @@ function FlowFiltersBar({
 
   search: string;
   setSearch: (v: string) => void;
+  hideEmptyDescriptions: boolean;
+  setHideEmptyDescriptions: (v: boolean) => void;
   categories: Category[];
   selectedCategoryIds: number[];
   setSelectedCategoryIds: (v: number[]) => void;
@@ -850,8 +873,18 @@ function FlowFiltersBar({
       <div className="flex flex-wrap items-end gap-3">
         {/* Search */}
         <div className="flex-1 min-w-[220px]">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-            Szukaj w opisie
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+              Szukaj w opisie
+            </div>
+            <label className="text-[10px] text-slate-500 flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={hideEmptyDescriptions}
+                onChange={(e) => setHideEmptyDescriptions(e.target.checked)}
+              />
+              Ukryj bez opisu
+            </label>
           </div>
           <input
             value={localQ}
