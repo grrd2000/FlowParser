@@ -8,6 +8,7 @@ from typing import Optional
 import unicodedata
 import re
 
+import httpx
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy import text, select, func
 from sqlalchemy.orm import Session
@@ -50,7 +51,7 @@ from app.schemas import (
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
-from app.utils.similarity import build_df, best_key_token, description_contains_token, tokenize
+from app.utils.similarity import description_contains_token, tokenize
 
 from app.auth import (
     get_current_user as auth_get_current_user,
@@ -71,6 +72,9 @@ DEV_AUTO_USER = os.getenv("DEV_AUTO_USER", "true").lower() == "false"
 DEV_USER_EMAIL = os.getenv("DEV_USER_EMAIL", "demo@example.com")
 DEV_USER_PASSWORD = os.getenv("DEV_USER_PASSWORD", "demo123")
 DEV_USER_FULL_NAME = os.getenv("DEV_USER_FULL_NAME", "Demo User")
+
+ML_ENGINE_URL = os.getenv("ML_ENGINE_URL", "http://ml-engine:8080")
+ML_ENGINE_TIMEOUT = float(os.getenv("ML_ENGINE_TIMEOUT", "5.0"))
 
 app = FastAPI(title="flowparser (prototype, refactored)")
 
@@ -1196,7 +1200,43 @@ def reorder_category_rules(
 
 
 
-MIN_SIMILAR_FOR_SUGGESTION = 5  # od ilu podobnych transakcji warto proponować regułę
+MIN_SIMILAR_FOR_SUGGESTION = 10  # od ilu podobnych transakcji warto proponować regułę
+
+
+def request_rule_suggestion_from_ml_engine(
+    description: str,
+    all_descriptions: list[str],
+    uncategorized_descriptions: list[str],
+) -> dict | None:
+    """
+    Offload TF-IDF sugerowanie tokenu do kontenera ml-engine.
+    """
+    try:
+        resp = httpx.post(
+            f"{ML_ENGINE_URL}/tfidf/rule-suggestion",
+            json={
+                "description": description,
+                "all_descriptions": all_descriptions,
+                "uncategorized_descriptions": uncategorized_descriptions,
+                "min_similar_for_suggestion": MIN_SIMILAR_FOR_SUGGESTION,
+                "max_token_ratio": 0.35,
+            },
+            timeout=ML_ENGINE_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        print(f"[ml-engine] rule suggestion failed: {exc}")
+        return None
+
+    data = resp.json()
+    token = data.get("token")
+    if not token:
+        return None
+
+    return {
+        "pattern_value": token,
+        "similar_count": int(data.get("similar_count") or 0),
+    }
 
 
 def build_rule_suggestion(db: Session, tx: Transaction) -> dict | None:
@@ -1220,33 +1260,19 @@ def build_rule_suggestion(db: Session, tx: Transaction) -> dict | None:
         .filter(Transaction.description.isnot(None))
         .all()
     ]
-    df, n_docs = build_df(all_desc)
-    if n_docs <= 1:
-        return None
+    uncategorized = [
+        d
+        for (d,) in db.query(Transaction.description).filter(
+            Transaction.category_id.is_(None)
+        ).all()
+    ]
 
-    # 2) token-kotwica dla tej transakcji
-    key = best_key_token(desc, df, n_docs)
-    if not key:
-        return None
-
-    # 3) jeśli token jest “za popularny” (np. występuje w połowie historii),
-    # to zwykle jest mało użyteczny — nie proponujemy automatyzacji.
-    ratio = df.get(key, 0) / max(1, n_docs)
-    if ratio > 0.35:
-        return None
-
-    # 4) policz podobne wśród tych BEZ kategorii (żeby automatyzacja miała sens)
-    uncategorized = db.query(Transaction.id, Transaction.description).filter(
-        Transaction.category_id.is_(None)
-    ).all()
-
-    similar_count = 0
-    for _, d in uncategorized:
-        if d and description_contains_token(d, key):
-            similar_count += 1
-
-    # próg — ustawiony tak, żeby Żabka zadziałała praktycznie od razu
-    if similar_count < 10:
+    suggestion = request_rule_suggestion_from_ml_engine(
+        description=desc,
+        all_descriptions=all_desc,
+        uncategorized_descriptions=[d for d in uncategorized if d],
+    )
+    if not suggestion:
         return None
 
     cat_name = None
@@ -1256,10 +1282,10 @@ def build_rule_suggestion(db: Session, tx: Transaction) -> dict | None:
 
     return {
         "pattern_type": "token",
-        "pattern_value": key,
+        "pattern_value": suggestion["pattern_value"],
         "category_id": tx.category_id,
         "category_name": cat_name,
-        "similar_count": similar_count,
+        "similar_count": suggestion["similar_count"],
     }
 
 
@@ -1920,4 +1946,3 @@ def apply_rules_for_user(db: Session, user_id: int) -> int:
 
     db.commit()
     return assigned
-
