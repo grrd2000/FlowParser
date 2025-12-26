@@ -5,7 +5,7 @@ import * as Popover from "@radix-ui/react-popover";
 import * as Slider from "@radix-ui/react-slider";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { SignedOutState } from "@/components/SignedOutState";
@@ -36,6 +36,31 @@ import {
 type RangeKey = "1m" | "3m" | "6m" | "ytd" | "all";
 type TxExt = Transaction & { amountNum: number; date: Date };
 type Density = "compact" | "comfortable";
+type ExportPayload = { headers: string[]; rows: string[][] };
+type TransactionsTableHandle = { getExportPayload: () => ExportPayload | null };
+type TransactionColumnId =
+  | "date"
+  | "description"
+  | "category"
+  | "amount"
+  | "value_date"
+  | "is_manual"
+  | "account_id";
+
+const columnLabel = (id: TransactionColumnId) =>
+  id === "date"
+    ? "Data"
+    : id === "description"
+    ? "Opis"
+    : id === "category"
+    ? "Kategoria"
+    : id === "amount"
+    ? "Kwota"
+    : id === "value_date"
+    ? "Data waluty"
+    : id === "is_manual"
+    ? "Źródło"
+    : "ID konta";
 
 type AutomationBanner = {
   txId: number;
@@ -46,6 +71,8 @@ type AutomationBanner = {
 
 export function FlowClient() {
   const { user, authLoading } = useAuth();
+
+  const transactionsTableRef = useRef<TransactionsTableHandle | null>(null);
 
   const [transactions, setTransactions] = useState<TxExt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -89,6 +116,74 @@ export function FlowClient() {
   const [automationBanner, setAutomationBanner] = useState<AutomationBanner>(
     null
   );
+
+  const buildExportPayload = useCallback(() => {
+    return transactionsTableRef.current?.getExportPayload() ?? null;
+  }, []);
+
+  const downloadAsCsv = useCallback(() => {
+    const payload = buildExportPayload();
+    if (!payload || payload.headers.length === 0) return;
+
+    const escapeCsvValue = (value: string) => {
+      const needsQuotes = /[",\n]/.test(value);
+      const sanitized = value.replace(/"/g, '""');
+      return needsQuotes ? `"${sanitized}"` : sanitized;
+    };
+
+    const lines = [payload.headers, ...payload.rows].map((row) =>
+      row.map((cell) => escapeCsvValue(cell)).join(",")
+    );
+
+    const blob = new Blob([`\uFEFF${lines.join("\r\n")}`], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, [buildExportPayload]);
+
+  const downloadAsExcel = useCallback(() => {
+    const payload = buildExportPayload();
+    if (!payload || payload.headers.length === 0) return;
+
+    const lines = [payload.headers, ...payload.rows].map((row) => row.join("\t"));
+    const blob = new Blob([`\uFEFF${lines.join("\r\n")}`], {
+      type: "application/vnd.ms-excel",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, [buildExportPayload]);
+
+  const downloadAsJson = useCallback(() => {
+    const payload = buildExportPayload();
+    if (!payload || payload.headers.length === 0) return;
+
+    const asObjects = payload.rows.map((row) => {
+      const entry: Record<string, string> = {};
+      payload.headers.forEach((header, idx) => {
+        entry[header] = row[idx] ?? "";
+      });
+      return entry;
+    });
+
+    const blob = new Blob([JSON.stringify(asObjects, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, [buildExportPayload]);
 
   // 1) Load data
   useEffect(() => {
@@ -561,15 +656,43 @@ export function FlowClient() {
                 Hover na opisie pokazuje pełną treść. Kliknij wiersz, aby rozsunąć szczegóły i akceptować automatyzacje.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                Zakres: <span className="text-white font-semibold">{rangeText}</span>
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                Wyświetlane: <span className="text-white font-semibold">{filtered.length}</span>
-              </span>
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-slate-300">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    Zakres: <span className="text-white font-semibold">{rangeText}</span>
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    Wyświetlane: <span className="text-white font-semibold">{filtered.length}</span>
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={downloadAsCsv}
+                    className="group relative overflow-hidden rounded-full border border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-emerald-400/15 to-emerald-500/25 px-3 py-1 text-[10px] font-semibold text-emerald-50 shadow-lg shadow-emerald-500/20 transition hover:-translate-y-0.5 hover:shadow-emerald-400/25"
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                    Eksport CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadAsExcel}
+                    className="group relative overflow-hidden rounded-full border border-indigo-400/50 bg-gradient-to-r from-indigo-500/25 via-indigo-400/15 to-indigo-500/25 px-3 py-1 text-[10px] font-semibold text-indigo-50 shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-indigo-400/25"
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                    Eksport Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadAsJson}
+                    className="group relative overflow-hidden rounded-full border border-amber-400/60 bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-amber-500/25 px-3 py-1 text-[10px] font-semibold text-amber-50 shadow-lg shadow-amber-500/20 transition hover:-translate-y-0.5 hover:shadow-amber-400/25"
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                    Eksport JSON
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
 
           <Tooltip.Provider delayDuration={180}>
             <div className="mt-2 flex flex-col lg:flex-row gap-4 items-stretch">
@@ -587,6 +710,7 @@ export function FlowClient() {
                   onRowClick={(tx) => handleRowClick(tx.id)}
                   selectedId={detailOpen && selectedTxId ? selectedTxId : null}
                   density={density}
+                  ref={transactionsTableRef}
                 />
               </div>
 
@@ -1252,19 +1376,14 @@ const transactionColumns: ColumnDef<TxExt>[] = [
   },
 ];
 
-function TransactionsTable({
-  transactions,
-  loading,
-  onRowClick,
-  selectedId,
-  density,
-}: {
+const TransactionsTable = React.forwardRef<TransactionsTableHandle, {
   transactions: TxExt[];
   loading: boolean;
   onRowClick: (tx: TxExt) => void;
   selectedId: number | null;
   density: Density;
-}) {
+}>(
+  ({ transactions, loading, onRowClick, selectedId, density }, ref) => {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "date", desc: true },
   ]);
@@ -1303,6 +1422,62 @@ function TransactionsTable({
     // zostaw ten sam indeks strony (tanstack to ogarnia)
     table.setPageIndex(pageIndex);
   }, [density, table]);
+
+  const formatExportValue = useCallback(
+    (tx: TxExt, columnId: TransactionColumnId) => {
+      switch (columnId) {
+        case "date":
+          return formatDateDisplay(tx.date);
+        case "description": {
+          const desc = (tx.description || "").trim();
+          return desc.length > 0 ? desc : "—";
+        }
+        case "category": {
+          const cat = (tx.category || "").trim();
+          const isAuto = tx.category_source === "rule";
+          if (!cat) return "—";
+          return isAuto ? `${cat} (AUTO)` : cat;
+        }
+        case "amount":
+          return formatCurrency(tx.amountNum);
+        case "value_date": {
+          const raw = tx.value_date as any;
+          if (!raw) return "—";
+          const d = new Date(raw);
+          return Number.isNaN(d.getTime()) ? "—" : formatDateDisplay(d);
+        }
+        case "is_manual":
+          return tx.is_manual ? "MANUAL" : "PDF";
+        case "account_id":
+          return tx.account_id?.toString() ?? "—";
+        default:
+          return "";
+      }
+    },
+    []
+  );
+
+  useImperativeHandle(
+    ref,
+    (): TransactionsTableHandle => ({
+      getExportPayload: () => {
+        const visibleColumns = table
+          .getVisibleLeafColumns()
+          .map((col) => col.id as TransactionColumnId);
+
+        if (visibleColumns.length === 0) return null;
+
+        const headerLabels = visibleColumns.map((id) => columnLabel(id));
+
+        const rows = table.getPrePaginationRowModel().rows.map((row) =>
+          visibleColumns.map((id) => formatExportValue(row.original, id))
+        );
+
+        return { headers: headerLabels, rows };
+      },
+    }),
+    [formatExportValue, table]
+  );
 
   if (loading) {
     return (
@@ -1346,21 +1521,7 @@ function TransactionsTable({
                   : "bg-slate-900/60 text-slate-300 border-slate-600 hover:bg-slate-800",
               ].join(" ")}
             >
-              {column.id === "date"
-                ? "Data"
-                : column.id === "description"
-                ? "Opis"
-                : column.id === "category"
-                ? "Kategoria"
-                : column.id === "amount"
-                ? "Kwota"
-                : column.id === "value_date"
-                ? "Data waluty"
-                : column.id === "is_manual"
-                ? "Źródło"
-                : column.id === "account_id"
-                ? "ID konta"
-                : column.id}
+              {columnLabel(column.id as TransactionColumnId)}
             </button>
           ))}
         </div>
@@ -1465,7 +1626,9 @@ function TransactionsTable({
       </div>
     </div>
   );
-}
+});
+
+TransactionsTable.displayName = "TransactionsTable";
 
 /* ---------- DETAILS PANEL ---------- */
 
