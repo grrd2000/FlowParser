@@ -153,11 +153,36 @@ export function FlowClient() {
 
     const lines = [payload.headers, ...payload.rows].map((row) => row.join("\t"));
     const blob = new Blob([`\uFEFF${lines.join("\r\n")}`], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       type: "application/vnd.ms-excel",
     });
 
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
+    link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, [buildExportPayload]);
+
+  const downloadAsJson = useCallback(() => {
+    const payload = buildExportPayload();
+    if (!payload || payload.headers.length === 0) return;
+
+    const asObjects = payload.rows.map((row) => {
+      const entry: Record<string, string> = {};
+      payload.headers.forEach((header, idx) => {
+        entry[header] = row[idx] ?? "";
+      });
+      return entry;
+    });
+
+    const blob = new Blob([JSON.stringify(asObjects, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.json`;
     link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.xls`;
     link.click();
     URL.revokeObjectURL(link.href);
@@ -652,6 +677,42 @@ export function FlowClient() {
                 Hover na opisie pokazuje pełną treść. Kliknij wiersz, aby rozsunąć szczegóły i akceptować automatyzacje.
               </p>
             </div>
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-slate-300">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    Zakres: <span className="text-white font-semibold">{rangeText}</span>
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    Wyświetlane: <span className="text-white font-semibold">{filtered.length}</span>
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={downloadAsCsv}
+                    className="group relative overflow-hidden rounded-full border border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-emerald-400/15 to-emerald-500/25 px-3 py-1 text-[10px] font-semibold text-emerald-50 shadow-lg shadow-emerald-500/20 transition hover:-translate-y-0.5 hover:shadow-emerald-400/25"
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                    Eksport CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadAsExcel}
+                    className="group relative overflow-hidden rounded-full border border-indigo-400/50 bg-gradient-to-r from-indigo-500/25 via-indigo-400/15 to-indigo-500/25 px-3 py-1 text-[10px] font-semibold text-indigo-50 shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-indigo-400/25"
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                    Eksport Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadAsJson}
+                    className="group relative overflow-hidden rounded-full border border-amber-400/60 bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-amber-500/25 px-3 py-1 text-[10px] font-semibold text-amber-50 shadow-lg shadow-amber-500/20 transition hover:-translate-y-0.5 hover:shadow-amber-400/25"
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                    Eksport JSON
+                  </button>
+                </div>
+              </div>
             <div className="flex flex-col items-end gap-2">
               <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-slate-300">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
