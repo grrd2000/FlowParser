@@ -86,6 +86,7 @@ export function FlowClient() {
 
   // ✅ nowy panel filtrów
   const [search, setSearch] = useState("");
+  const [hideEmptyDescriptions, setHideEmptyDescriptions] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [includeUncategorized, setIncludeUncategorized] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<"all" | "pdf" | "manual">(
@@ -158,29 +159,6 @@ export function FlowClient() {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.xls`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, [buildExportPayload]);
-
-  const downloadAsJson = useCallback(() => {
-    const payload = buildExportPayload();
-    if (!payload || payload.headers.length === 0) return;
-
-    const asObjects = payload.rows.map((row) => {
-      const entry: Record<string, string> = {};
-      payload.headers.forEach((header, idx) => {
-        entry[header] = row[idx] ?? "";
-      });
-      return entry;
-    });
-
-    const blob = new Blob([JSON.stringify(asObjects, null, 2)], {
-      type: "application/json;charset=utf-8;",
-    });
-
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `transakcje_${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
   }, [buildExportPayload]);
@@ -263,8 +241,13 @@ export function FlowClient() {
             normalizeQuery(t.description ?? "").includes(q)
           );
 
+    // ukryj transakcje bez opisu
+    const afterDescription = hideEmptyDescriptions
+      ? afterSearch.filter((t) => normalizeQuery(t.description ?? "").length > 0)
+      : afterSearch;
+
     // kategorie (multi + brak kategorii)
-    const afterCategories = afterSearch.filter((t) => {
+    const afterCategories = afterDescription.filter((t) => {
       const hasCat = t.category_id != null;
 
       // brak filtrowania kategorii
@@ -313,6 +296,7 @@ export function FlowClient() {
     amountMin,
     amountMax,
     amountAbs,
+    hideEmptyDescriptions,
   ]);
 
   // ✅ zaznaczona transakcja zawsze z aktualnego stanu
@@ -444,12 +428,21 @@ export function FlowClient() {
   const activeFiltersCount = useMemo(() => {
     let n = 0;
     if (normalizeQuery(search).length > 0) n++;
+    if (hideEmptyDescriptions) n++;
     if (selectedCategoryIds.length > 0) n++;
     if (includeUncategorized) n++;
     if (sourceFilter !== "all") n++;
     if (amountMin != null || amountMax != null) n++;
     return n;
-  }, [search, selectedCategoryIds, includeUncategorized, sourceFilter, amountMin, amountMax]);
+  }, [
+    search,
+    hideEmptyDescriptions,
+    selectedCategoryIds,
+    includeUncategorized,
+    sourceFilter,
+    amountMin,
+    amountMax,
+  ]);
 
   const resetSmartFilters = () => {
     setSearch("");
@@ -459,6 +452,7 @@ export function FlowClient() {
     setAmountAbs(true);
     setAmountMin(null);
     setAmountMax(null);
+    setHideEmptyDescriptions(false);
     // density zostawiamy – to “preferencja widoku”
   };
 
@@ -624,6 +618,8 @@ export function FlowClient() {
           setKind={setKind}
           search={search}
           setSearch={setSearch}
+          hideEmptyDescriptions={hideEmptyDescriptions}
+          setHideEmptyDescriptions={setHideEmptyDescriptions}
           categories={categories}
           selectedCategoryIds={selectedCategoryIds}
           setSelectedCategoryIds={setSelectedCategoryIds}
@@ -692,6 +688,34 @@ export function FlowClient() {
                   </button>
                 </div>
               </div>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-slate-300">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  Zakres: <span className="text-white font-semibold">{rangeText}</span>
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  Wyświetlane: <span className="text-white font-semibold">{filtered.length}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={downloadAsCsv}
+                  className="group relative overflow-hidden rounded-full border border-emerald-400/50 bg-gradient-to-r from-emerald-500/25 via-emerald-400/15 to-emerald-500/25 px-4 py-1.5 text-[11px] font-semibold text-emerald-50 shadow-lg shadow-emerald-500/20 transition hover:-translate-y-0.5 hover:shadow-emerald-400/25"
+                >
+                  <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                  Eksport CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadAsExcel}
+                  className="group relative overflow-hidden rounded-full border border-indigo-400/50 bg-gradient-to-r from-indigo-500/25 via-indigo-400/15 to-indigo-500/25 px-4 py-1.5 text-[11px] font-semibold text-indigo-50 shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-indigo-400/25"
+                >
+                  <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                  Eksport Excel
+                </button>
+              </div>
+            </div>
             </div>
 
           <Tooltip.Provider delayDuration={180}>
@@ -763,6 +787,8 @@ function FlowFiltersBar({
 
   search,
   setSearch,
+  hideEmptyDescriptions,
+  setHideEmptyDescriptions,
   categories,
   selectedCategoryIds,
   setSelectedCategoryIds,
@@ -789,6 +815,8 @@ function FlowFiltersBar({
 
   search: string;
   setSearch: (v: string) => void;
+  hideEmptyDescriptions: boolean;
+  setHideEmptyDescriptions: (v: boolean) => void;
   categories: Category[];
   selectedCategoryIds: number[];
   setSelectedCategoryIds: (v: number[]) => void;
@@ -881,8 +909,18 @@ function FlowFiltersBar({
       <div className="flex flex-wrap items-end gap-3">
         {/* Search */}
         <div className="flex-1 min-w-[220px]">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-            Szukaj w opisie
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+              Szukaj w opisie
+            </div>
+            <label className="text-[10px] text-slate-500 flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={hideEmptyDescriptions}
+                onChange={(e) => setHideEmptyDescriptions(e.target.checked)}
+              />
+              Ukryj bez opisu
+            </label>
           </div>
           <input
             value={localQ}
