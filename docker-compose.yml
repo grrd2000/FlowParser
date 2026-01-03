@@ -7,47 +7,58 @@ services:
       POSTGRES_DB: flowparser_db
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    networks: [db_net]
+    expose:
+      - "5432"
+    ports: ["127.0.0.1:5432:5432"]
 
   api:
     build: ./backend
     depends_on:
       - db
+      - ml-engine
     environment:
       - DATABASE_URL=postgresql+psycopg2://admin:admin@db:5432/flowparser_db
+      - ML_ENGINE_URL=http://ml-engine:8080
       - SECRET_KEY=dev-secret-change-me
       - ACCESS_TOKEN_EXPIRE_MINUTES=43200
-      - ML_ENGINE_URL=http://ml-engine:8080
     ports:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
+    networks: [edge, db_net, ml_net]
 
   frontend:
     build: ./frontend
     depends_on:
       - api
     environment:
-      - INTERNAL_API_BASE_URL=http://api:8000        # dla kodu serwerowego Next
-      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000  # dla przeglądarki
+      - INTERNAL_API_BASE_URL=http://api:8000
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
     ports:
       - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     command: ["sh", "-c", "npm install && npm run dev"]
+    networks: [edge]
 
   ml-engine:
     build: ./ml-engine
     environment:
       - PORT=8080
-    ports:
-      - "8080:8080"
     volumes:
       - ./ml-engine/app:/app/app
       - ./ml-engine/data:/app/data
-
+    networks: [ml_net]
+    expose:
+      - "8080"
+    # (opcjonalnie w dev) ports: ["127.0.0.1:8080:8080"]
 
 volumes:
   pgdata:
+
+networks:
+  edge: {}
+  db_net: {}
+  ml_net: {}
