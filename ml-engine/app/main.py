@@ -8,8 +8,6 @@ from pydantic import BaseModel, Field
 from app.engine import (
     Algorithm,
     RecurringPaymentEngine,
-    # build_dataframe,
-    # load_sample_dataset,
 )
 from app.tfidf import suggest_rule_token
 
@@ -86,11 +84,7 @@ def train(req: TrainRequest):
 
 @app.post("/train-sample", response_model=TrainResponse)
 def train_sample(algorithm: Algorithm = "lightgbm"):
-    # xd = r'data/sample_transactions.csv'
-    df = engine.load_sample_dataset()
-    print (df.head())
-    result = engine.train(df, algorithm=algorithm)
-    return {"algorithm": algorithm, "metrics": result.metrics}
+    raise HTTPException(status_code=410, detail="Sample training dataset is no longer available.")
 
 
 @app.post("/predict", response_model=PredictResponse)
