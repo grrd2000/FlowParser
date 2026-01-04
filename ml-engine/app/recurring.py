@@ -133,12 +133,10 @@ class RecurringDetectionResult:
     skipped_count: int = 0
 
 
-def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionResult:
-    if not transactions:
-        return RecurringDetectionResult(algorithm="heuristic_v2", scores=[], groups=[], skipped_count=0)
-
-    parsed: list[dict] = []
+def _normalize_transactions(transactions: list[dict]) -> tuple[list[dict], int]:
+    normalized: list[dict] = []
     skipped_count = 0
+
     for tx in transactions:
         try:
             normalized.append(
@@ -152,7 +150,8 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
         except Exception:
             skipped_count += 1
             continue
-    return normalized
+
+    return normalized, skipped_count
 
 
 def _detect_groups(transactions: list[dict]) -> list[RecurringGroup]:
@@ -235,25 +234,72 @@ def _detect_groups(transactions: list[dict]) -> list[RecurringGroup]:
     return groups
 
 
+def _heuristic_scores(
+    transactions: list[dict],
+    groups: list[RecurringGroup],
+) -> list[RecurringScore]:
+    group_score_by_tx: dict[int | str, float] = {}
+    for group in groups:
+        for tx_id in group.transaction_ids:
+            group_score_by_tx[tx_id] = max(group_score_by_tx.get(tx_id, 0.0), group.confidence)
+
+    keyword_hints = {"subscription", "abonament", "subskrypc", "membership", "plan", "netflix", "spotify", "gym"}
+
+    scores: list[RecurringScore] = []
+    for tx in transactions:
+        normalized_desc = normalize_description(tx.get("description"))
+        tokens = set(normalized_desc.split()) if normalized_desc else set()
+        keyword_bonus = 0.25 if tokens & keyword_hints else 0.0
+
+        membership_bonus = group_score_by_tx.get(tx["transaction_id"])
+        cadence_score = (membership_bonus + 0.15) if membership_bonus is not None else 0.0
+
+        polarity_bonus = 0.05 if tx.get("amount", 0) < 0 else 0.0
+        base_score = 0.08 + keyword_bonus + polarity_bonus
+
+        score_val = max(base_score, cadence_score)
+        score_val = min(1.0, max(score_val, (membership_bonus or 0)))
+        scores.append(RecurringScore(transaction_id=tx["transaction_id"], score=round(score_val, 3)))
+
+    return scores
+
+
 def detect_recurring_payments(
     transactions: list[dict],
     engine: RecurringPaymentEngine,
     algorithm: Algorithm = "lightgbm",
 ) -> RecurringDetectionResult:
-    normalized = _normalize_transactions(transactions)
+    normalized, skipped_count = _normalize_transactions(transactions)
     if not normalized:
-        return RecurringDetectionResult(algorithm=str(algorithm), scores=[], groups=[])
+        return RecurringDetectionResult(
+            algorithm=str(algorithm),
+            scores=[],
+            groups=[],
+            skipped_count=skipped_count,
+        )
 
-    dataframe = engine.build_dataframe(normalized, include_label=False)
-    scores_array = engine.predict(dataframe, algorithm=algorithm)
+    groups = _detect_groups(normalized)
 
-    scores = [
-        RecurringScore(transaction_id=row["transaction_id"], score=round(float(score), 3))
-        for row, score in zip(normalized, scores_array)
-    ]
+    used_algorithm: str = str(algorithm)
+    scores: list[RecurringScore]
+
+    if engine.has_model(algorithm):
+        try:
+            dataframe = engine.build_dataframe(normalized, include_label=False)
+            scores_array = engine.predict(dataframe, algorithm=algorithm)
+            scores = [
+                RecurringScore(transaction_id=row["transaction_id"], score=round(float(score), 3))
+                for row, score in zip(normalized, scores_array)
+            ]
+        except Exception:
+            used_algorithm = "heuristic_v2"
+            scores = _heuristic_scores(normalized, groups)
+    else:
+        used_algorithm = "heuristic_v2"
+        scores = _heuristic_scores(normalized, groups)
 
     return RecurringDetectionResult(
-        algorithm="heuristic_v2",
+        algorithm=used_algorithm,
         scores=scores,
         groups=groups,
         skipped_count=skipped_count,

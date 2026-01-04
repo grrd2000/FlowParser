@@ -55,10 +55,6 @@ class TrainRequest(BaseModel):
     transactions: List[LabeledTransaction]
 
 
-class TrainSampleRequest(BaseModel):
-    algorithm: Algorithm = Field("lightgbm", description="Model family to use for sample training")
-
-
 class TrainResponse(BaseModel):
     algorithm: Algorithm
     metrics: dict
@@ -180,11 +176,6 @@ def train(req: TrainRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"algorithm": req.algorithm, "metrics": result.metrics}
-
-
-@app.post("/train-sample", response_model=TrainResponse)
-def train_sample(algorithm: Algorithm = "lightgbm"):
-    raise HTTPException(status_code=410, detail="Sample training dataset is no longer available.")
 
 
 @app.post("/predict", response_model=PredictResponse)

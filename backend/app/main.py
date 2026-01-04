@@ -292,7 +292,7 @@ def ensure_recurring_model_ready(algorithm: str) -> None:
     trained = bool(status.get("trained"))
     if trained:
         return
-    ml_engine_post("/train-sample", payload={"algorithm": algorithm})
+    print(f"[ml-engine] Model '{algorithm}' nie jest wytrenowany – użyję heurystyk do wykrywania cyklicznych transakcji.")
 
 
 def ensure_dev_user(db: Session) -> User | None:
