@@ -33,6 +33,10 @@ class TrainRequest(BaseModel):
     transactions: List[LabeledTransaction]
 
 
+class TrainSampleRequest(BaseModel):
+    algorithm: Algorithm = Field("lightgbm", description="Model family to use for sample training")
+
+
 class TrainResponse(BaseModel):
     algorithm: Algorithm
     metrics: dict
@@ -69,6 +73,11 @@ class TokenSuggestionResponse(BaseModel):
     similar_count: int
 
 
+class ModelStatusResponse(BaseModel):
+    algorithm: Algorithm
+    trained: bool
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -85,12 +94,16 @@ def train(req: TrainRequest):
 
 
 @app.post("/train-sample", response_model=TrainResponse)
-def train_sample(algorithm: Algorithm = "lightgbm"):
-    # xd = r'data/sample_transactions.csv'
+def train_sample(payload: TrainSampleRequest | None = None, algorithm: Algorithm = "lightgbm"):
+    """
+    Train a baseline model on bundled sample data.
+
+    The algorithm can be provided either via JSON payload (preferred) or query parameter.
+    """
+    algo = payload.algorithm if payload else algorithm
     df = engine.load_sample_dataset()
-    print (df.head())
-    result = engine.train(df, algorithm=algorithm)
-    return {"algorithm": algorithm, "metrics": result.metrics}
+    result = engine.train(df, algorithm=algo)
+    return {"algorithm": algo, "metrics": result.metrics}
 
 
 @app.post("/predict", response_model=PredictResponse)
@@ -116,3 +129,13 @@ def suggest_token(req: TokenSuggestionRequest):
         return TokenSuggestionResponse(token=None, similar_count=0)
 
     return TokenSuggestionResponse(token=result["token"], similar_count=result["similar_count"])
+
+
+@app.get("/model-status", response_model=ModelStatusResponse)
+def model_status(algorithm: Algorithm = "lightgbm"):
+    """
+    Lightweight readiness probe used by backend to decide whether it needs to
+    trigger a training job. No data is persisted here; backend owns storage.
+    """
+    trained = engine.has_model(algorithm)
+    return ModelStatusResponse(algorithm=algorithm, trained=trained)

@@ -186,6 +186,9 @@ class RecurringPaymentEngine:
     def __init__(self) -> None:
         self._models: dict[Algorithm, object] = {}
 
+    def has_model(self, algorithm: Algorithm) -> bool:
+        return algorithm in self._models
+
     @staticmethod
     def _build_features(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -294,6 +297,7 @@ class RecurringPaymentEngine:
         return df
 
 
+    @staticmethod
     def build_dataframe(transactions: List[dict], include_label: bool) -> pd.DataFrame:
         normalized = []
         for tx in transactions:

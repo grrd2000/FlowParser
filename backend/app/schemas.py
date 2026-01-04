@@ -145,6 +145,16 @@ class LabInsightsOut(BaseModel):
     assignments_rule: int
     suggestions: list[LabSuggestionOut]
 
+
+class RecurringScore(BaseModel):
+    transaction_id: int
+    score: float
+
+
+class RecurringDetectionResponse(BaseModel):
+    algorithm: str
+    scores: list[RecurringScore]
+
 class EnableRulePayload(BaseModel):
     pattern_value: str
     pattern_type: str = "contains"
