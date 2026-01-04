@@ -31,6 +31,10 @@ class TrainRequest(BaseModel):
     transactions: List[LabeledTransaction]
 
 
+class TrainSampleRequest(BaseModel):
+    algorithm: Algorithm = Field("lightgbm", description="Model family to use for sample training")
+
+
 class TrainResponse(BaseModel):
     algorithm: Algorithm
     metrics: dict
@@ -67,6 +71,9 @@ class TokenSuggestionResponse(BaseModel):
     similar_count: int
 
 
+class ModelStatusResponse(BaseModel):
+    algorithm: Algorithm
+    trained: bool
 class PreprocessTextsRequest(BaseModel):
     texts: List[str] = Field(default_factory=list, description="Teksty do normalizacji/tokenizacji")
 

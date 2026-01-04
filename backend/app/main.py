@@ -43,7 +43,9 @@ from app.schemas import (
     LabInsightsOut,
     EnableRuleResult,
     EnableRulePayload,
-    LabSuggestionOut
+    LabSuggestionOut,
+    RecurringDetectionResponse,
+    RecurringScore,
 )
 
 from app.utils.pko_pdf_parser import parse_pko_statement
@@ -70,6 +72,35 @@ DEV_USER_FULL_NAME = os.getenv("DEV_USER_FULL_NAME", "Demo User")
 
 ML_ENGINE_URL = os.getenv("ML_ENGINE_URL", "http://ml-engine:8080")
 ML_ENGINE_TIMEOUT = float(os.getenv("ML_ENGINE_TIMEOUT", "5.0"))
+ML_ENGINE_RECURRING_ALGO = os.getenv("ML_ENGINE_RECURRING_ALGO", "lightgbm")
+
+
+def ml_engine_post(path: str, payload: dict | None = None) -> dict:
+    try:
+        resp = httpx.post(
+            f"{ML_ENGINE_URL}{path}",
+            json=payload or {},
+            timeout=ML_ENGINE_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPError as exc:
+        print(f"[ml-engine] POST {path} failed: {exc}")
+        raise HTTPException(status_code=502, detail="ML engine unavailable")
+
+
+def ml_engine_get(path: str, params: dict | None = None) -> dict:
+    try:
+        resp = httpx.get(
+            f"{ML_ENGINE_URL}{path}",
+            params=params or {},
+            timeout=ML_ENGINE_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPError as exc:
+        print(f"[ml-engine] GET {path} failed: {exc}")
+        raise HTTPException(status_code=502, detail="ML engine unavailable")
 
 app = FastAPI(title="flowparser (prototype, refactored)")
 
@@ -198,6 +229,34 @@ def ensure_default_categories(db: Session, user: User):
             )
         )
     db.commit()
+
+
+def serialize_tx_for_recurring(tx: Transaction) -> dict:
+    return {
+        "transaction_id": tx.id,
+        "date": tx.operation_date.isoformat(),
+        "amount": float(tx.amount or 0),
+        "description": tx.description or "",
+    }
+
+
+def fetch_transactions_for_recurring(db: Session, user_id: int) -> list[dict]:
+    rows = (
+        db.query(Transaction)
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(Account.user_id == user_id)
+        .order_by(Transaction.operation_date.asc(), Transaction.id.asc())
+        .all()
+    )
+    return [serialize_tx_for_recurring(tx) for tx in rows]
+
+
+def ensure_recurring_model_ready(algorithm: str) -> None:
+    status = ml_engine_get("/model-status", params={"algorithm": algorithm})
+    trained = bool(status.get("trained"))
+    if trained:
+        return
+    ml_engine_post("/train-sample", payload={"algorithm": algorithm})
 
 
 def ensure_dev_user(db: Session) -> User | None:
@@ -503,6 +562,48 @@ def list_transactions(
         }
         for t in rows
     ]
+
+
+@app.get("/recurring-payments", response_model=RecurringDetectionResponse)
+def detect_recurring_payments(
+    user: User = Depends(auth_get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Wykrywa transakcje cykliczne użytkownika, delegując obliczenia do kontenera ml-engine.
+    Model trenowany jest na danych przykładowych, a do predykcji przekazujemy jedynie
+    zserializowane dane transakcji (bez bezpośredniego dostępu ml-engine do bazy).
+    """
+    transactions = fetch_transactions_for_recurring(db, user.id)
+    if not transactions:
+        return RecurringDetectionResponse(
+            algorithm=ML_ENGINE_RECURRING_ALGO,
+            scores=[],
+        )
+
+    ensure_recurring_model_ready(ML_ENGINE_RECURRING_ALGO)
+
+    resp = ml_engine_post(
+        "/predict",
+        payload={
+            "algorithm": ML_ENGINE_RECURRING_ALGO,
+            "transactions": transactions,
+        },
+    )
+    predictions = resp.get("predictions")
+    if not isinstance(predictions, list):
+        raise HTTPException(status_code=502, detail="Invalid ML response from engine")
+    if len(predictions) != len(transactions):
+        raise HTTPException(status_code=502, detail="ML engine response length mismatch")
+
+    scores = [
+        RecurringScore(transaction_id=tx["transaction_id"], score=float(score))
+        for tx, score in zip(transactions, predictions)
+    ]
+    return RecurringDetectionResponse(
+        algorithm=resp.get("algorithm", ML_ENGINE_RECURRING_ALGO),
+        scores=scores,
+    )
 
 
 # -----------------------
@@ -1351,9 +1452,15 @@ def update_transaction_category(
     tx_id: int,
     payload: CategoryUpdatePayload,
     db: Session = Depends(get_db),
+    user: User = Depends(auth_get_current_user),
 ):
     tx = db.get(Transaction, tx_id)
     if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # upewnij się, że użytkownik jest właścicielem transakcji
+    account = db.get(Account, tx.account_id)
+    if not account or account.user_id != user.id:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     old_cat_id = tx.category_id

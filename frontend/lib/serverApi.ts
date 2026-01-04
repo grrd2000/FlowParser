@@ -118,6 +118,16 @@ export type LabOverview = {
   assignments_rule: number;
 };
 
+export type RecurringScore = {
+  transaction_id: number;
+  score: number;
+};
+
+export type RecurringDetection = {
+  algorithm: string;
+  scores: RecurringScore[];
+};
+
 export type CategoryRuleUI = {
   id: number;
   category_id: number;
@@ -342,6 +352,13 @@ export async function toggleCategoryRule(
   );
 }
 
+export async function fetchRecurringDetections(): Promise<RecurringDetection> {
+  return requestJson<RecurringDetection>("/recurring-payments", {}, {
+    allowUnauthorized: true,
+    unauthorizedValue: { algorithm: "lightgbm", scores: [] },
+  });
+}
+
 export async function fetchCategoryStats(): Promise<Record<number, number>> {
   return requestJson<Record<number, number>>("/categories/stats", {}, {
     allowUnauthorized: true,
@@ -484,4 +501,3 @@ export async function authLogout(): Promise<{ ok: boolean }> {
     method: "POST",
   });
 }
-
