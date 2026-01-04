@@ -8,10 +8,8 @@ from pydantic import BaseModel, Field
 from app.engine import (
     Algorithm,
     RecurringPaymentEngine,
-    # build_dataframe,
-    # load_sample_dataset,
 )
-from app.tfidf import suggest_rule_token
+from app.tfidf import preprocess_texts, suggest_rule_token
 
 app = FastAPI(title="FlowParser ML Engine", version="0.1.0")
 engine = RecurringPaymentEngine()
@@ -76,6 +74,17 @@ class TokenSuggestionResponse(BaseModel):
 class ModelStatusResponse(BaseModel):
     algorithm: Algorithm
     trained: bool
+class PreprocessTextsRequest(BaseModel):
+    texts: List[str] = Field(default_factory=list, description="Teksty do normalizacji/tokenizacji")
+
+
+class PreprocessTextFeatures(BaseModel):
+    normalized: str
+    tokens: List[str]
+
+
+class PreprocessTextsResponse(BaseModel):
+    items: List[PreprocessTextFeatures]
 
 
 @app.get("/health")
@@ -94,16 +103,8 @@ def train(req: TrainRequest):
 
 
 @app.post("/train-sample", response_model=TrainResponse)
-def train_sample(payload: TrainSampleRequest | None = None, algorithm: Algorithm = "lightgbm"):
-    """
-    Train a baseline model on bundled sample data.
-
-    The algorithm can be provided either via JSON payload (preferred) or query parameter.
-    """
-    algo = payload.algorithm if payload else algorithm
-    df = engine.load_sample_dataset()
-    result = engine.train(df, algorithm=algo)
-    return {"algorithm": algo, "metrics": result.metrics}
+def train_sample(algorithm: Algorithm = "lightgbm"):
+    raise HTTPException(status_code=410, detail="Sample training dataset is no longer available.")
 
 
 @app.post("/predict", response_model=PredictResponse)
@@ -131,11 +132,7 @@ def suggest_token(req: TokenSuggestionRequest):
     return TokenSuggestionResponse(token=result["token"], similar_count=result["similar_count"])
 
 
-@app.get("/model-status", response_model=ModelStatusResponse)
-def model_status(algorithm: Algorithm = "lightgbm"):
-    """
-    Lightweight readiness probe used by backend to decide whether it needs to
-    trigger a training job. No data is persisted here; backend owns storage.
-    """
-    trained = engine.has_model(algorithm)
-    return ModelStatusResponse(algorithm=algorithm, trained=trained)
+@app.post("/text/preprocess", response_model=PreprocessTextsResponse)
+def preprocess(req: PreprocessTextsRequest):
+    feats = preprocess_texts(req.texts)
+    return PreprocessTextsResponse(items=[PreprocessTextFeatures(**f) for f in feats])
