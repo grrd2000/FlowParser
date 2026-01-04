@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   fetchCategories,
   fetchTransactions,
@@ -49,7 +49,13 @@ type CalendarCell = {
   label: string;
   isCurrentMonth: boolean;
   date: Date;
-  markers: RecurringGroup[];
+  markers: CalendarMarker[];
+};
+
+type CalendarMarker = {
+  group: RecurringGroup;
+  date: Date;
+  isNext: boolean;
 };
 
 export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
@@ -67,6 +73,12 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
   >(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recurringViewDate, setRecurringViewDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [calendarDirection, setCalendarDirection] = useState<1 | -1>(1);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
 
 
@@ -169,6 +181,20 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
   const handleGranularityChange = useCallback((value: NetFlowGranularity) => {
     setGranularity(value);
   }, []);
+  const handleRecurringMonthChange = useCallback((direction: 1 | -1) => {
+    setRecurringViewDate((prev) => {
+      const next = new Date(prev);
+      next.setMonth(prev.getMonth() + direction);
+      return next;
+    });
+    setCalendarDirection(direction);
+  }, []);
+  const handleRecurringToday = useCallback(() => {
+    const now = new Date();
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    setCalendarDirection(1);
+    setRecurringViewDate(currentMonth);
+  }, []);
   const rangeText = rangeLabel(range, startDate);
   const dailyAverage = useMemo(() => {
     if (!filtered.length) return 0;
@@ -197,8 +223,8 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     [transactions]
   );
   const recurringCalendar = useMemo(
-    () => buildRecurringCalendar(new Date(), recurringGroups),
-    [recurringGroups]
+    () => buildRecurringCalendar(recurringViewDate, recurringGroups),
+    [recurringViewDate, recurringGroups]
   );
   const recurringByCadence = useMemo(() => {
     const monthly = recurringGroups.filter((g) => g.cadence === "miesięczne");
@@ -210,6 +236,22 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       weekly: [...weekly].sort(sortByNext),
     };
   }, [recurringGroups]);
+  useEffect(() => {
+    if (recurringCalendar.cells.length === 0) {
+      setSelectedCalendarDate(null);
+      return;
+    }
+    setSelectedCalendarDate((prev) => {
+      if (prev && recurringCalendar.cells.some((c) => c.key === prev)) {
+        return prev;
+      }
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const todayCell = recurringCalendar.cells.find((c) => c.key === todayKey);
+      if (todayCell) return todayKey;
+      const firstCurrentMonth = recurringCalendar.cells.find((c) => c.isCurrentMonth);
+      return firstCurrentMonth?.key ?? recurringCalendar.cells[0]?.key ?? null;
+    });
+  }, [recurringCalendar]);
 
   // Signed out state (after all hooks to satisfy React Rules of Hooks)
   if (!authLoading && !user) {
@@ -489,6 +531,13 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
               monthLabel={recurringCalendar.monthLabel}
               hasData={recurringGroups.length > 0}
               loading={loading}
+              onPrevMonth={() => handleRecurringMonthChange(-1)}
+              onNextMonth={() => handleRecurringMonthChange(1)}
+              onToday={handleRecurringToday}
+              direction={calendarDirection}
+              selectedDateKey={selectedCalendarDate}
+              onSelectDate={setSelectedCalendarDate}
+              visibleMarkers={recurringCalendar.visibleMarkers}
             />
           </div>
           <div className="lg:w-5/12 w-full space-y-4">
@@ -1289,11 +1338,25 @@ function RecurringCalendar({
   monthLabel,
   hasData,
   loading,
+  onPrevMonth,
+  onNextMonth,
+  onToday,
+  direction,
+  selectedDateKey,
+  onSelectDate,
+  visibleMarkers,
 }: {
   cells: CalendarCell[];
   monthLabel: string;
   hasData: boolean;
   loading: boolean;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onToday: () => void;
+  direction: 1 | -1;
+  selectedDateKey: string | null;
+  onSelectDate: (key: string) => void;
+  visibleMarkers: CalendarMarker[];
 }) {
   if (loading) {
     return (
@@ -1303,18 +1366,56 @@ function RecurringCalendar({
     );
   }
 
+  const flattenedMarkers = visibleMarkers
+    .map((marker) => ({
+      ...marker,
+      key: `${marker.group.id}-${marker.date.toISOString()}`,
+    }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const selectedCell = cells.find((c) => c.key === selectedDateKey);
+  const todayKey = new Date().toISOString().slice(0, 10);
+
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-inner shadow-black/30">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-semibold text-white">{monthLabel}</div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-400">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-3 w-3 rounded-sm bg-emerald-400/70" />
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onPrevMonth}
+            className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-white shadow-sm transition hover:-translate-x-[1px] hover:border-white/20 hover:bg-white/10"
+            aria-label="Poprzedni miesiąc"
+          >
+            ←
+          </button>
+          <div className="text-sm font-semibold text-white px-2">{monthLabel}</div>
+          <button
+            type="button"
+            onClick={onNextMonth}
+            className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-white shadow-sm transition hover:translate-x-[1px] hover:border-white/20 hover:bg-white/10"
+            aria-label="Następny miesiąc"
+          >
+            →
+          </button>
+          <button
+            type="button"
+            onClick={onToday}
+            className="rounded-full border border-indigo-400/40 bg-indigo-500/10 px-3 py-1 text-[11px] font-semibold text-indigo-100 shadow-sm transition hover:border-indigo-300/50 hover:bg-indigo-400/15"
+          >
+            Dziś
+          </button>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-slate-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-[3px] border border-white/5">
+            <span className="h-3 w-3 rounded-sm bg-emerald-400/70 shadow-[0_0_0_2px_rgba(34,197,94,0.2)]" />
             Miesięczne
           </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-3 w-3 rounded-sm bg-indigo-400/80" />
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-[3px] border border-white/5">
+            <span className="h-3 w-3 rounded-sm bg-indigo-400/80 shadow-[0_0_0_2px_rgba(99,102,241,0.2)]" />
             Tygodniowe
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-[3px] border border-white/5">
+            <span className="h-3 w-3 rounded-full border border-white/40" />
+            Dziś
           </span>
         </div>
       </div>
@@ -1327,62 +1428,181 @@ function RecurringCalendar({
         ))}
       </div>
 
-      {cells.length === 0 ? (
-        <div className="h-48 flex items-center justify-center text-[11px] text-slate-500">
-          Brak danych.
-        </div>
-      ) : (
-        <div className="grid grid-cols-7 gap-1 text-[11px]">
-          {cells.map((cell) => (
-            <div
-              key={cell.key}
-              className={[
-                "min-h-[72px] rounded-xl border p-2 flex flex-col gap-1 transition",
-                cell.isCurrentMonth
-                  ? "border-white/10 bg-white/5"
-                  : "border-white/5 bg-slate-900/50 text-slate-500",
-              ].join(" ")}
-            >
-              <div className="flex items-center justify-between">
-                <span>{cell.label}</span>
-                <div className="flex gap-1">
-                  {cell.markers.slice(0, 3).map((group) => (
-                    <span
-                      key={group.id}
-                      className="h-2 w-2 rounded-sm"
-                      style={{ backgroundColor: group.color }}
-                    />
-                  ))}
-                </div>
-              </div>
-              {cell.markers.length > 0 && (
-                <div className="flex flex-col gap-0.5">
-                  {cell.markers.slice(0, 2).map((group) => (
-                    <div
-                      key={`${cell.key}-${group.id}`}
-                      className="truncate rounded-md bg-white/5 px-1 py-[2px] text-[10px] text-white"
-                      style={{ borderLeft: `3px solid ${group.color}` }}
-                    >
-                      {group.name}
-                    </div>
-                  ))}
-                  {cell.markers.length > 2 && (
-                    <span className="text-[10px] text-slate-400">
-                      +{cell.markers.length - 2} więcej
+      <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+        {cells.length === 0 ? (
+          <motion.div
+            key="empty"
+            className="h-48 flex items-center justify-center text-[11px] text-slate-500"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            Brak danych.
+          </motion.div>
+        ) : (
+          <motion.div
+            key={monthLabel}
+            className="grid grid-cols-7 gap-1 text-[11px]"
+            custom={direction}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            variants={{
+              enter: (dir: 1 | -1) => ({
+                opacity: 0,
+                x: dir > 0 ? 24 : -24,
+                scale: 0.98,
+              }),
+              center: { opacity: 1, x: 0, scale: 1 },
+              exit: (dir: 1 | -1) => ({
+                opacity: 0,
+                x: dir > 0 ? -24 : 24,
+                scale: 0.98,
+              }),
+            }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+          >
+            {cells.map((cell) => {
+              const isSelected = cell.key === selectedDateKey;
+              const isToday = cell.key === todayKey;
+              return (
+                <button
+                  type="button"
+                  key={cell.key}
+                  onClick={() => onSelectDate(cell.key)}
+                  className={[
+                    "min-h-[82px] rounded-xl border p-2 flex flex-col gap-1 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/80",
+                    cell.isCurrentMonth
+                      ? "border-white/10 bg-white/5"
+                      : "border-white/5 bg-slate-900/50 text-slate-500",
+                    isSelected ? "border-indigo-400/60 shadow-[0_0_0_1px_rgba(129,140,248,0.4)]" : "",
+                    "hover:border-white/20 hover:bg-white/10",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-[11px]">{cell.label}</span>
+                      {isToday && (
+                        <span className="h-2 w-2 rounded-full border border-white/50" title="Dziś" />
+                      )}
                     </span>
+                    <div className="flex gap-1">
+                      {cell.markers.slice(0, 3).map((marker) => (
+                        <span
+                          key={`${cell.key}-${marker.group.id}`}
+                          className={[
+                            "h-2 w-2 rounded-sm",
+                            marker.isNext ? "shadow-[0_0_0_2px_rgba(129,140,248,0.45)]" : "",
+                          ].join(" ")}
+                          style={{ backgroundColor: marker.group.color }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {cell.markers.length > 0 && (
+                    <div className="flex flex-col gap-0.5">
+                      {cell.markers.slice(0, 2).map((marker) => (
+                        <div
+                          key={`${cell.key}-${marker.group.id}`}
+                          className="truncate rounded-md bg-white/5 px-1 py-[2px] text-[10px] text-white"
+                          style={{ borderLeft: `3px solid ${marker.group.color}` }}
+                        >
+                          {marker.group.name}
+                          {marker.isNext && <span className="ml-1 text-indigo-200">• najbliższa</span>}
+                        </div>
+                      ))}
+                      {cell.markers.length > 2 && (
+                        <span className="text-[10px] text-slate-400">
+                          +{cell.markers.length - 2} więcej
+                        </span>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {!hasData && (
         <p className="mt-3 text-[11px] text-slate-400">
           Gdy ML-engine wykryje powtarzalne transakcje, pojawią się tutaj terminy.
         </p>
       )}
+      {selectedCell && (
+        <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/80 p-3 text-[11px] text-slate-200 shadow-inner shadow-black/20">
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-white">
+              {selectedCell.date.toLocaleDateString("pl-PL", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })}
+            </div>
+            <span className="rounded-full bg-white/5 px-2 py-[3px] text-[10px] text-slate-400 border border-white/10">
+              {selectedCell.markers.length} termin{selectedCell.markers.length === 1 ? "" : "y"}
+            </span>
+          </div>
+          {selectedCell.markers.length === 0 ? (
+            <p className="text-slate-500">Brak powtarzalnych płatności tego dnia.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {selectedCell.markers.map((marker) => (
+                <div
+                  key={`${selectedCell.key}-${marker.group.id}-detail`}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                  style={{ borderLeft: `3px solid ${marker.group.color}` }}
+                >
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>{marker.group.cadence === "miesięczne" ? "Co miesiąc" : "Co tydzień"}</span>
+                    {marker.isNext && <span className="text-indigo-200">Nadchodzące</span>}
+                  </div>
+                  <div className="text-[12px] font-semibold text-white">{marker.group.name}</div>
+                  <div className="text-slate-300">
+                    Śr. kwota: {formatCurrency(Math.abs(marker.group.averageAmount))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="mt-3 flex flex-col gap-2 text-[11px] text-slate-200">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400">Najbliższe terminy w widoku</span>
+          <span className="text-slate-500">{flattenedMarkers.length}</span>
+        </div>
+        {flattenedMarkers.length === 0 ? (
+          <p className="text-slate-500">Brak terminów w tym miesiącu. Przejdź do innego okresu.</p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {flattenedMarkers.slice(0, 6).map((marker) => (
+              <div
+                key={marker.key}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 flex items-center justify-between"
+                style={{ borderLeft: `3px solid ${marker.group.color}` }}
+              >
+                <div>
+                  <div className="text-[12px] font-semibold text-white leading-tight">
+                    {marker.group.name}
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    {marker.group.cadence === "miesięczne" ? "Co miesiąc" : "Co tydzień"} •{" "}
+                    {marker.date.toLocaleDateString("pl-PL", {
+                      day: "2-digit",
+                      month: "short",
+                    })}
+                  </div>
+                </div>
+                <div className="text-[12px] font-semibold text-white">
+                  {formatCurrency(Math.abs(marker.group.averageAmount))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1604,6 +1824,53 @@ function buildRecurringCalendar(referenceDate: Date, groups: RecurringGroup[]) {
   const startOffset = (monthStart.getDay() + 6) % 7; // Monday as first day
   const firstCellDate = new Date(monthStart);
   firstCellDate.setDate(monthStart.getDate() - startOffset);
+  const rangeStart = firstCellDate;
+  const rangeEnd = new Date(firstCellDate);
+  rangeEnd.setDate(firstCellDate.getDate() + 41); // 6 tygodni
+
+  const markers: CalendarMarker[] = [];
+  for (const group of groups) {
+    let cursor = new Date(group.nextDate);
+    const stepForward = (d: Date) => {
+      const copy = new Date(d);
+      if (group.cadence === "tygodniowe") {
+        copy.setDate(copy.getDate() + 7);
+      } else {
+        copy.setMonth(copy.getMonth() + 1);
+      }
+      return copy;
+    };
+    const stepBackward = (d: Date) => {
+      const copy = new Date(d);
+      if (group.cadence === "tygodniowe") {
+        copy.setDate(copy.getDate() - 7);
+      } else {
+        copy.setMonth(copy.getMonth() - 1);
+      }
+      return copy;
+    };
+
+    // Cofnij się tak, aby pierwszy punkt był przed zakresem
+    while (cursor > rangeStart) {
+      const prev = stepBackward(cursor);
+      if (prev.getTime() === cursor.getTime()) break;
+      cursor = prev;
+    }
+
+    // Idź do przodu i zbierz wystąpienia w widoku
+    while (cursor <= rangeEnd) {
+      if (cursor >= rangeStart) {
+        markers.push({
+          group,
+          date: new Date(cursor),
+          isNext: isSameDay(cursor, group.nextDate),
+        });
+      }
+      const next = stepForward(cursor);
+      if (next.getTime() === cursor.getTime()) break;
+      cursor = next;
+    }
+  }
 
   const cells: CalendarCell[] = [];
   for (let i = 0; i < 42; i++) {
@@ -1614,7 +1881,7 @@ function buildRecurringCalendar(referenceDate: Date, groups: RecurringGroup[]) {
       label: d.getDate().toString(),
       isCurrentMonth: d.getMonth() === monthStart.getMonth(),
       date: d,
-      markers: groups.filter((g) => isSameDay(g.nextDate, d)),
+      markers: markers.filter((marker) => isSameDay(marker.date, d)),
     });
   }
 
@@ -1623,7 +1890,7 @@ function buildRecurringCalendar(referenceDate: Date, groups: RecurringGroup[]) {
     year: "numeric",
   });
 
-  return { cells, monthLabel };
+  return { cells, monthLabel, visibleMarkers: markers };
 }
 
 function isSameDay(a: Date, b: Date) {
