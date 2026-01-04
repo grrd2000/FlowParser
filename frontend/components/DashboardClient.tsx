@@ -34,6 +34,24 @@ type CategoryBucket = {
   color?: string | null;
 };
 
+type RecurringGroup = {
+  id: string;
+  name: string;
+  cadence: "miesięczne" | "tygodniowe";
+  nextDate: Date;
+  averageAmount: number;
+  color: string;
+  transactions: TxExt[];
+};
+
+type CalendarCell = {
+  key: string;
+  label: string;
+  isCurrentMonth: boolean;
+  date: Date;
+  markers: RecurringGroup[];
+};
+
 export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
   const { user, authLoading } = useAuth();
@@ -173,6 +191,25 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
     return match ?? coloredCategories[0];
   }, [coloredCategories, selectedCategory]);
+
+  const recurringGroups = useMemo(
+    () => detectRecurringGroups(transactions),
+    [transactions]
+  );
+  const recurringCalendar = useMemo(
+    () => buildRecurringCalendar(new Date(), recurringGroups),
+    [recurringGroups]
+  );
+  const recurringByCadence = useMemo(() => {
+    const monthly = recurringGroups.filter((g) => g.cadence === "miesięczne");
+    const weekly = recurringGroups.filter((g) => g.cadence === "tygodniowe");
+    const sortByNext = (a: RecurringGroup, b: RecurringGroup) =>
+      a.nextDate.getTime() - b.nextDate.getTime();
+    return {
+      monthly: [...monthly].sort(sortByNext),
+      weekly: [...weekly].sort(sortByNext),
+    };
+  }, [recurringGroups]);
 
   // Signed out state (after all hooks to satisfy React Rules of Hooks)
   if (!authLoading && !user) {
@@ -430,6 +467,42 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
             transactions={filtered.slice(-6).reverse()}
             loading={loading}
           />
+        </div>
+      </section>
+
+      {/* PŁATNOŚCI CYKLICZNE (ML-preview) */}
+      <section className="glass-card glass-card-hover-soft p-4 md:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-8">
+          <div className="lg:w-7/12 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-50">Płatności cykliczne</h2>
+                <p className="text-[11px] text-slate-400">
+                  Wstępny podgląd z nadchodzącego wykrywania w ML-engine. Prosty kalendarz pokazuje terminy,
+                  a obok zobaczysz grupy transakcji (miesięczne i tygodniowe).
+                </p>
+              </div>
+              <span className="badge-soft">Preview</span>
+            </div>
+            <RecurringCalendar
+              cells={recurringCalendar.cells}
+              monthLabel={recurringCalendar.monthLabel}
+              hasData={recurringGroups.length > 0}
+              loading={loading}
+            />
+          </div>
+          <div className="lg:w-5/12 w-full space-y-4">
+            <RecurringGroupList
+              title="Miesięczne"
+              groups={recurringByCadence.monthly}
+              loading={loading}
+            />
+            <RecurringGroupList
+              title="Tygodniowe"
+              groups={recurringByCadence.weekly}
+              loading={loading}
+            />
+          </div>
         </div>
       </section>
     </div>
@@ -1211,7 +1284,286 @@ function RecentTransactionsList({
   );
 }
 
+function RecurringCalendar({
+  cells,
+  monthLabel,
+  hasData,
+  loading,
+}: {
+  cells: CalendarCell[];
+  monthLabel: string;
+  hasData: boolean;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="h-64 flex items-center justify-center text-[11px] text-slate-500">
+        Ładowanie danych...
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-inner shadow-black/30">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-semibold text-white">{monthLabel}</div>
+        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-3 w-3 rounded-sm bg-emerald-400/70" />
+            Miesięczne
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-3 w-3 rounded-sm bg-indigo-400/80" />
+            Tygodniowe
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-[11px] text-slate-400 mb-1">
+        {["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"].map((d) => (
+          <span key={d} className="text-center">
+            {d}
+          </span>
+        ))}
+      </div>
+
+      {cells.length === 0 ? (
+        <div className="h-48 flex items-center justify-center text-[11px] text-slate-500">
+          Brak danych.
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 gap-1 text-[11px]">
+          {cells.map((cell) => (
+            <div
+              key={cell.key}
+              className={[
+                "min-h-[72px] rounded-xl border p-2 flex flex-col gap-1 transition",
+                cell.isCurrentMonth
+                  ? "border-white/10 bg-white/5"
+                  : "border-white/5 bg-slate-900/50 text-slate-500",
+              ].join(" ")}
+            >
+              <div className="flex items-center justify-between">
+                <span>{cell.label}</span>
+                <div className="flex gap-1">
+                  {cell.markers.slice(0, 3).map((group) => (
+                    <span
+                      key={group.id}
+                      className="h-2 w-2 rounded-sm"
+                      style={{ backgroundColor: group.color }}
+                    />
+                  ))}
+                </div>
+              </div>
+              {cell.markers.length > 0 && (
+                <div className="flex flex-col gap-0.5">
+                  {cell.markers.slice(0, 2).map((group) => (
+                    <div
+                      key={`${cell.key}-${group.id}`}
+                      className="truncate rounded-md bg-white/5 px-1 py-[2px] text-[10px] text-white"
+                      style={{ borderLeft: `3px solid ${group.color}` }}
+                    >
+                      {group.name}
+                    </div>
+                  ))}
+                  {cell.markers.length > 2 && (
+                    <span className="text-[10px] text-slate-400">
+                      +{cell.markers.length - 2} więcej
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!hasData && (
+        <p className="mt-3 text-[11px] text-slate-400">
+          Gdy ML-engine wykryje powtarzalne transakcje, pojawią się tutaj terminy.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RecurringGroupList({
+  title,
+  groups,
+  loading,
+}: {
+  title: string;
+  groups: RecurringGroup[];
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-inner shadow-black/30">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <span className="badge-soft">{groups.length}</span>
+      </div>
+      {loading ? (
+        <div className="h-28 flex items-center justify-center text-[11px] text-slate-500">
+          Ładowanie danych...
+        </div>
+      ) : groups.length === 0 ? (
+        <div className="text-[11px] text-slate-500">
+          Brak wykrytych grup w tym rytmie.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {groups.map((group) => (
+            <div
+              key={group.id}
+              className="rounded-xl border border-white/10 bg-white/5 p-3 text-[11px] text-slate-200"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-3 w-3 rounded-sm"
+                    style={{ backgroundColor: group.color }}
+                  />
+                  <span className="font-semibold text-white">{group.name}</span>
+                </div>
+                <span className="text-slate-400">
+                  {group.cadence === "miesięczne" ? "Co miesiąc" : "Co tydzień"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300">
+                <span>Następna: {formatDateLong(group.nextDate.toISOString().slice(0, 10))}</span>
+                <span className="font-semibold text-white">
+                  {formatCurrency(Math.abs(group.averageAmount))}
+                </span>
+              </div>
+              {group.transactions.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-slate-400">
+                  {group.transactions.slice(-3).map((t) => (
+                    <span
+                      key={t.id}
+                      className="rounded-md bg-slate-900/60 px-2 py-[2px]"
+                    >
+                      {formatDateShort(t.operation_date)} • {formatCurrency(Math.abs(t.amountNum))}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- DATA HELPERS ---------- */
+
+const RECURRING_COLORS = [
+  "#22c55e",
+  "#6366f1",
+  "#f59e0b",
+  "#ef4444",
+  "#14b8a6",
+  "#8b5cf6",
+];
+
+function detectRecurringGroups(transactions: TxExt[]): RecurringGroup[] {
+  if (transactions.length === 0) return [];
+
+  const map = new Map<string, TxExt[]>();
+  for (const t of transactions) {
+    if (!t.description) continue;
+    const key = `${t.description.trim().toLowerCase()}|${t.amountNum >= 0 ? "in" : "out"}`;
+    const bucket = map.get(key) ?? [];
+    bucket.push(t);
+    map.set(key, bucket);
+  }
+
+  const groups: RecurringGroup[] = [];
+  let colorIdx = 0;
+
+  for (const [key, txs] of map.entries()) {
+    if (txs.length < 3) continue;
+
+    const sorted = [...txs].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const intervals: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1].date.getTime();
+      const curr = sorted[i].date.getTime();
+      intervals.push(Math.round((curr - prev) / (1000 * 60 * 60 * 24)));
+    }
+    const avgInterval =
+      intervals.length > 0
+        ? intervals.reduce((sum, v) => sum + v, 0) / intervals.length
+        : Infinity;
+
+    let cadence: RecurringGroup["cadence"] | null = null;
+    let cadenceDays = 0;
+    if (avgInterval >= 5 && avgInterval <= 9) {
+      cadence = "tygodniowe";
+      cadenceDays = 7;
+    } else if (avgInterval >= 25 && avgInterval <= 35) {
+      cadence = "miesięczne";
+      cadenceDays = 30;
+    }
+    if (!cadence) continue;
+
+    const lastTx = sorted[sorted.length - 1];
+    const nextDate = new Date(lastTx.date);
+    nextDate.setDate(nextDate.getDate() + cadenceDays);
+
+    const averageAmount =
+      sorted.reduce((sum, t) => sum + t.amountNum, 0) / sorted.length;
+    const color = RECURRING_COLORS[colorIdx % RECURRING_COLORS.length];
+    colorIdx += 1;
+
+    groups.push({
+      id: key,
+      name: lastTx.description ?? "Powtarzalna transakcja",
+      cadence,
+      nextDate,
+      averageAmount,
+      color,
+      transactions: sorted,
+    });
+  }
+
+  return groups;
+}
+
+function buildRecurringCalendar(referenceDate: Date, groups: RecurringGroup[]) {
+  const monthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+  const startOffset = (monthStart.getDay() + 6) % 7; // Monday as first day
+  const firstCellDate = new Date(monthStart);
+  firstCellDate.setDate(monthStart.getDate() - startOffset);
+
+  const cells: CalendarCell[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(firstCellDate);
+    d.setDate(firstCellDate.getDate() + i);
+    cells.push({
+      key: d.toISOString().slice(0, 10),
+      label: d.getDate().toString(),
+      isCurrentMonth: d.getMonth() === monthStart.getMonth(),
+      date: d,
+      markers: groups.filter((g) => isSameDay(g.nextDate, d)),
+    });
+  }
+
+  const monthLabel = monthStart.toLocaleDateString("pl-PL", {
+    month: "long",
+    year: "numeric",
+  });
+
+  return { cells, monthLabel };
+}
+
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
 function normalizeTransactions(transactions: Transaction[]): TxExt[] {
   return transactions
