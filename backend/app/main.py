@@ -260,14 +260,12 @@ def serialize_tx_for_recurring(tx: Transaction) -> dict:
     }
 
 
-def fetch_transactions_for_recurring(db: Session, user_id: int) -> list[Transaction]:
-    return (
 def fetch_transactions_for_recurring(
     db: Session,
     user_id: int,
-    from_date: date | None,
-    to_date: date | None,
-    max_transactions: int | None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    max_transactions: int | None = None,
 ) -> tuple[list[dict], int]:
     stmt = (
         db.query(Transaction)
@@ -769,24 +767,17 @@ def detect_recurring_payments(
     return recurring_service.detection_to_response(
         detection,
         status="refreshed" if should_refresh else "completed",
-    meta = RecurringDetectionMeta(
-        from_date=lower_from,
-        to_date=upper_to,
-        max_transactions=max_transactions,
-        considered_transactions=len(transactions),
-        total_transactions=total_count,
-        limited=bool(
-            (max_transactions is not None and total_count > max_transactions)
-            or (to_date is not None and to_date > upper_to)
+        meta=RecurringDetectionMeta(
+            from_date=lower_from,
+            to_date=upper_to,
+            max_transactions=max_transactions,
+            considered_transactions=len(transactions),
+            total_transactions=total_count,
+            limited=bool(
+                (max_transactions is not None and total_count > max_transactions)
+                or (to_date is not None and to_date > upper_to)
+            ),
         ),
-    )
-
-    return RecurringDetectionResponse(
-        algorithm=resp.get("algorithm", "recurring-heuristic"),
-        scores=scores,
-        groups=groups,
-        skipped_count=int(resp.get("skipped_count", 0)),
-        meta=meta,
     )
 
 
