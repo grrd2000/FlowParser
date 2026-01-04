@@ -150,6 +150,18 @@ export type RecurringDetection = {
   };
 };
 
+const recurringDetectionFallback = (
+  status: RecurringDetection["status"] = "unauthorized"
+): RecurringDetection => ({
+  algorithm: "lightgbm",
+  scores: [],
+  groups: [],
+  run_at: null,
+  status,
+  skipped_count: 0,
+  meta: { limited: false },
+});
+
 export type CategoryRuleUI = {
   id: number;
   category_id: number;
@@ -383,18 +395,22 @@ export async function fetchRecurringDetections(options?: {
   const query = params.toString();
   const path = query ? `/recurring-payments?${query}` : "/recurring-payments";
 
-  return requestJson<RecurringDetection>(path, {}, {
-    allowUnauthorized: true,
-    unauthorizedValue: {
-      algorithm: "lightgbm",
-      scores: [],
-      groups: [],
-      run_at: null,
-      status: "unauthorized",
-      skipped_count: 0,
-      meta: { limited: false },
-    },
-  });
+  try {
+    return await requestJson<RecurringDetection>(path, {}, {
+      allowUnauthorized: true,
+      unauthorizedValue: recurringDetectionFallback("unauthorized"),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    const isMlUnavailable = message.toLowerCase().includes("ml engine unavailable");
+
+    if (isMlUnavailable) {
+      console.warn("Recurring detection unavailable (ML engine)", err);
+      return recurringDetectionFallback("unavailable");
+    }
+
+    throw err;
+  }
 }
 
 export async function fetchCategoryStats(): Promise<Record<number, number>> {
