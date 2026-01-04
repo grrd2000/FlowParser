@@ -266,7 +266,7 @@ def fetch_transactions_for_recurring(
     from_date: date | None = None,
     to_date: date | None = None,
     max_transactions: int | None = None,
-) -> tuple[list[dict], int]:
+) -> tuple[list[Transaction], int]:
     stmt = (
         db.query(Transaction)
         .join(Account, Account.id == Transaction.account_id)
@@ -284,7 +284,7 @@ def fetch_transactions_for_recurring(
         stmt = stmt.limit(max_transactions)
 
     rows = stmt.all()
-    return [serialize_tx_for_recurring(tx) for tx in rows], total
+    return rows, total
 
 
 def ensure_recurring_model_ready(algorithm: str) -> None:
@@ -624,7 +624,6 @@ def detect_recurring_payments(
     Model trenowany jest na danych przykładowych, a do predykcji przekazujemy jedynie
     zserializowane dane transakcji (bez bezpośredniego dostępu ml-engine do bazy).
     """
-    transactions = fetch_transactions_for_recurring(db, user.id)
     latest_detection = recurring_service.get_latest_detection(db, user.id)
     now = datetime.now(timezone.utc)
     is_stale = True
