@@ -130,10 +130,15 @@ class RecurringDetectionResult:
     algorithm: str
     scores: list[RecurringScore]
     groups: list[RecurringGroup]
+    skipped_count: int = 0
 
 
-def _normalize_transactions(transactions: list[dict]) -> list[dict]:
-    normalized: list[dict] = []
+def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionResult:
+    if not transactions:
+        return RecurringDetectionResult(algorithm="heuristic_v2", scores=[], groups=[], skipped_count=0)
+
+    parsed: list[dict] = []
+    skipped_count = 0
     for tx in transactions:
         try:
             normalized.append(
@@ -145,6 +150,7 @@ def _normalize_transactions(transactions: list[dict]) -> list[dict]:
                 }
             )
         except Exception:
+            skipped_count += 1
             continue
     return normalized
 
@@ -246,6 +252,9 @@ def detect_recurring_payments(
         for row, score in zip(normalized, scores_array)
     ]
 
-    groups = _detect_groups(normalized)
-
-    return RecurringDetectionResult(algorithm=str(algorithm), scores=scores, groups=groups)
+    return RecurringDetectionResult(
+        algorithm="heuristic_v2",
+        scores=scores,
+        groups=groups,
+        skipped_count=skipped_count,
+    )

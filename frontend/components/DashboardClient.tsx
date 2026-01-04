@@ -259,6 +259,11 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     () => buildRecurringCalendar(recurringViewDate, recurringGroups),
     [recurringViewDate, recurringGroups]
   );
+  const recurringMeta = recurringDetection?.meta;
+  const recurringRangeLabel = useMemo(() => {
+    if (!recurringMeta) return null;
+    return formatDateRangeLabel(recurringMeta.from_date, recurringMeta.to_date);
+  }, [recurringMeta]);
   const recurringByCadence = useMemo(() => {
     const monthly = recurringGroups.filter((g) => g.cadence === "miesięczne");
     const weekly = recurringGroups.filter((g) => g.cadence === "tygodniowe");
@@ -269,6 +274,27 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       weekly: [...weekly].sort(sortByNext),
     };
   }, [recurringGroups]);
+  const recurringLastRunAt = useMemo(() => {
+    if (!recurringDetection?.run_at) return null;
+    const parsed = new Date(recurringDetection.run_at);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [recurringDetection]);
+  const recurringStatus = recurringDetection?.status ?? (recurringDetection ? "completed" : "empty");
+  const recurringStatusLabel = useMemo(() => {
+    if (loading) return "Ładowanie…";
+    switch (recurringStatus) {
+      case "refreshed":
+        return "Odświeżone";
+      case "cached":
+        return "Dane z cache";
+      case "empty":
+        return "Brak danych";
+      case "unauthorized":
+        return "Brak dostępu";
+      default:
+        return "Gotowe";
+    }
+  }, [recurringStatus, loading]);
   useEffect(() => {
     if (recurringCalendar.cells.length === 0) {
       setSelectedCalendarDate(null);
@@ -556,9 +582,40 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
                   Wstępny podgląd z nadchodzącego wykrywania w ML-engine. Prosty kalendarz pokazuje terminy,
                   a obok zobaczysz grupy transakcji (miesięczne i tygodniowe).
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-[4px] text-[10px] uppercase tracking-wide text-white/80">
+                    {recurringStatusLabel}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/5 bg-white/5 px-2 py-[4px] text-slate-200/80">
+                    Ostatnia aktualizacja:
+                    <span className="font-medium text-white">
+                      {recurringLastRunAt ? formatDateTime(recurringLastRunAt) : "brak"}
+                    </span>
+                  </span>
+                </div>
               </div>
               <span className="badge-soft">Preview</span>
             </div>
+            {recurringMeta?.limited && (
+              <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-50 shadow-inner shadow-amber-500/10">
+                <div className="font-semibold text-amber-100">Zakres przycięty</div>
+                <div className="text-amber-50/90">
+                  Wykrywanie działa na danych {recurringRangeLabel ?? "z ograniczonego zakresu"}.
+                  {recurringMeta.max_transactions
+                    ? ` Limit transakcji: ${recurringMeta.max_transactions}.`
+                    : ""}
+                  {typeof recurringMeta.considered_transactions === "number" &&
+                    typeof recurringMeta.total_transactions === "number" &&
+                    recurringMeta.total_transactions > 0 && (
+                      <span>
+                        {" "}
+                        Użyto {recurringMeta.considered_transactions} z{" "}
+                        {recurringMeta.total_transactions} transakcji.
+                      </span>
+                    )}
+                </div>
+              </div>
+            )}
             <RecurringCalendar
               cells={recurringCalendar.cells}
               monthLabel={recurringCalendar.monthLabel}
@@ -2031,6 +2088,17 @@ function rangeLabelShort(range: RangeKey) {
   }
 }
 
+function formatDateTime(date: Date) {
+  const opts: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+  return date.toLocaleString("pl-PL", opts);
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pl-PL", {
     style: "currency",
@@ -2051,6 +2119,13 @@ function formatDateLong(isoDate: string) {
   const [y, m, d] = isoDate.split("-");
   if (!y || !m || !d) return isoDate;
   return `${d}.${m}.${y}`;
+}
+
+function formatDateRangeLabel(from?: string | null, to?: string | null) {
+  if (!from && !to) return null;
+  if (from && to) return `${formatDateLong(from)} – ${formatDateLong(to)}`;
+  if (from) return `od ${formatDateLong(from)}`;
+  return `do ${formatDateLong(to ?? "")}`;
 }
 
 function formatNumberCompact(value: number): string {

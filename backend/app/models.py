@@ -369,3 +369,86 @@ class ClassificationEvent(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+
+
+class RecurringDetection(Base):
+    __tablename__ = "recurring_detections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    algorithm: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+
+    scores: Mapped[list["RecurringScoreEntry"]] = relationship(
+        back_populates="detection",
+        cascade="all, delete-orphan",
+    )
+    groups: Mapped[list["RecurringGroup"]] = relationship(
+        back_populates="detection",
+        cascade="all, delete-orphan",
+    )
+
+
+class RecurringScoreEntry(Base):
+    __tablename__ = "recurring_scores"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    detection_id: Mapped[int] = mapped_column(
+        ForeignKey("recurring_detections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+
+    detection: Mapped["RecurringDetection"] = relationship(back_populates="scores")
+    transaction: Mapped["Transaction"] = relationship()
+
+
+class RecurringGroup(Base):
+    __tablename__ = "recurring_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    detection_id: Mapped[int] = mapped_column(
+        ForeignKey("recurring_detections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    name: Mapped[str] = mapped_column(String(128), nullable=False, default="Recurring")
+    cadence: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_date: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)
+    average_amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    detection: Mapped["RecurringDetection"] = relationship(back_populates="groups")
+    transactions: Mapped[list["RecurringGroupTransaction"]] = relationship(
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
+
+
+class RecurringGroupTransaction(Base):
+    __tablename__ = "recurring_group_transactions"
+
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("recurring_groups.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    group: Mapped["RecurringGroup"] = relationship(back_populates="transactions")
+    transaction: Mapped["Transaction"] = relationship()

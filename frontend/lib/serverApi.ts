@@ -130,13 +130,24 @@ export type RecurringGroupDetection = {
   next_date: string;
   average_amount: number;
   transaction_ids: number[];
-  confidence?: number;
+  confidence?: number | null;
 };
 
 export type RecurringDetection = {
   algorithm: string;
   scores: RecurringScore[];
   groups: RecurringGroupDetection[];
+  run_at?: string | null;
+  status?: string | null;
+  skipped_count: number;
+  meta?: {
+    from_date?: string | null;
+    to_date?: string | null;
+    max_transactions?: number | null;
+    considered_transactions?: number | null;
+    total_transactions?: number | null;
+    limited: boolean;
+  };
 };
 
 export type CategoryRuleUI = {
@@ -363,10 +374,26 @@ export async function toggleCategoryRule(
   );
 }
 
-export async function fetchRecurringDetections(): Promise<RecurringDetection> {
-  return requestJson<RecurringDetection>("/recurring-payments", {}, {
+export async function fetchRecurringDetections(options?: {
+  refresh?: boolean;
+}): Promise<RecurringDetection> {
+  const params = new URLSearchParams();
+  if (options?.refresh) params.set("refresh", "true");
+
+  const query = params.toString();
+  const path = query ? `/recurring-payments?${query}` : "/recurring-payments";
+
+  return requestJson<RecurringDetection>(path, {}, {
     allowUnauthorized: true,
-    unauthorizedValue: { algorithm: "lightgbm", scores: [], groups: [] },
+    unauthorizedValue: {
+      algorithm: "lightgbm",
+      scores: [],
+      groups: [],
+      run_at: null,
+      status: "unauthorized",
+      skipped_count: 0,
+      meta: { limited: false },
+    },
   });
 }
 

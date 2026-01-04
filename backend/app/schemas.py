@@ -161,10 +161,23 @@ class RecurringGroupOut(BaseModel):
     confidence: float | None = None
 
 
+class RecurringDetectionMeta(BaseModel):
+    from_date: date | None = None
+    to_date: date | None = None
+    max_transactions: int | None = None
+    considered_transactions: int | None = None
+    total_transactions: int | None = None
+    limited: bool = False
+
+
 class RecurringDetectionResponse(BaseModel):
     algorithm: str
     scores: list[RecurringScore]
     groups: list[RecurringGroupOut] = Field(default_factory=list)
+    run_at: datetime | None = None
+    status: str | None = None
+    skipped_count: int = 0
+    meta: RecurringDetectionMeta | None = None
 
 class EnableRulePayload(BaseModel):
     pattern_value: str
