@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable, Literal, Tuple
 
+from app.engine import Algorithm, RecurringPaymentEngine
+
 
 RECURRING_STOPWORDS = {
     "platnosc",
@@ -130,14 +132,11 @@ class RecurringDetectionResult:
     groups: list[RecurringGroup]
 
 
-def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionResult:
-    if not transactions:
-        return RecurringDetectionResult(algorithm="heuristic_v2", scores=[], groups=[])
-
-    parsed: list[dict] = []
+def _normalize_transactions(transactions: list[dict]) -> list[dict]:
+    normalized: list[dict] = []
     for tx in transactions:
         try:
-            parsed.append(
+            normalized.append(
                 {
                     "transaction_id": tx.get("transaction_id", tx.get("id")),
                     "date": datetime.fromisoformat(str(tx["date"])),
@@ -147,9 +146,12 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
             )
         except Exception:
             continue
+    return normalized
 
+
+def _detect_groups(transactions: list[dict]) -> list[RecurringGroup]:
     buckets: dict[str, list[dict]] = {}
-    for tx in parsed:
+    for tx in transactions:
         normalized = normalize_description(tx["description"])
         if not normalized:
             continue
@@ -185,7 +187,9 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
         coverage = float(cadence_info.get("coverage", 0.0))
         jitter = float(cadence_info.get("jitter", 0.0))
         tolerance = float(cadence_info.get("tolerance", 1.0))
-        cadence_strength = min(1.0, 0.6 * coverage + 0.4 * max(0.0, 1 - jitter / max(tolerance, 1)))
+        cadence_strength = min(
+            1.0, 0.6 * coverage + 0.4 * max(0.0, 1 - jitter / max(tolerance, 1))
+        )
 
         abs_amounts = [abs(a) for a in amounts]
         spread = max(abs_amounts) - min(abs_amounts)
@@ -222,18 +226,26 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
         )
 
     groups.sort(key=lambda g: g.confidence, reverse=True)
+    return groups
 
-    score_map: dict[int | str, float] = {}
-    for group in groups:
-        for tid in group.transaction_ids:
-            score_map[tid] = max(score_map.get(tid, 0.0), group.confidence)
+
+def detect_recurring_payments(
+    transactions: list[dict],
+    engine: RecurringPaymentEngine,
+    algorithm: Algorithm = "lightgbm",
+) -> RecurringDetectionResult:
+    normalized = _normalize_transactions(transactions)
+    if not normalized:
+        return RecurringDetectionResult(algorithm=str(algorithm), scores=[], groups=[])
+
+    dataframe = engine.build_dataframe(normalized, include_label=False)
+    scores_array = engine.predict(dataframe, algorithm=algorithm)
 
     scores = [
-        RecurringScore(
-            transaction_id=tx.get("transaction_id", tx.get("id")),
-            score=round(score_map.get(tx.get("transaction_id", tx.get("id")), 0.0), 3),
-        )
-        for tx in transactions
+        RecurringScore(transaction_id=row["transaction_id"], score=round(float(score), 3))
+        for row, score in zip(normalized, scores_array)
     ]
 
-    return RecurringDetectionResult(algorithm="heuristic_v2", scores=scores, groups=groups)
+    groups = _detect_groups(normalized)
+
+    return RecurringDetectionResult(algorithm=str(algorithm), scores=scores, groups=groups)

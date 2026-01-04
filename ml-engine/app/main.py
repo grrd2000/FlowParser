@@ -100,6 +100,7 @@ class RecurringDetectionResponse(BaseModel):
 
 
 class RecurringDetectionRequest(BaseModel):
+    algorithm: Algorithm = Field("lightgbm", description="Model family to use for recurring detection")
     transactions: List[Transaction]
 
     class Config:
@@ -115,6 +116,16 @@ class RecurringDetectionRequest(BaseModel):
                 ]
             }
         }
+
+
+class RecurringTrainRequest(BaseModel):
+    algorithm: Algorithm = Field("lightgbm", description="Model family to use for recurring detection")
+    transactions: List[LabeledTransaction]
+
+
+class RecurringPredictRequest(BaseModel):
+    algorithm: Algorithm = Field("lightgbm", description="Model family to use for recurring detection")
+    transactions: List[Transaction]
 class PreprocessTextsRequest(BaseModel):
     texts: List[str] = Field(default_factory=list, description="Teksty do normalizacji/tokenizacji")
 
@@ -135,7 +146,7 @@ def health() -> dict:
 
 @app.get("/model-status", response_model=ModelStatusResponse)
 def model_status(algorithm: Algorithm = "lightgbm"):
-    return ModelStatusResponse(algorithm=algorithm, trained=True)
+    return ModelStatusResponse(algorithm=algorithm, trained=engine.has_model(algorithm))
 
 
 @app.post("/train", response_model=TrainResponse)
@@ -165,7 +176,14 @@ def predict(req: PredictRequest):
 
 @app.post("/recurring/detect", response_model=RecurringDetectionResponse)
 def detect_recurring(req: RecurringDetectionRequest):
-    result = detect_recurring_payments([tx.model_dump() for tx in req.transactions])
+    try:
+        result = detect_recurring_payments(
+            [tx.model_dump() for tx in req.transactions],
+            engine=engine,
+            algorithm=req.algorithm,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return RecurringDetectionResponse(
         algorithm=result.algorithm,
@@ -183,6 +201,26 @@ def detect_recurring(req: RecurringDetectionRequest):
             for group in result.groups
         ],
     )
+
+
+@app.post("/recurring/predict", response_model=PredictResponse)
+def recurring_predict(req: RecurringPredictRequest):
+    df = engine.build_dataframe([tx.model_dump() for tx in req.transactions], include_label=False)
+    try:
+        scores = engine.predict(df, algorithm=req.algorithm)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"algorithm": req.algorithm, "predictions": list(scores)}
+
+
+@app.post("/recurring/train", response_model=TrainResponse)
+def recurring_train(req: RecurringTrainRequest):
+    df = engine.build_dataframe([tx.model_dump() for tx in req.transactions], include_label=True)
+    try:
+        result = engine.train(df, algorithm=req.algorithm)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"algorithm": req.algorithm, "metrics": result.metrics}
 
 
 @app.post("/tfidf/rule-suggestion", response_model=TokenSuggestionResponse)
