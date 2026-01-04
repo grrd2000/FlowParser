@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
+import sys
 import unittest
 from typing import List, Dict
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from fastapi.testclient import TestClient
 
@@ -92,6 +96,19 @@ class RecurringMLFlowTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         detail = resp.json().get("detail", "")
         self.assertIn("not trained", detail.lower())
+
+    def test_detect_without_trained_model_falls_back_to_heuristics(self):
+        payload = {
+            "algorithm": "lightgbm",
+            "transactions": self._sample_transactions(labeled=False),
+        }
+        resp = self.client.post("/recurring/detect", json=payload)
+        self.assertEqual(resp.status_code, 200, resp.text)
+
+        data = resp.json()
+        self.assertEqual(len(data["scores"]), len(payload["transactions"]))
+        self.assertGreaterEqual(len(data.get("groups", [])), 1)
+        self.assertEqual(data.get("algorithm"), "heuristic_v2")
 
 
 if __name__ == "__main__":
