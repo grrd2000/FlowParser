@@ -90,6 +90,7 @@ class RecurringGroupOut(BaseModel):
     next_date: datetime
     average_amount: float
     transaction_ids: List[str | int]
+    confidence: float
 
 
 class RecurringDetectionResponse(BaseModel):
@@ -177,6 +178,7 @@ def detect_recurring(req: RecurringDetectionRequest):
                 next_date=group.next_date,
                 average_amount=group.average_amount,
                 transaction_ids=group.transaction_ids,
+                confidence=group.confidence,
             )
             for group in result.groups
         ],

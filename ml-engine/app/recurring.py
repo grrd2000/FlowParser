@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Tuple
 
 
 RECURRING_STOPWORDS = {
@@ -67,22 +67,43 @@ def cadence_from_intervals(intervals: list[int]) -> dict[str, int | str] | None:
     if not intervals:
         return None
 
-    sorted_intervals = sorted(intervals)
-    median = sorted_intervals[len(sorted_intervals) // 2]
+    rounded = [int(round(v)) for v in intervals]
 
-    def within_jitter(tolerance: int) -> bool:
-        return all(abs(v - median) <= tolerance for v in intervals)
+    def candidate(
+        cadence: Literal["tygodniowe", "miesięczne"], target: int, tolerance: int
+    ) -> Tuple[float, dict[str, int | str]] | None:
+        cluster = [v for v in rounded if abs(v - target) <= tolerance]
+        if not cluster:
+            return None
 
-    def near(target: int, tolerance: int) -> bool:
-        return abs(median - target) <= tolerance
+        coverage = len(cluster) / len(rounded)
+        jitter = max(abs(v - target) for v in cluster)
+        cadence_days = int(round(sum(cluster) / len(cluster)))
+        cadence_days = max(1, cadence_days)
 
-    if near(7, 2) and within_jitter(2):
-        return {"cadence": "tygodniowe", "cadence_days": 7}
+        strength = coverage * 0.7 + max(0.0, 1 - jitter / max(tolerance, 1)) * 0.3
+        return strength, {
+            "cadence": cadence,
+            "cadence_days": cadence_days,
+            "coverage": coverage,
+            "tolerance": tolerance,
+            "jitter": jitter,
+        }
 
-    if (near(30, 5) or near(28, 3) or near(31, 4)) and within_jitter(6):
-        return {"cadence": "miesięczne", "cadence_days": int(round(median))}
+    candidates = [
+        candidate("tygodniowe", 7, 2),
+        candidate("miesięczne", 30, 7),
+    ]
+    scored = [c for c in candidates if c]
+    if not scored:
+        return None
 
-    return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    best_strength, best_payload = scored[0]
+    if best_strength < 0.35:  # very weak signal
+        return None
+
+    return best_payload
 
 
 @dataclass
@@ -93,6 +114,7 @@ class RecurringGroup:
     next_date: datetime
     average_amount: float
     transaction_ids: list[int | str]
+    confidence: float
 
 
 @dataclass
@@ -110,7 +132,7 @@ class RecurringDetectionResult:
 
 def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionResult:
     if not transactions:
-        return RecurringDetectionResult(algorithm="heuristic_v1", scores=[], groups=[])
+        return RecurringDetectionResult(algorithm="heuristic_v2", scores=[], groups=[])
 
     parsed: list[dict] = []
     for tx in transactions:
@@ -152,14 +174,40 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
         cadence_info = cadence_from_intervals(intervals)
         if not cadence_info:
             continue
-        if len(intervals) < 2 and len(sorted_txs) < 3:
-            continue
 
         cadence_days = int(cadence_info["cadence_days"])
         last_date = sorted_txs[-1]["date"]
         next_date = last_date + timedelta(days=cadence_days)
         amounts = [tx["amount"] for tx in sorted_txs]
         average_amount = sum(amounts) / len(amounts)
+
+        # Confidence combines cadence strength, amount stability, sample size and recency
+        coverage = float(cadence_info.get("coverage", 0.0))
+        jitter = float(cadence_info.get("jitter", 0.0))
+        tolerance = float(cadence_info.get("tolerance", 1.0))
+        cadence_strength = min(1.0, 0.6 * coverage + 0.4 * max(0.0, 1 - jitter / max(tolerance, 1)))
+
+        abs_amounts = [abs(a) for a in amounts]
+        spread = max(abs_amounts) - min(abs_amounts)
+        avg_amount = sum(abs_amounts) / len(abs_amounts)
+        allowed_spread = max(5.0, avg_amount * 0.15)
+        amount_score = max(0.0, min(1.0, 1 - spread / allowed_spread))
+
+        sample_score = min(1.0, (len(sorted_txs) - 1) / 5)
+        days_since_last = max((datetime.utcnow() - last_date).days, 0)
+        recency_penalty = max(0.0, days_since_last - cadence_days)
+        recency_score = max(
+            0.0,
+            1 - recency_penalty / max(cadence_days * 2, 1),
+        )
+
+        confidence = round(
+            0.4 * cadence_strength
+            + 0.3 * amount_score
+            + 0.2 * sample_score
+            + 0.1 * recency_score,
+            3,
+        )
 
         groups.append(
             RecurringGroup(
@@ -169,16 +217,23 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
                 next_date=next_date,
                 average_amount=average_amount,
                 transaction_ids=[tx["transaction_id"] for tx in sorted_txs],
+                confidence=confidence,
             )
         )
 
-    recurring_ids = {tid for group in groups for tid in group.transaction_ids}
+    groups.sort(key=lambda g: g.confidence, reverse=True)
+
+    score_map: dict[int | str, float] = {}
+    for group in groups:
+        for tid in group.transaction_ids:
+            score_map[tid] = max(score_map.get(tid, 0.0), group.confidence)
+
     scores = [
         RecurringScore(
             transaction_id=tx.get("transaction_id", tx.get("id")),
-            score=1.0 if tx.get("transaction_id", tx.get("id")) in recurring_ids else 0.0,
+            score=round(score_map.get(tx.get("transaction_id", tx.get("id")), 0.0), 3),
         )
         for tx in transactions
     ]
 
-    return RecurringDetectionResult(algorithm="heuristic_v1", scores=scores, groups=groups)
+    return RecurringDetectionResult(algorithm="heuristic_v2", scores=scores, groups=groups)
