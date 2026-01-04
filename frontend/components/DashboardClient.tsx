@@ -259,6 +259,11 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     () => buildRecurringCalendar(recurringViewDate, recurringGroups),
     [recurringViewDate, recurringGroups]
   );
+  const recurringMeta = recurringDetection?.meta;
+  const recurringRangeLabel = useMemo(() => {
+    if (!recurringMeta) return null;
+    return formatDateRangeLabel(recurringMeta.from_date, recurringMeta.to_date);
+  }, [recurringMeta]);
   const recurringByCadence = useMemo(() => {
     const monthly = recurringGroups.filter((g) => g.cadence === "miesięczne");
     const weekly = recurringGroups.filter((g) => g.cadence === "tygodniowe");
@@ -591,6 +596,26 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
               </div>
               <span className="badge-soft">Preview</span>
             </div>
+            {recurringMeta?.limited && (
+              <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-50 shadow-inner shadow-amber-500/10">
+                <div className="font-semibold text-amber-100">Zakres przycięty</div>
+                <div className="text-amber-50/90">
+                  Wykrywanie działa na danych {recurringRangeLabel ?? "z ograniczonego zakresu"}.
+                  {recurringMeta.max_transactions
+                    ? ` Limit transakcji: ${recurringMeta.max_transactions}.`
+                    : ""}
+                  {typeof recurringMeta.considered_transactions === "number" &&
+                    typeof recurringMeta.total_transactions === "number" &&
+                    recurringMeta.total_transactions > 0 && (
+                      <span>
+                        {" "}
+                        Użyto {recurringMeta.considered_transactions} z{" "}
+                        {recurringMeta.total_transactions} transakcji.
+                      </span>
+                    )}
+                </div>
+              </div>
+            )}
             <RecurringCalendar
               cells={recurringCalendar.cells}
               monthLabel={recurringCalendar.monthLabel}
@@ -2094,6 +2119,13 @@ function formatDateLong(isoDate: string) {
   const [y, m, d] = isoDate.split("-");
   if (!y || !m || !d) return isoDate;
   return `${d}.${m}.${y}`;
+}
+
+function formatDateRangeLabel(from?: string | null, to?: string | null) {
+  if (!from && !to) return null;
+  if (from && to) return `${formatDateLong(from)} – ${formatDateLong(to)}`;
+  if (from) return `od ${formatDateLong(from)}`;
+  return `do ${formatDateLong(to ?? "")}`;
 }
 
 function formatNumberCompact(value: number): string {

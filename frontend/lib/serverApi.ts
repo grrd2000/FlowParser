@@ -139,6 +139,15 @@ export type RecurringDetection = {
   groups: RecurringGroupDetection[];
   run_at?: string | null;
   status?: string | null;
+  skipped_count: number;
+  meta?: {
+    from_date?: string | null;
+    to_date?: string | null;
+    max_transactions?: number | null;
+    considered_transactions?: number | null;
+    total_transactions?: number | null;
+    limited: boolean;
+  };
 };
 
 export type CategoryRuleUI = {
@@ -382,6 +391,8 @@ export async function fetchRecurringDetections(options?: {
       groups: [],
       run_at: null,
       status: "unauthorized",
+      skipped_count: 0,
+      meta: { limited: false },
     },
   });
 }
