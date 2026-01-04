@@ -133,7 +133,7 @@ class RecurringDetectionResult:
     skipped_count: int = 0
 
 
-def normalize_transactions(transactions: list[dict]) -> tuple[list[dict], int]:
+def _normalize_transactions(transactions: list[dict]) -> tuple[list[dict], int]:
     normalized: list[dict] = []
     skipped_count = 0
 
@@ -152,10 +152,6 @@ def normalize_transactions(transactions: list[dict]) -> tuple[list[dict], int]:
             continue
 
     return normalized, skipped_count
-
-
-# Backwards compatibility for any stale imports
-_normalize_transactions = normalize_transactions
 
 
 def _detect_groups(transactions: list[dict]) -> list[RecurringGroup]:
@@ -273,7 +269,7 @@ def detect_recurring_payments(
     engine: RecurringPaymentEngine,
     algorithm: Algorithm = "lightgbm",
 ) -> RecurringDetectionResult:
-    normalized, skipped_count = normalize_transactions(transactions)
+    normalized, skipped_count = _normalize_transactions(transactions)
     if not normalized:
         return RecurringDetectionResult(
             algorithm=str(algorithm),
