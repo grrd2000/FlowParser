@@ -174,6 +174,8 @@ class RecurringDetectionResponse(BaseModel):
     algorithm: str
     scores: list[RecurringScore]
     groups: list[RecurringGroupOut] = Field(default_factory=list)
+    run_at: datetime | None = None
+    status: str | None = None
     skipped_count: int = 0
     meta: RecurringDetectionMeta | None = None
 

@@ -49,6 +49,7 @@ from app.schemas import (
     RecurringDetectionResponse,
     RecurringScore,
 )
+from app import recurring_service
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
@@ -75,6 +76,9 @@ DEV_USER_FULL_NAME = os.getenv("DEV_USER_FULL_NAME", "Demo User")
 ML_ENGINE_URL = os.getenv("ML_ENGINE_URL", "http://ml-engine:8080")
 ML_ENGINE_TIMEOUT = float(os.getenv("ML_ENGINE_TIMEOUT", "5.0"))
 ML_ENGINE_RECURRING_ALGO = os.getenv("ML_ENGINE_RECURRING_ALGO", "lightgbm")
+RECURRING_REFRESH_MAX_AGE_HOURS = float(
+    os.getenv("RECURRING_REFRESH_MAX_AGE_HOURS", "24")
+)
 
 
 def ml_engine_post(path: str, payload: dict | None = None) -> dict:
@@ -242,6 +246,8 @@ def serialize_tx_for_recurring(tx: Transaction) -> dict:
     }
 
 
+def fetch_transactions_for_recurring(db: Session, user_id: int) -> list[Transaction]:
+    return (
 def fetch_transactions_for_recurring(
     db: Session,
     user_id: int,
@@ -584,6 +590,12 @@ def list_transactions(
 
 @app.get("/recurring-payments", response_model=RecurringDetectionResponse)
 def detect_recurring_payments(
+    refresh: bool = Query(
+        False,
+        description=(
+            "Wymuś ponowne przeliczenie, zamiast używać ostatniego runu z cache."
+        ),
+    ),
     user: User = Depends(auth_get_current_user),
     db: Session = Depends(get_db),
     from_date: date | None = Query(None, alias="from"),
@@ -600,6 +612,21 @@ def detect_recurring_payments(
     Model trenowany jest na danych przykładowych, a do predykcji przekazujemy jedynie
     zserializowane dane transakcji (bez bezpośredniego dostępu ml-engine do bazy).
     """
+    transactions = fetch_transactions_for_recurring(db, user.id)
+    latest_detection = recurring_service.get_latest_detection(db, user.id)
+    now = datetime.now(timezone.utc)
+    is_stale = True
+    if latest_detection and latest_detection.run_at:
+        is_stale = latest_detection.run_at < now - timedelta(hours=RECURRING_REFRESH_MAX_AGE_HOURS)
+
+    should_refresh = refresh or latest_detection is None or is_stale
+
+    if not should_refresh and latest_detection:
+        return recurring_service.detection_to_response(
+            latest_detection,
+            status="cached",
+        )
+
     today = date.today()
     upper_to = to_date or today
     lower_from = from_date
@@ -623,10 +650,17 @@ def detect_recurring_payments(
         max_transactions=max_transactions,
     )
     if not transactions:
+        if latest_detection:
+            return recurring_service.detection_to_response(
+                latest_detection,
+                status="cached",
+            )
         return RecurringDetectionResponse(
             algorithm=ML_ENGINE_RECURRING_ALGO,
             scores=[],
             groups=[],
+            run_at=None,
+            status="empty",
             meta=RecurringDetectionMeta(
                 from_date=lower_from,
                 to_date=upper_to,
@@ -640,41 +674,87 @@ def detect_recurring_payments(
             ),
         )
 
+    serialized_transactions = [serialize_tx_for_recurring(tx) for tx in transactions]
+
+    ensure_recurring_model_ready(ML_ENGINE_RECURRING_ALGO)
     resp = ml_engine_post(
         "/recurring/detect",
-        payload={"transactions": transactions},
+        payload={"transactions": serialized_transactions},
     )
     scores_payload = resp.get("scores")
     if not isinstance(scores_payload, list):
         raise HTTPException(status_code=502, detail="Invalid ML response from engine")
 
+    allowed_transaction_ids = {tx.id for tx in transactions}
+
+    scores = [
+        RecurringScore(
+            transaction_id=int(item["transaction_id"]),
+            score=float(item["score"]),
+        )
+        for item in scores_payload
+        if "transaction_id" in item
+        and "score" in item
+        and int(item["transaction_id"]) in allowed_transaction_ids
+    ]
+
     groups_payload = resp.get("groups", [])
     if not isinstance(groups_payload, list):
         raise HTTPException(status_code=502, detail="Invalid ML response from engine")
 
-    scores = [
-        RecurringScore(transaction_id=int(item["transaction_id"]), score=float(item["score"]))
-        for item in scores_payload
-        if "transaction_id" in item and "score" in item
-    ]
+    def parse_next_date(value) -> datetime:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, datetime.min.time(), tzinfo=timezone.utc)
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed
+            except ValueError as exc:
+                raise HTTPException(status_code=502, detail=f"Invalid date in ML response: {exc}")
+        raise HTTPException(status_code=502, detail="Invalid next_date in ML response")
 
-    groups = []
+    groups: list[RecurringGroupOut] = []
     try:
         for g in groups_payload:
+            tx_ids = [
+                int(tid)
+                for tid in (g.get("transaction_ids") or [])
+                if int(tid) in allowed_transaction_ids
+            ]
             groups.append(
                 RecurringGroupOut(
                     id=str(g.get("id", "")),
                     name=g.get("name") or "Powtarzalna transakcja",
                     cadence=str(g.get("cadence")),
-                    next_date=g.get("next_date"),
+                    next_date=parse_next_date(g.get("next_date")),
                     average_amount=float(g.get("average_amount", 0)),
-                    transaction_ids=[int(tid) for tid in g.get("transaction_ids", [])],
-                    confidence=float(g.get("confidence")) if g.get("confidence") is not None else None,
+                    transaction_ids=tx_ids,
+                    confidence=float(g.get("confidence"))
+                    if g.get("confidence") is not None
+                    else None,
                 )
             )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Invalid ML response from engine: {exc}")
 
+    detection = recurring_service.save_detection(
+        db,
+        user_id=user.id,
+        algorithm=resp.get("algorithm", "recurring-heuristic"),
+        scores=scores,
+        groups=groups,
+        status="completed",
+    )
+
+    return recurring_service.detection_to_response(
+        detection,
+        status="refreshed" if should_refresh else "completed",
     meta = RecurringDetectionMeta(
         from_date=lower_from,
         to_date=upper_to,
