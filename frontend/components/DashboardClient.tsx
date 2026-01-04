@@ -7,7 +7,9 @@ import { motion } from "framer-motion";
 import {
   fetchCategories,
   fetchTransactions,
+  fetchRecurringDetections,
   type Category,
+  type RecurringDetection,
   type Transaction,
 } from "@/lib/serverApi";
 
@@ -58,6 +60,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
 
   const [transactions, setTransactions] = useState<TxExt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [recurringDetection, setRecurringDetection] = useState<RecurringDetection | null>(null);
   const [range, setRange] = useState<RangeKey>(initialRange);
   const [granularity, setGranularity] = useState<NetFlowGranularity>(
     () => defaultGranularityForRange(initialRange)
@@ -82,6 +85,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     if (!user) {
       setTransactions([]);
       setCategories([]);
+      setRecurringDetection(null);
       setError(null);
       setLoading(false);
       return;
@@ -91,14 +95,16 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       try {
         setLoading(true);
         setError(null);
-        const [rawTx, rawCategories] = await Promise.all([
+        const [rawTx, rawCategories, recurring] = await Promise.all([
           fetchTransactions(),
           fetchCategories(),
+          fetchRecurringDetections(),
         ]);
 
         const parsed = normalizeTransactions(rawTx);
         setTransactions(parsed);
         setCategories(rawCategories);
+        setRecurringDetection(recurring);
       } catch (e: unknown) {
         console.error(e);
         const message = e instanceof Error ? e.message : null;
@@ -192,10 +198,35 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
     return match ?? coloredCategories[0];
   }, [coloredCategories, selectedCategory]);
 
-  const recurringGroups = useMemo(
-    () => detectRecurringGroups(transactions),
-    [transactions]
-  );
+  const recurringGroups = useMemo(() => {
+    if (!recurringDetection) return [];
+
+    const txById = new Map(transactions.map((t) => [t.id, t]));
+    let colorIdx = 0;
+
+    return recurringDetection.groups
+      .map((group) => {
+        const txs = group.transaction_ids
+          .map((id) => txById.get(id))
+          .filter(Boolean) as TxExt[];
+
+        if (!txs.length) return null;
+
+        const color = RECURRING_COLORS[colorIdx % RECURRING_COLORS.length];
+        colorIdx += 1;
+
+        return {
+          id: group.id,
+          name: group.name || "Powtarzalna transakcja",
+          cadence: group.cadence,
+          nextDate: new Date(group.next_date),
+          averageAmount: group.average_amount ?? 0,
+          color,
+          transactions: txs,
+        } satisfies RecurringGroup;
+      })
+      .filter(Boolean) as RecurringGroup[];
+  }, [recurringDetection, transactions]);
   const recurringCalendar = useMemo(
     () => buildRecurringCalendar(new Date(), recurringGroups),
     [recurringGroups]
@@ -1465,139 +1496,6 @@ const RECURRING_COLORS = [
   "#14b8a6",
   "#8b5cf6",
 ];
-
-const RECURRING_STOPWORDS = new Set([
-  "platnosc",
-  "płatność",
-  "oplata",
-  "opłata",
-  "przelew",
-  "rachunek",
-  "faktura",
-  "faktury",
-  "invoice",
-  "za",
-  "do",
-  "nr",
-  "numer",
-  "id",
-]);
-
-function normalizeRecurringDescription(description: string | null | undefined): string | null {
-  if (!description) return null;
-
-  const withoutDiacritics = description
-    .normalize("NFD")
-    .replace(/\p{M}+/gu, "")
-    .toLowerCase();
-
-  const scrubbed = withoutDiacritics
-    // usuń numery faktur/referencyjne i daty
-    .replace(/\b(?:nr|numer|id|ref|fv|invoice)\s*[\w/-]*/g, " ")
-    .replace(/\d{2,}/g, " ")
-    .replace(/[.,;:]/g, " ");
-
-  const tokens = scrubbed
-    .split(/[^a-ząćęłńóśźż]+/u)
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 3 && !RECURRING_STOPWORDS.has(t));
-
-  if (!tokens.length) return null;
-
-  const unique = Array.from(new Set(tokens.map((t) => t.normalize("NFKC")))).sort();
-  return unique.join(" ");
-}
-
-function isAmountStable(values: number[]): boolean {
-  if (!values.length) return false;
-
-  const absValues = values.map((v) => Math.abs(v));
-  const avg = absValues.reduce((sum, v) => sum + v, 0) / absValues.length;
-  const spread = Math.max(...absValues) - Math.min(...absValues);
-  const tolerance = Math.max(2, avg * 0.08);
-
-  return spread <= tolerance;
-}
-
-function cadenceFromIntervals(intervals: number[]): { cadence: RecurringGroup["cadence"]; cadenceDays: number } | null {
-  if (!intervals.length) return null;
-
-  const sorted = [...intervals].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-
-  const withinJitter = (tolerance: number) => intervals.every((v) => Math.abs(v - median) <= tolerance);
-  const near = (target: number, tolerance: number) => Math.abs(median - target) <= tolerance;
-
-  if (near(7, 2) && withinJitter(2)) {
-    return { cadence: "tygodniowe", cadenceDays: 7 };
-  }
-
-  if ((near(30, 5) || near(28, 3) || near(31, 4)) && withinJitter(6)) {
-    return { cadence: "miesięczne", cadenceDays: Math.round(median) };
-  }
-
-  return null;
-}
-
-function detectRecurringGroups(transactions: TxExt[]): RecurringGroup[] {
-  if (transactions.length === 0) return [];
-
-  const map = new Map<string, TxExt[]>();
-  for (const t of transactions) {
-    const normalized = normalizeRecurringDescription(t.description);
-    if (!normalized) continue;
-
-    const key = `${normalized}|${t.amountNum >= 0 ? "in" : "out"}`;
-    const bucket = map.get(key) ?? [];
-    bucket.push(t);
-    map.set(key, bucket);
-  }
-
-  const groups: RecurringGroup[] = [];
-  let colorIdx = 0;
-
-  for (const [key, txs] of map.entries()) {
-    if (txs.length < 2) continue;
-
-    const sorted = [...txs].sort((a, b) => a.date.getTime() - b.date.getTime());
-    if (!isAmountStable(sorted.map((t) => t.amountNum))) continue;
-
-    const intervals: number[] = [];
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1].date.getTime();
-      const curr = sorted[i].date.getTime();
-      intervals.push(Math.round((curr - prev) / (1000 * 60 * 60 * 24)));
-    }
-    const cadenceInfo = cadenceFromIntervals(intervals);
-    if (!cadenceInfo) continue;
-    if (intervals.length < 2 && sorted.length < 3) continue; // przynajmniej 2 odcinki lub 3 wystąpienia
-
-    const lastTx = sorted[sorted.length - 1];
-    const nextDate = new Date(lastTx.date);
-    if (cadenceInfo.cadence === "miesięczne") {
-      nextDate.setMonth(nextDate.getMonth() + 1);
-    } else {
-      nextDate.setDate(nextDate.getDate() + cadenceInfo.cadenceDays);
-    }
-
-    const averageAmount =
-      sorted.reduce((sum, t) => sum + t.amountNum, 0) / sorted.length;
-    const color = RECURRING_COLORS[colorIdx % RECURRING_COLORS.length];
-    colorIdx += 1;
-
-    groups.push({
-      id: key,
-      name: lastTx.description ?? "Powtarzalna transakcja",
-      cadence: cadenceInfo.cadence,
-      nextDate,
-      averageAmount,
-      color,
-      transactions: sorted,
-    });
-  }
-
-  return groups;
-}
 
 function buildRecurringCalendar(referenceDate: Date, groups: RecurringGroup[]) {
   const monthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);

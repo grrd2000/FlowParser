@@ -288,6 +288,7 @@ class RecurringPaymentEngine:
         features = self._build_features(data)
         return model.predict_proba(features)[:, 1]
 
+    @staticmethod
     def build_dataframe(transactions: List[dict], include_label: bool) -> pd.DataFrame:
         normalized = []
         for tx in transactions:

@@ -151,9 +151,19 @@ class RecurringScore(BaseModel):
     score: float
 
 
+class RecurringGroupOut(BaseModel):
+    id: str
+    name: str
+    cadence: str
+    next_date: datetime
+    average_amount: float
+    transaction_ids: list[int]
+
+
 class RecurringDetectionResponse(BaseModel):
     algorithm: str
     scores: list[RecurringScore]
+    groups: list[RecurringGroupOut] = Field(default_factory=list)
 
 class EnableRulePayload(BaseModel):
     pattern_value: str

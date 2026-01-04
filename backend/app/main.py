@@ -44,6 +44,7 @@ from app.schemas import (
     EnableRuleResult,
     EnableRulePayload,
     LabSuggestionOut,
+    RecurringGroupOut,
     RecurringDetectionResponse,
     RecurringScore,
 )
@@ -579,30 +580,47 @@ def detect_recurring_payments(
         return RecurringDetectionResponse(
             algorithm=ML_ENGINE_RECURRING_ALGO,
             scores=[],
+            groups=[],
         )
 
-    ensure_recurring_model_ready(ML_ENGINE_RECURRING_ALGO)
-
     resp = ml_engine_post(
-        "/predict",
-        payload={
-            "algorithm": ML_ENGINE_RECURRING_ALGO,
-            "transactions": transactions,
-        },
+        "/recurring/detect",
+        payload={"transactions": transactions},
     )
-    predictions = resp.get("predictions")
-    if not isinstance(predictions, list):
+    scores_payload = resp.get("scores")
+    if not isinstance(scores_payload, list):
         raise HTTPException(status_code=502, detail="Invalid ML response from engine")
-    if len(predictions) != len(transactions):
-        raise HTTPException(status_code=502, detail="ML engine response length mismatch")
+
+    groups_payload = resp.get("groups", [])
+    if not isinstance(groups_payload, list):
+        raise HTTPException(status_code=502, detail="Invalid ML response from engine")
 
     scores = [
-        RecurringScore(transaction_id=tx["transaction_id"], score=float(score))
-        for tx, score in zip(transactions, predictions)
+        RecurringScore(transaction_id=int(item["transaction_id"]), score=float(item["score"]))
+        for item in scores_payload
+        if "transaction_id" in item and "score" in item
     ]
+
+    groups = []
+    try:
+        for g in groups_payload:
+            groups.append(
+                RecurringGroupOut(
+                    id=str(g.get("id", "")),
+                    name=g.get("name") or "Powtarzalna transakcja",
+                    cadence=str(g.get("cadence")),
+                    next_date=g.get("next_date"),
+                    average_amount=float(g.get("average_amount", 0)),
+                    transaction_ids=[int(tid) for tid in g.get("transaction_ids", [])],
+                )
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Invalid ML response from engine: {exc}")
+
     return RecurringDetectionResponse(
-        algorithm=resp.get("algorithm", ML_ENGINE_RECURRING_ALGO),
+        algorithm=resp.get("algorithm", "recurring-heuristic"),
         scores=scores,
+        groups=groups,
     )
 
 
