@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List
+from datetime import datetime
+from typing import List, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -9,6 +10,7 @@ from app.engine import (
     Algorithm,
     RecurringPaymentEngine,
 )
+from app.recurring import detect_recurring_payments
 from app.tfidf import preprocess_texts, suggest_rule_token
 
 app = FastAPI(title="FlowParser ML Engine", version="0.1.0")
@@ -74,6 +76,44 @@ class TokenSuggestionResponse(BaseModel):
 class ModelStatusResponse(BaseModel):
     algorithm: Algorithm
     trained: bool
+
+
+class RecurringScoreOut(BaseModel):
+    transaction_id: str | int
+    score: float
+
+
+class RecurringGroupOut(BaseModel):
+    id: str
+    name: str
+    cadence: Literal["miesięczne", "tygodniowe"]
+    next_date: datetime
+    average_amount: float
+    transaction_ids: List[str | int]
+
+
+class RecurringDetectionResponse(BaseModel):
+    algorithm: str
+    scores: List[RecurringScoreOut]
+    groups: List[RecurringGroupOut]
+
+
+class RecurringDetectionRequest(BaseModel):
+    transactions: List[Transaction]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "transactions": [
+                    {
+                        "transaction_id": 1,
+                        "date": "2024-01-05",
+                        "amount": -19.99,
+                        "description": "Netflix subscription",
+                    }
+                ]
+            }
+        }
 class PreprocessTextsRequest(BaseModel):
     texts: List[str] = Field(default_factory=list, description="Teksty do normalizacji/tokenizacji")
 
@@ -90,6 +130,11 @@ class PreprocessTextsResponse(BaseModel):
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/model-status", response_model=ModelStatusResponse)
+def model_status(algorithm: Algorithm = "lightgbm"):
+    return ModelStatusResponse(algorithm=algorithm, trained=True)
 
 
 @app.post("/train", response_model=TrainResponse)
@@ -115,6 +160,27 @@ def predict(req: PredictRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"algorithm": req.algorithm, "predictions": list(scores)}
+
+
+@app.post("/recurring/detect", response_model=RecurringDetectionResponse)
+def detect_recurring(req: RecurringDetectionRequest):
+    result = detect_recurring_payments([tx.model_dump() for tx in req.transactions])
+
+    return RecurringDetectionResponse(
+        algorithm=result.algorithm,
+        scores=[RecurringScoreOut(**score.__dict__) for score in result.scores],
+        groups=[
+            RecurringGroupOut(
+                id=group.id,
+                name=group.name,
+                cadence=group.cadence,
+                next_date=group.next_date,
+                average_amount=group.average_amount,
+                transaction_ids=group.transaction_ids,
+            )
+            for group in result.groups
+        ],
+    )
 
 
 @app.post("/tfidf/rule-suggestion", response_model=TokenSuggestionResponse)

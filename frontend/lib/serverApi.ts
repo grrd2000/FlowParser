@@ -123,9 +123,19 @@ export type RecurringScore = {
   score: number;
 };
 
+export type RecurringGroupDetection = {
+  id: string;
+  name: string;
+  cadence: "miesięczne" | "tygodniowe";
+  next_date: string;
+  average_amount: number;
+  transaction_ids: number[];
+};
+
 export type RecurringDetection = {
   algorithm: string;
   scores: RecurringScore[];
+  groups: RecurringGroupDetection[];
 };
 
 export type CategoryRuleUI = {
@@ -355,7 +365,7 @@ export async function toggleCategoryRule(
 export async function fetchRecurringDetections(): Promise<RecurringDetection> {
   return requestJson<RecurringDetection>("/recurring-payments", {}, {
     allowUnauthorized: true,
-    unauthorizedValue: { algorithm: "lightgbm", scores: [] },
+    unauthorizedValue: { algorithm: "lightgbm", scores: [], groups: [] },
   });
 }
 
