@@ -128,13 +128,15 @@ class RecurringDetectionResult:
     algorithm: str
     scores: list[RecurringScore]
     groups: list[RecurringGroup]
+    skipped_count: int = 0
 
 
 def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionResult:
     if not transactions:
-        return RecurringDetectionResult(algorithm="heuristic_v2", scores=[], groups=[])
+        return RecurringDetectionResult(algorithm="heuristic_v2", scores=[], groups=[], skipped_count=0)
 
     parsed: list[dict] = []
+    skipped_count = 0
     for tx in transactions:
         try:
             parsed.append(
@@ -146,6 +148,7 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
                 }
             )
         except Exception:
+            skipped_count += 1
             continue
 
     buckets: dict[str, list[dict]] = {}
@@ -236,4 +239,9 @@ def detect_recurring_payments(transactions: list[dict]) -> RecurringDetectionRes
         for tx in transactions
     ]
 
-    return RecurringDetectionResult(algorithm="heuristic_v2", scores=scores, groups=groups)
+    return RecurringDetectionResult(
+        algorithm="heuristic_v2",
+        scores=scores,
+        groups=groups,
+        skipped_count=skipped_count,
+    )

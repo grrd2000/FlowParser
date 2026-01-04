@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional, TypedDict
 
@@ -45,6 +45,7 @@ from app.schemas import (
     EnableRulePayload,
     LabSuggestionOut,
     RecurringGroupOut,
+    RecurringDetectionMeta,
     RecurringDetectionResponse,
     RecurringScore,
 )
@@ -241,15 +242,31 @@ def serialize_tx_for_recurring(tx: Transaction) -> dict:
     }
 
 
-def fetch_transactions_for_recurring(db: Session, user_id: int) -> list[dict]:
-    rows = (
+def fetch_transactions_for_recurring(
+    db: Session,
+    user_id: int,
+    from_date: date | None,
+    to_date: date | None,
+    max_transactions: int | None,
+) -> tuple[list[dict], int]:
+    stmt = (
         db.query(Transaction)
         .join(Account, Account.id == Transaction.account_id)
         .filter(Account.user_id == user_id)
-        .order_by(Transaction.operation_date.asc(), Transaction.id.asc())
-        .all()
     )
-    return [serialize_tx_for_recurring(tx) for tx in rows]
+    if from_date is not None:
+        stmt = stmt.filter(Transaction.operation_date >= from_date)
+    if to_date is not None:
+        stmt = stmt.filter(Transaction.operation_date <= to_date)
+
+    stmt = stmt.order_by(Transaction.operation_date.asc(), Transaction.id.asc())
+    total = stmt.count()
+
+    if max_transactions is not None:
+        stmt = stmt.limit(max_transactions)
+
+    rows = stmt.all()
+    return [serialize_tx_for_recurring(tx) for tx in rows], total
 
 
 def ensure_recurring_model_ready(algorithm: str) -> None:
@@ -569,18 +586,58 @@ def list_transactions(
 def detect_recurring_payments(
     user: User = Depends(auth_get_current_user),
     db: Session = Depends(get_db),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    max_transactions: int | None = Query(
+        None,
+        gt=0,
+        le=5000,
+        description="Opcjonalny limit liczby transakcji przekazywanych do heurystyki",
+    ),
 ):
     """
     Wykrywa transakcje cykliczne użytkownika, delegując obliczenia do kontenera ml-engine.
     Model trenowany jest na danych przykładowych, a do predykcji przekazujemy jedynie
     zserializowane dane transakcji (bez bezpośredniego dostępu ml-engine do bazy).
     """
-    transactions = fetch_transactions_for_recurring(db, user.id)
+    today = date.today()
+    upper_to = to_date or today
+    lower_from = from_date
+
+    if upper_to > today:
+        upper_to = today
+    if lower_from is None:
+        lower_from = upper_to - timedelta(days=365)
+    if upper_to < lower_from:
+        raise HTTPException(status_code=400, detail="Zakres dat jest niepoprawny (od > do).")
+
+    max_span_days = 548  # ~18 miesięcy
+    if (upper_to - lower_from).days > max_span_days:
+        raise HTTPException(status_code=400, detail="Zakres dat jest zbyt szeroki (max 18 miesięcy).")
+
+    transactions, total_count = fetch_transactions_for_recurring(
+        db,
+        user.id,
+        from_date=lower_from,
+        to_date=upper_to,
+        max_transactions=max_transactions,
+    )
     if not transactions:
         return RecurringDetectionResponse(
             algorithm=ML_ENGINE_RECURRING_ALGO,
             scores=[],
             groups=[],
+            meta=RecurringDetectionMeta(
+                from_date=lower_from,
+                to_date=upper_to,
+                max_transactions=max_transactions,
+                considered_transactions=0,
+                total_transactions=total_count,
+                limited=bool(
+                    (max_transactions is not None and total_count > max_transactions)
+                    or (to_date is not None and to_date > upper_to)
+                ),
+            ),
         )
 
     resp = ml_engine_post(
@@ -618,10 +675,24 @@ def detect_recurring_payments(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Invalid ML response from engine: {exc}")
 
+    meta = RecurringDetectionMeta(
+        from_date=lower_from,
+        to_date=upper_to,
+        max_transactions=max_transactions,
+        considered_transactions=len(transactions),
+        total_transactions=total_count,
+        limited=bool(
+            (max_transactions is not None and total_count > max_transactions)
+            or (to_date is not None and to_date > upper_to)
+        ),
+    )
+
     return RecurringDetectionResponse(
         algorithm=resp.get("algorithm", "recurring-heuristic"),
         scores=scores,
         groups=groups,
+        skipped_count=int(resp.get("skipped_count", 0)),
+        meta=meta,
     )
 
 

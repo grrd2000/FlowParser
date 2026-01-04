@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Literal
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.engine import (
     Algorithm,
@@ -22,6 +22,28 @@ class Transaction(BaseModel):
     date: str = Field(..., description="Transaction date in ISO format")
     amount: float = Field(..., description="Signed amount")
     description: str = Field("", description="Free-text description")
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, value: str) -> str:
+        try:
+            datetime.fromisoformat(value)
+        except Exception as exc:
+            raise ValueError("date must be in ISO format YYYY-MM-DD") from exc
+        return value
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, value: float) -> float:
+        if value is None:
+            raise ValueError("amount is required")
+        try:
+            numeric = float(value)
+        except Exception as exc:
+            raise ValueError("amount must be a number") from exc
+        if numeric != numeric or numeric in (float("inf"), float("-inf")):
+            raise ValueError("amount must be finite")
+        return numeric
 
 
 class LabeledTransaction(Transaction):
@@ -97,6 +119,7 @@ class RecurringDetectionResponse(BaseModel):
     algorithm: str
     scores: List[RecurringScoreOut]
     groups: List[RecurringGroupOut]
+    skipped_count: int = 0
 
 
 class RecurringDetectionRequest(BaseModel):
@@ -182,6 +205,7 @@ def detect_recurring(req: RecurringDetectionRequest):
             )
             for group in result.groups
         ],
+        skipped_count=result.skipped_count,
     )
 
 
