@@ -90,6 +90,20 @@ def ml_engine_post(path: str, payload: dict | None = None) -> dict:
         )
         resp.raise_for_status()
         return resp.json()
+    except httpx.HTTPStatusError as exc:
+        detail: str | None = None
+        try:
+            body = exc.response.json()
+            detail = body.get("detail") if isinstance(body, dict) else None
+        except Exception:
+            detail = None
+        if exc.response.status_code == 400 and detail and "not trained" in detail.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="Model cyklicznych transakcji nie jest jeszcze wytrenowany. Wytrenuj model i spróbuj ponownie.",
+            )
+        print(f"[ml-engine] POST {path} failed: {exc}")
+        raise HTTPException(status_code=502, detail="ML engine unavailable")
     except httpx.HTTPError as exc:
         print(f"[ml-engine] POST {path} failed: {exc}")
         raise HTTPException(status_code=502, detail="ML engine unavailable")
