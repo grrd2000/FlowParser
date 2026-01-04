@@ -67,6 +67,18 @@ def tokenize(s: str) -> list[str]:
     return out
 
 
+def preprocess_texts(texts: list[str]) -> list[dict[str, object]]:
+    """
+    Normalizuje i tokenizuje wsadowo, aby ponownie użyć logiki w backendzie.
+    """
+    results: list[dict[str, object]] = []
+    for text in texts:
+        norm = normalize_text(text or "")
+        toks = tokenize(text or "")
+        results.append({"normalized": norm, "tokens": toks})
+    return results
+
+
 def build_df(docs: Iterable[str]) -> tuple[dict[str, int], int]:
     df: dict[str, int] = defaultdict(int)
     n = 0
