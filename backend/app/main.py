@@ -3,10 +3,7 @@ from __future__ import annotations
 import os
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Optional
-
-import unicodedata
-import re
+from typing import Optional, TypedDict
 
 import httpx
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
@@ -51,8 +48,6 @@ from app.schemas import (
 
 from app.utils.pko_pdf_parser import parse_pko_statement
 from app.utils.data_types_parser import parse_date_str, parse_decimal_str
-from app.utils.similarity import description_contains_token, tokenize
-
 from app.auth import (
     get_current_user as auth_get_current_user,
     hash_password,
@@ -95,6 +90,62 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+
+
+class PreprocessedText(TypedDict):
+    normalized: str
+    tokens: list[str]
+
+
+def preprocess_texts(texts: list[str]) -> list[PreprocessedText]:
+    """
+    Deleguje normalizację/tokenizację do ml-engine, aby utrzymać jedno źródło prawdy.
+    """
+    if not texts:
+        return []
+
+    try:
+        resp = httpx.post(
+            f"{ML_ENGINE_URL}/text/preprocess",
+            json={"texts": texts},
+            timeout=ML_ENGINE_TIMEOUT,
+        )
+        resp.raise_for_status()
+        payload = resp.json() or {}
+        items = payload.get("items") or []
+    except httpx.HTTPError as exc:
+        print(f"[ml-engine] preprocess failed: {exc}")
+        items = []
+
+    results: list[PreprocessedText] = []
+    for text, item in zip(texts, items):
+        normalized = ""
+        tokens: list[str] = []
+        if isinstance(item, dict):
+            normalized = str(item.get("normalized") or "")
+            raw_tokens = item.get("tokens") or []
+            if isinstance(raw_tokens, list):
+                tokens = [str(t) for t in raw_tokens]
+        if not normalized:
+            normalized = (text or "").lower().strip()
+        results.append({"normalized": normalized, "tokens": tokens})
+
+    # zabezpieczenie, gdy ml-engine zwróci mniej elementów
+    while len(results) < len(texts):
+        raw_text = texts[len(results)] if len(results) < len(texts) else ""
+        results.append({"normalized": (raw_text or "").lower().strip(), "tokens": []})
+
+    return results
+
+
+def preprocess_single(text: str | None) -> PreprocessedText:
+    res = preprocess_texts([text or ""])
+    return res[0] if res else {"normalized": "", "tokens": []}
+
+
+def first_token(value: str | None) -> str | None:
+    tokens = preprocess_single(value)["tokens"]
+    return tokens[0] if tokens else None
 
 # -----------------------
 #  DB dependency
@@ -1104,22 +1155,26 @@ def update_category_rule(
 
 
 def _rule_matches_tx(rule: CategoryRule, desc: str | None) -> bool:
-    raw = desc or ""
-    norm = normalize_text(raw)
+    tx_feats = preprocess_single(desc)
+    norm = tx_feats["normalized"]
+    tokens = set(tx_feats["tokens"])
+
+    pat_feats = preprocess_single(rule.pattern_value or "")
+    pat_norm = pat_feats["normalized"]
+    pat_token = pat_feats["tokens"][0] if pat_feats["tokens"] else None
 
     if rule.pattern_type == "token":
-        return description_contains_token(raw, rule.pattern_value or "")
+        return bool(pat_token and pat_token in tokens)
 
-    pat = normalize_text(rule.pattern_value or "")
-    if not pat:
+    if not pat_norm:
         return False
 
     if rule.pattern_type == "contains":
-        return pat in norm
+        return pat_norm in norm
     if rule.pattern_type == "startswith":
-        return norm.startswith(pat)
+        return norm.startswith(pat_norm)
     if rule.pattern_type == "equals":
-        return norm == pat
+        return norm == pat_norm
     return False
 
 
@@ -1244,7 +1299,7 @@ def build_rule_suggestion(db: Session, tx: Transaction) -> dict | None:
     Buduje subtelną sugestię “automatyzacji podobnych”:
     - wybiera token-kotwicę z opisu (TF-IDF) w pełni automatycznie
     - liczy ile transakcji bez kategorii ma ten token
-    - ignoruje telefony/ID dzięki normalizacji w tokenize()
+    - ignoruje telefony/ID dzięki normalizacji w ml-engine
     """
     # Sugestia ma sens tylko po nadaniu kategorii
     if tx.category_id is None:
@@ -1383,8 +1438,8 @@ def create_category_rule(
     # --- ważne: dla "token" trzymamy w bazie JEDEN token, już znormalizowany ---
     pattern_value = payload.pattern_value or ""
     if payload.pattern_type == "token":
-        toks = tokenize(pattern_value)
-        pattern_value = toks[0] if toks else ""
+        tok = first_token(pattern_value)
+        pattern_value = tok or ""
 
     rule = CategoryRule(
         user_id=user.id,
@@ -1558,7 +1613,10 @@ def enable_rule(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    pattern_value = normalize_text(payload.pattern_value)
+    pattern_value = preprocess_single(payload.pattern_value)["normalized"]
+    if payload.pattern_type == "token":
+        tok = first_token(payload.pattern_value)
+        pattern_value = tok or ""
     if not pattern_value:
         raise HTTPException(status_code=400, detail="pattern_value required")
 
@@ -1727,33 +1785,6 @@ def ensure_default_categories(db: Session, user: User):
     db.commit()
 
 
-def normalize_text(s: str | None) -> str:
-    """
-    Normalizuje tekst do dopasowywania:
-    - zamienia na małe litery
-    - usuwa polskie znaki (ą→a, ł→l, ś→s itd.)
-    - wycina znaki specjalne, zostawia cyfry, litery i spacje
-    - redukuje wielokrotne spacje do jednej
-    """
-    if not s:
-        return ""
-
-    # lower-case
-    s = s.lower()
-
-    # rozbij na znaki + usuń znaki łączące (akcenty)
-    s = unicodedata.normalize("NFD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-
-    # wszystko poza literami, cyframi i spacją → spacja
-    s = re.sub(r"[^0-9a-z\s]", " ", s)
-
-    # redukcja wielu spacji
-    s = re.sub(r"\s+", " ", s).strip()
-
-    return s
-
-
 STOP_TOKENS = {
     "pln", "ref", "zlec", "zlecenie", "transakcja", "platnosc",
     "karta", "przelew", "oplata", "opłata", "saldo", "data"
@@ -1762,7 +1793,7 @@ STOP_TOKENS = {
 def extract_candidate_pattern(description: str | None) -> str | None:
     if not description:
         return None
-    desc_norm = normalize_text(description)
+    desc_norm = preprocess_single(description)["normalized"]
     tokens = [t for t in desc_norm.split() if len(t) >= 4 and t not in STOP_TOKENS]
     if not tokens:
         return None
@@ -1806,36 +1837,37 @@ def apply_rules_for_statement(db: Session, user_id: int, statement_id: int) -> i
     )
 
     assigned = 0
+    tx_feats_list = preprocess_texts([tx.description or "" for tx in txs])
+    rule_feats_list = preprocess_texts([rule.pattern_value or "" for rule in rules])
+    rule_tokens = [
+        feats["tokens"][0] if feats["tokens"] else None
+        for feats in rule_feats_list
+    ]
 
-    for tx in txs:
-        text_norm = normalize_text(tx.description or "")
+    for tx, tx_feats in zip(txs, tx_feats_list):
+        text_norm = tx_feats["normalized"]
+        text_tokens = set(tx_feats["tokens"])
 
         old_cat_id = tx.category_id
 
-        for rule in rules:
+        for rule, rule_feats, rule_token in zip(rules, rule_feats_list, rule_tokens):
             if rule.field != "description":
                 continue
 
-            pattern_norm = normalize_text(rule.pattern_value or "")
-            if not pattern_norm:
-                continue
+            pattern_norm = rule_feats["normalized"]
 
             ok = False
             if rule.pattern_type == "contains":
-                ok = pattern_norm in text_norm
+                ok = bool(pattern_norm and pattern_norm in text_norm)
 
             elif rule.pattern_type == "startswith":
-                ok = text_norm.startswith(pattern_norm)
+                ok = bool(pattern_norm and text_norm.startswith(pattern_norm))
 
             elif rule.pattern_type == "token":
-                # pattern_value dla token to pojedynczy token (np. "zabka")
-                toks = tokenize(rule.pattern_value or "")
-                token = toks[0] if toks else None
-                if token:
-                    ok = description_contains_token(tx.description or "", token)
+                ok = bool(rule_token and rule_token in text_tokens)
 
-            else:
-                continue
+            elif rule.pattern_type == "equals":
+                ok = bool(pattern_norm and text_norm == pattern_norm)
 
             if ok:
                 cat = rule.category
@@ -1889,14 +1921,20 @@ def apply_rules_for_user(db: Session, user_id: int) -> int:
     )
 
     assigned = 0
+    tx_feats_list = preprocess_texts([tx.description or "" for tx in txs])
+    rule_feats_list = preprocess_texts([rule.pattern_value or "" for rule in rules])
+    rule_tokens = [
+        feats["tokens"][0] if feats["tokens"] else None
+        for feats in rule_feats_list
+    ]
 
-    for tx in txs:
-        text_raw = tx.description or ""
-        text_norm = normalize_text(text_raw)
+    for tx, tx_feats in zip(txs, tx_feats_list):
+        text_norm = tx_feats["normalized"]
+        text_tokens = set(tx_feats["tokens"])
 
         old_cat_id = tx.category_id
 
-        for rule in rules:
+        for rule, rule_feats, rule_token in zip(rules, rule_feats_list, rule_tokens):
             if rule.field != "description":
                 continue
 
@@ -1904,11 +1942,9 @@ def apply_rules_for_user(db: Session, user_id: int) -> int:
             matched = False
 
             if rule.pattern_type == "token":
-                # pattern_value to pojedynczy token z tokenize()
-                if description_contains_token(text_raw, rule.pattern_value or ""):
-                    matched = True
+                matched = bool(rule_token and rule_token in text_tokens)
             else:
-                pattern_norm = normalize_text(rule.pattern_value or "")
+                pattern_norm = rule_feats["normalized"]
                 if not pattern_norm:
                     continue
 

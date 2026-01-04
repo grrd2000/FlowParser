@@ -11,7 +11,7 @@ from app.engine import (
     # build_dataframe,
     # load_sample_dataset,
 )
-from app.tfidf import suggest_rule_token
+from app.tfidf import preprocess_texts, suggest_rule_token
 
 app = FastAPI(title="FlowParser ML Engine", version="0.1.0")
 engine = RecurringPaymentEngine()
@@ -69,6 +69,19 @@ class TokenSuggestionResponse(BaseModel):
     similar_count: int
 
 
+class PreprocessTextsRequest(BaseModel):
+    texts: List[str] = Field(default_factory=list, description="Teksty do normalizacji/tokenizacji")
+
+
+class PreprocessTextFeatures(BaseModel):
+    normalized: str
+    tokens: List[str]
+
+
+class PreprocessTextsResponse(BaseModel):
+    items: List[PreprocessTextFeatures]
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -116,3 +129,9 @@ def suggest_token(req: TokenSuggestionRequest):
         return TokenSuggestionResponse(token=None, similar_count=0)
 
     return TokenSuggestionResponse(token=result["token"], similar_count=result["similar_count"])
+
+
+@app.post("/text/preprocess", response_model=PreprocessTextsResponse)
+def preprocess(req: PreprocessTextsRequest):
+    feats = preprocess_texts(req.texts)
+    return PreprocessTextsResponse(items=[PreprocessTextFeatures(**f) for f in feats])
