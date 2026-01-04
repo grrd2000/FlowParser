@@ -1466,13 +1466,88 @@ const RECURRING_COLORS = [
   "#8b5cf6",
 ];
 
+const RECURRING_STOPWORDS = new Set([
+  "platnosc",
+  "płatność",
+  "oplata",
+  "opłata",
+  "przelew",
+  "rachunek",
+  "faktura",
+  "faktury",
+  "invoice",
+  "za",
+  "do",
+  "nr",
+  "numer",
+  "id",
+]);
+
+function normalizeRecurringDescription(description: string | null | undefined): string | null {
+  if (!description) return null;
+
+  const withoutDiacritics = description
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase();
+
+  const scrubbed = withoutDiacritics
+    // usuń numery faktur/referencyjne i daty
+    .replace(/\b(?:nr|numer|id|ref|fv|invoice)\s*[\w/-]*/g, " ")
+    .replace(/\d{2,}/g, " ")
+    .replace(/[.,;:]/g, " ");
+
+  const tokens = scrubbed
+    .split(/[^a-ząćęłńóśźż]+/u)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && !RECURRING_STOPWORDS.has(t));
+
+  if (!tokens.length) return null;
+
+  const unique = Array.from(new Set(tokens.map((t) => t.normalize("NFKC")))).sort();
+  return unique.join(" ");
+}
+
+function isAmountStable(values: number[]): boolean {
+  if (!values.length) return false;
+
+  const absValues = values.map((v) => Math.abs(v));
+  const avg = absValues.reduce((sum, v) => sum + v, 0) / absValues.length;
+  const spread = Math.max(...absValues) - Math.min(...absValues);
+  const tolerance = Math.max(2, avg * 0.08);
+
+  return spread <= tolerance;
+}
+
+function cadenceFromIntervals(intervals: number[]): { cadence: RecurringGroup["cadence"]; cadenceDays: number } | null {
+  if (!intervals.length) return null;
+
+  const sorted = [...intervals].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+
+  const withinJitter = (tolerance: number) => intervals.every((v) => Math.abs(v - median) <= tolerance);
+  const near = (target: number, tolerance: number) => Math.abs(median - target) <= tolerance;
+
+  if (near(7, 2) && withinJitter(2)) {
+    return { cadence: "tygodniowe", cadenceDays: 7 };
+  }
+
+  if ((near(30, 5) || near(28, 3) || near(31, 4)) && withinJitter(6)) {
+    return { cadence: "miesięczne", cadenceDays: Math.round(median) };
+  }
+
+  return null;
+}
+
 function detectRecurringGroups(transactions: TxExt[]): RecurringGroup[] {
   if (transactions.length === 0) return [];
 
   const map = new Map<string, TxExt[]>();
   for (const t of transactions) {
-    if (!t.description) continue;
-    const key = `${t.description.trim().toLowerCase()}|${t.amountNum >= 0 ? "in" : "out"}`;
+    const normalized = normalizeRecurringDescription(t.description);
+    if (!normalized) continue;
+
+    const key = `${normalized}|${t.amountNum >= 0 ? "in" : "out"}`;
     const bucket = map.get(key) ?? [];
     bucket.push(t);
     map.set(key, bucket);
@@ -1482,34 +1557,28 @@ function detectRecurringGroups(transactions: TxExt[]): RecurringGroup[] {
   let colorIdx = 0;
 
   for (const [key, txs] of map.entries()) {
-    if (txs.length < 3) continue;
+    if (txs.length < 2) continue;
 
     const sorted = [...txs].sort((a, b) => a.date.getTime() - b.date.getTime());
+    if (!isAmountStable(sorted.map((t) => t.amountNum))) continue;
+
     const intervals: number[] = [];
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1].date.getTime();
       const curr = sorted[i].date.getTime();
       intervals.push(Math.round((curr - prev) / (1000 * 60 * 60 * 24)));
     }
-    const avgInterval =
-      intervals.length > 0
-        ? intervals.reduce((sum, v) => sum + v, 0) / intervals.length
-        : Infinity;
-
-    let cadence: RecurringGroup["cadence"] | null = null;
-    let cadenceDays = 0;
-    if (avgInterval >= 5 && avgInterval <= 9) {
-      cadence = "tygodniowe";
-      cadenceDays = 7;
-    } else if (avgInterval >= 25 && avgInterval <= 35) {
-      cadence = "miesięczne";
-      cadenceDays = 30;
-    }
-    if (!cadence) continue;
+    const cadenceInfo = cadenceFromIntervals(intervals);
+    if (!cadenceInfo) continue;
+    if (intervals.length < 2 && sorted.length < 3) continue; // przynajmniej 2 odcinki lub 3 wystąpienia
 
     const lastTx = sorted[sorted.length - 1];
     const nextDate = new Date(lastTx.date);
-    nextDate.setDate(nextDate.getDate() + cadenceDays);
+    if (cadenceInfo.cadence === "miesięczne") {
+      nextDate.setMonth(nextDate.getMonth() + 1);
+    } else {
+      nextDate.setDate(nextDate.getDate() + cadenceInfo.cadenceDays);
+    }
 
     const averageAmount =
       sorted.reduce((sum, t) => sum + t.amountNum, 0) / sorted.length;
@@ -1519,7 +1588,7 @@ function detectRecurringGroups(transactions: TxExt[]): RecurringGroup[] {
     groups.push({
       id: key,
       name: lastTx.description ?? "Powtarzalna transakcja",
-      cadence,
+      cadence: cadenceInfo.cadence,
       nextDate,
       averageAmount,
       color,
