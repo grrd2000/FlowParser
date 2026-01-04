@@ -158,6 +158,7 @@ class RecurringGroupOut(BaseModel):
     next_date: datetime
     average_amount: float
     transaction_ids: list[int]
+    confidence: float | None = None
 
 
 class RecurringDetectionResponse(BaseModel):

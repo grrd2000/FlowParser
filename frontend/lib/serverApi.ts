@@ -130,6 +130,7 @@ export type RecurringGroupDetection = {
   next_date: string;
   average_amount: number;
   transaction_ids: number[];
+  confidence?: number;
 };
 
 export type RecurringDetection = {

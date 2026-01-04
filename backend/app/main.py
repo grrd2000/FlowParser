@@ -612,6 +612,7 @@ def detect_recurring_payments(
                     next_date=g.get("next_date"),
                     average_amount=float(g.get("average_amount", 0)),
                     transaction_ids=[int(tid) for tid in g.get("transaction_ids", [])],
+                    confidence=float(g.get("confidence")) if g.get("confidence") is not None else None,
                 )
             )
     except Exception as exc:

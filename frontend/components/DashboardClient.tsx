@@ -42,6 +42,7 @@ type RecurringGroup = {
   cadence: "miesięczne" | "tygodniowe";
   nextDate: Date;
   averageAmount: number;
+  confidence?: number;
   color: string;
   transactions: TxExt[];
 };
@@ -247,6 +248,7 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
           cadence: group.cadence,
           nextDate: new Date(group.next_date),
           averageAmount: group.average_amount ?? 0,
+          confidence: group.confidence,
           color,
           transactions: txs,
         } satisfies RecurringGroup;
