@@ -49,7 +49,6 @@ services:
       - PORT=8080
     volumes:
       - ./ml-engine/app:/app/app
-      - ./ml-engine/data:/app/data
     networks: [ml_net]
     expose:
       - "8080"

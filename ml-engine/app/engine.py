@@ -285,15 +285,6 @@ class RecurringPaymentEngine:
         features = self._build_features(data)
         return model.predict_proba(features)[:, 1]
 
-
-    def load_sample_dataset(self) -> pd.DataFrame:
-        path = r'data/sample_transactions.csv'
-        df = pd.read_csv(path)
-        if "label" not in df.columns:
-            raise ValueError("Sample dataset must contain 'label' column")
-        return df
-
-
     def build_dataframe(transactions: List[dict], include_label: bool) -> pd.DataFrame:
         normalized = []
         for tx in transactions:
