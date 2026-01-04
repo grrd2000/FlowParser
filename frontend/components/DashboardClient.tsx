@@ -269,6 +269,27 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
       weekly: [...weekly].sort(sortByNext),
     };
   }, [recurringGroups]);
+  const recurringLastRunAt = useMemo(() => {
+    if (!recurringDetection?.run_at) return null;
+    const parsed = new Date(recurringDetection.run_at);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [recurringDetection]);
+  const recurringStatus = recurringDetection?.status ?? (recurringDetection ? "completed" : "empty");
+  const recurringStatusLabel = useMemo(() => {
+    if (loading) return "Ładowanie…";
+    switch (recurringStatus) {
+      case "refreshed":
+        return "Odświeżone";
+      case "cached":
+        return "Dane z cache";
+      case "empty":
+        return "Brak danych";
+      case "unauthorized":
+        return "Brak dostępu";
+      default:
+        return "Gotowe";
+    }
+  }, [recurringStatus, loading]);
   useEffect(() => {
     if (recurringCalendar.cells.length === 0) {
       setSelectedCalendarDate(null);
@@ -556,6 +577,17 @@ export function DashboardClient({ initialRange = "3m" }: DashboardClientProps) {
                   Wstępny podgląd z nadchodzącego wykrywania w ML-engine. Prosty kalendarz pokazuje terminy,
                   a obok zobaczysz grupy transakcji (miesięczne i tygodniowe).
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-[4px] text-[10px] uppercase tracking-wide text-white/80">
+                    {recurringStatusLabel}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/5 bg-white/5 px-2 py-[4px] text-slate-200/80">
+                    Ostatnia aktualizacja:
+                    <span className="font-medium text-white">
+                      {recurringLastRunAt ? formatDateTime(recurringLastRunAt) : "brak"}
+                    </span>
+                  </span>
+                </div>
               </div>
               <span className="badge-soft">Preview</span>
             </div>
@@ -2029,6 +2061,17 @@ function rangeLabelShort(range: RangeKey) {
     case "all":
       return "ALL";
   }
+}
+
+function formatDateTime(date: Date) {
+  const opts: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+  return date.toLocaleString("pl-PL", opts);
 }
 
 function formatCurrency(value: number): string {

@@ -130,13 +130,15 @@ export type RecurringGroupDetection = {
   next_date: string;
   average_amount: number;
   transaction_ids: number[];
-  confidence?: number;
+  confidence?: number | null;
 };
 
 export type RecurringDetection = {
   algorithm: string;
   scores: RecurringScore[];
   groups: RecurringGroupDetection[];
+  run_at?: string | null;
+  status?: string | null;
 };
 
 export type CategoryRuleUI = {
@@ -363,10 +365,24 @@ export async function toggleCategoryRule(
   );
 }
 
-export async function fetchRecurringDetections(): Promise<RecurringDetection> {
-  return requestJson<RecurringDetection>("/recurring-payments", {}, {
+export async function fetchRecurringDetections(options?: {
+  refresh?: boolean;
+}): Promise<RecurringDetection> {
+  const params = new URLSearchParams();
+  if (options?.refresh) params.set("refresh", "true");
+
+  const query = params.toString();
+  const path = query ? `/recurring-payments?${query}` : "/recurring-payments";
+
+  return requestJson<RecurringDetection>(path, {}, {
     allowUnauthorized: true,
-    unauthorizedValue: { algorithm: "lightgbm", scores: [], groups: [] },
+    unauthorizedValue: {
+      algorithm: "lightgbm",
+      scores: [],
+      groups: [],
+      run_at: null,
+      status: "unauthorized",
+    },
   });
 }
 
